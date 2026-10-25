@@ -28,3 +28,9 @@ export function nextInstance(taken: Spec[], path: string, agent: string): number
 export function agentLabel(s: Spec): string {
   return s.instance > 0 ? `${s.agent} #${s.instance + 1}` : s.agent;
 }
+
+/** "2 sesje", "5 sesji", "22 sesje". */
+export function sessionsLabel(n: number): string {
+  const few = n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14);
+  return `${n} ${n === 1 ? "sesja" : few ? "sesje" : "sesji"}`;
+}

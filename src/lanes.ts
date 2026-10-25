@@ -1,5 +1,8 @@
-// Pure operations on lanes: columns of project paths, top to bottom.
+// Pure operations on lanes: columns of session keys, top to bottom.
+// Sessions of one project stay together (one card per project), so most
+// operations take `of`, which maps a key to its project.
 export type Lanes = string[][];
+export type ProjectOf = (key: string) => string;
 
 export function clone(lanes: Lanes): Lanes {
   return lanes.map((l) => [...l]);
@@ -21,10 +24,58 @@ export function shortestLane(lanes: Lanes): number {
   return best;
 }
 
-export function add(lanes: Lanes, path: string): Lanes {
+/** Add a key after the other sessions of its project, or to the shortest lane. */
+export function add(lanes: Lanes, path: string, of?: ProjectOf): Lanes {
   if (contains(lanes, path)) return lanes;
   const next = clone(lanes.length ? lanes : [[]]);
+  if (of) {
+    const project = of(path);
+    for (const lane of next) {
+      const last = lane.map(of).lastIndexOf(project);
+      if (last >= 0) {
+        lane.splice(last + 1, 0, path);
+        return next;
+      }
+    }
+  }
   next[shortestLane(next)].push(path);
+  return next;
+}
+
+/** Runs of consecutive keys of one project in a lane. */
+export function groups(lane: string[], of: ProjectOf): string[][] {
+  const out: string[][] = [];
+  for (const key of lane) {
+    const last = out[out.length - 1];
+    if (last && of(last[0]) === of(key)) last.push(key);
+    else out.push([key]);
+  }
+  return out;
+}
+
+/** Pull every project's sessions together, where the project first appears. */
+export function group(lanes: Lanes, of: ProjectOf): Lanes {
+  let next: Lanes = lanes.map(() => []);
+  lanes.forEach((lane, i) => {
+    for (const key of lane) {
+      const project = of(key);
+      const home = next.findIndex((l) => l.some((k) => of(k) === project));
+      if (home < 0) next[i].push(key);
+      else next = add(next, key, of);
+    }
+  });
+  return next;
+}
+
+/** Move a project's whole card to `lane`, before its `index`-th card (counted without it). */
+export function moveGroup(lanes: Lanes, project: string, of: ProjectOf, lane: number, index: number): Lanes {
+  if (lane < 0 || lane >= lanes.length) return lanes;
+  const keys = lanes.flat().filter((k) => of(k) === project);
+  if (!keys.length) return lanes;
+  const next = lanes.map((l) => l.filter((k) => of(k) !== project));
+  const cards = groups(next[lane], of);
+  const at = Math.max(0, Math.min(index, cards.length));
+  next[lane] = [...cards.slice(0, at).flat(), ...keys, ...cards.slice(at).flat()];
   return next;
 }
 

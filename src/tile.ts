@@ -68,6 +68,8 @@ export class Tile {
   branch: string | null = null;
   state: TileState = "starting";
   index = 0;
+  /** Shown inside a project card with other sessions: the card names the project. */
+  grouped = false;
 
   private term: Terminal;
   private fit = new FitAddon();
@@ -224,13 +226,20 @@ export class Tile {
     this.el.classList.toggle("active", active);
   }
 
-  update(patch: { branch?: string | null; state?: TileState; index?: number }): void {
+  update(patch: { branch?: string | null; state?: TileState; index?: number; grouped?: boolean }): void {
     const next = {
       branch: patch.branch === undefined ? this.branch : patch.branch,
       state: patch.state ?? this.state,
       index: patch.index ?? this.index,
+      grouped: patch.grouped ?? this.grouped,
     };
-    if (next.branch === this.branch && next.state === this.state && next.index === this.index) return;
+    if (
+      next.branch === this.branch &&
+      next.state === this.state &&
+      next.index === this.index &&
+      next.grouped === this.grouped
+    )
+      return;
     Object.assign(this, next);
     this.render();
   }
@@ -256,10 +265,13 @@ export class Tile {
   private render(): void {
     this.el.className = this.el.className.replace(/\bstate-\S+/, `state-${this.state}`);
     this.badge.textContent = this.index > 0 && this.index < 10 ? String(this.index) : "";
+    this.el.classList.toggle("grouped", this.grouped);
     const parts = [
-      `<span class="agent">${escapeHtml(agentLabel(this))}</span>`,
-      `<b>${escapeHtml(this.name)}</b>`,
-      this.branch ? `<span class="branch">${escapeHtml(this.branch)}</span>` : "",
+      this.grouped
+        ? `<b>${escapeHtml(agentLabel(this))}</b>`
+        : `<span class="agent">${escapeHtml(agentLabel(this))}</span>`,
+      this.grouped ? "" : `<b>${escapeHtml(this.name)}</b>`,
+      this.branch && !this.grouped ? `<span class="branch">${escapeHtml(this.branch)}</span>` : "",
       // Only Claude Code reports working/waiting/idle through desk's hooks.
       this.agent === "claude" ? `<span class="state">${STATE_LABEL[this.state]}</span>` : "",
     ].filter(Boolean);

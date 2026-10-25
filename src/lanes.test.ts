@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { add, flatten, move, remove, restore, setLaneCount, shortestLane } from "./lanes";
+import { add, flatten, group, groups, move, moveGroup, remove, restore, setLaneCount, shortestLane } from "./lanes";
+
+// Session keys as in sessions.ts: "/a" is the main session, "codex#0:/a" another one of /a.
+const of = (k: string) => k.slice(k.indexOf(":") + 1);
 
 describe("lanes", () => {
   it("adds to the shortest lane and never twice", () => {
@@ -39,5 +42,31 @@ describe("lanes", () => {
     const saved = [["/a"], ["/b"], [], []];
     expect(restore(saved, ["/b", "/x"], 4)).toEqual([["/a"], ["/b"], ["/x"], []]);
     expect(restore([], [], 4)).toEqual([[], [], [], []]);
+  });
+
+  it("adds a project's next session under its card", () => {
+    const l = [["/a", "/b"], ["/c"]];
+    expect(add(l, "claude#1:/a", of)).toEqual([["/a", "claude#1:/a", "/b"], ["/c"]]);
+    expect(add(l, "codex#0:/c", of)).toEqual([["/a", "/b"], ["/c", "codex#0:/c"]]);
+    expect(add(l, "/d", of)).toEqual([["/a", "/b"], ["/c", "/d"]]);
+  });
+
+  it("splits a lane into project cards", () => {
+    expect(groups(["/a", "claude#1:/a", "/b", "codex#0:/b"], of)).toEqual([
+      ["/a", "claude#1:/a"],
+      ["/b", "codex#0:/b"],
+    ]);
+  });
+
+  it("pulls scattered sessions of a project together", () => {
+    const l = [["/a", "/b", "claude#1:/a"], ["codex#0:/a", "/c"]];
+    expect(group(l, of)).toEqual([["/a", "claude#1:/a", "codex#0:/a", "/b"], ["/c"]]);
+  });
+
+  it("moves a whole project card", () => {
+    const l = [["/a", "claude#1:/a", "/b"], ["/c"]];
+    expect(moveGroup(l, "/a", of, 1, 1)).toEqual([["/b"], ["/c", "/a", "claude#1:/a"]]);
+    expect(moveGroup(l, "/a", of, 0, 1)).toEqual([["/b", "/a", "claude#1:/a"], ["/c"]]);
+    expect(moveGroup(l, "/x", of, 0, 0)).toBe(l);
   });
 });

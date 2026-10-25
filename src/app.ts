@@ -17,13 +17,14 @@ import { actionFor, HINTS, type Action } from "./keys";
 import * as L from "./lanes";
 import { Palette } from "./palette";
 import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
-import { keyOf, nextInstance, parseKey } from "./sessions";
+import { keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
 import { Settings } from "./settings";
 import { displayState, escapeHtml, Tile, type TileAction } from "./tile";
 import { confirmBox, newProjectBox, toast } from "./ui";
 import { usageHtml } from "./usage";
 
 const POLL_MS = 3000;
+const projectOf = (key: string): string => parseKey(key).path;
 const USAGE_MS = 30_000;
 
 export class App {
@@ -39,6 +40,8 @@ export class App {
   private earlyExits = new Map<number, string>(); // pty-exit that arrived before attach returned
   private missing: { key: string; lane: number }[] = [];
   private creatingProject = false;
+  /** One card per project in the grid; its sessions' tiles sit inside. */
+  private cards = new Map<string, HTMLElement>();
   private usage: Usage[] = [];
   private usageAt = 0;
   private coffee: CoffeeStatus = { level: "off", helperInstalled: false, sleepDisabled: false, stoppedBecause: null };
@@ -208,7 +211,7 @@ export class App {
     this.missing = this.missing.filter((m) => m.key !== key);
     const tile = await this.createTile(key);
     if (!tile) return;
-    this.layout.lanes = L.add(this.layout.lanes, key);
+    this.layout.lanes = L.add(this.layout.lanes, key, projectOf);
     this.render();
     try {
       await tile.start();
@@ -280,6 +283,7 @@ export class App {
       const next = ((this.layout.colors[tile.path] ?? 0) + 1) % PROJECT_COLORS.length;
       this.layout.colors[tile.path] = next;
       for (const t of this.tiles.values()) if (t.path === tile.path) t.setColor(PROJECT_COLORS[next]);
+      this.renderCards();
       this.save();
     }
   }
@@ -329,6 +333,7 @@ export class App {
   // ---- layout ------------------------------------------------------------
 
   private render(): void {
+    this.layout.lanes = L.group(this.layout.lanes, projectOf);
     const lanes = this.layout.lanes;
     while (this.grid.children.length > lanes.length) this.grid.lastElementChild!.remove();
     while (this.grid.children.length < lanes.length) this.grid.appendChild(this.laneEl());
@@ -338,20 +343,81 @@ export class App {
       lane.querySelector(".lane-head")!.innerHTML =
         `LANE ${i + 1} <span class="dim">${paths.length || ""}</span>`;
       const body = lane.querySelector<HTMLElement>(".lane-body")!;
-      for (const p of paths) {
-        const t = this.tiles.get(p);
-        if (t && t.el.parentElement !== body) body.appendChild(t.el);
+      const open = paths.filter((p) => this.tiles.has(p));
+      // Order inside the lane: one card per project, its sessions top to bottom.
+      for (const keys of L.groups(open, projectOf)) {
+        const card = this.card(projectOf(keys[0]));
+        const cardBody = card.querySelector<HTMLElement>(".card-body")!;
+        for (const k of keys) {
+          const t = this.tiles.get(k)!;
+          cardBody.appendChild(t.el);
+          t.update({ grouped: keys.length > 1 });
+        }
+        card.classList.toggle("multi", keys.length > 1);
+        card.style.flexGrow = String(keys.length);
+        body.appendChild(card);
       }
-      // Order inside the lane.
-      paths.forEach((p) => {
-        const t = this.tiles.get(p);
-        if (t) body.appendChild(t.el);
-      });
-      body.classList.toggle("empty", paths.length === 0);
+      body.classList.toggle("empty", open.length === 0);
     });
+    for (const [project, card] of this.cards) {
+      if (!card.querySelector(".tile")) {
+        card.remove();
+        this.cards.delete(project);
+      }
+    }
     L.flatten(lanes).forEach((p, i) => this.tiles.get(p)?.update({ index: i + 1 }));
+    this.renderCards();
     this.renderChrome();
     this.fitAll();
+  }
+
+  private card(project: string): HTMLElement {
+    let card = this.cards.get(project);
+    if (card) return card;
+    card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <header class="card-head" draggable="true">
+        <span class="dot"></span><span class="card-title"></span>
+        <span class="actions"><button data-a="sub" title="Kolejna sesja w tym projekcie (⌘D)">+</button></span>
+      </header>
+      <div class="card-body"></div>`;
+    const head = card.querySelector<HTMLElement>(".card-head")!;
+    const first = () => [...this.tiles.values()].find((t) => t.path === project);
+    head.addEventListener("dragstart", (e) => {
+      const t = first();
+      if (!t) return;
+      e.dataTransfer?.setData("text/x-desk-key", t.key);
+      e.dataTransfer!.effectAllowed = "move";
+      card.classList.add("dragging");
+    });
+    head.addEventListener("dragend", () => card.classList.remove("dragging"));
+    head.addEventListener("click", (e) => {
+      const t = first();
+      if (!t) return;
+      if ((e.target as HTMLElement).closest("[data-a='sub']")) void this.openSub(t);
+      else this.setActive(t.key, true);
+    });
+    this.cards.set(project, card);
+    return card;
+  }
+
+  /** Card headers: project color, name, branch and how many sessions it holds. */
+  private renderCards(): void {
+    for (const [project, card] of this.cards) {
+      const tiles = [...this.tiles.values()].filter((t) => t.path === project);
+      if (!tiles.length) continue;
+      card.style.setProperty("--proj", projectColor(project, this.layout.colors));
+      const t = tiles[0];
+      const parts = [
+        `<b>${escapeHtml(t.name)}</b>`,
+        t.branch ? `<span class="branch">${escapeHtml(t.branch)}</span>` : "",
+        `<span class="dim">${sessionsLabel(tiles.length)}</span>`,
+      ].filter(Boolean);
+      const title = card.querySelector<HTMLElement>(".card-title")!;
+      title.innerHTML = parts.join(`<span class="sep"> · </span>`);
+      title.title = project;
+    }
   }
 
   private laneEl(): HTMLElement {
@@ -375,7 +441,8 @@ export class App {
       e.preventDefault();
       const laneIdx = Number(lane.dataset.lane);
       const index = dropIndex(body, e.clientY);
-      this.layout.lanes = L.move(this.layout.lanes, key, laneIdx, index);
+      // A project moves as a whole card, with all its sessions.
+      this.layout.lanes = L.moveGroup(this.layout.lanes, projectOf(key), projectOf, laneIdx, index);
       this.changed();
       this.setActive(key, true);
     });
@@ -385,8 +452,8 @@ export class App {
   private markDrop(body: HTMLElement | null, index: number): void {
     this.grid.querySelectorAll(".drop-before, .drop-end").forEach((el) => el.classList.remove("drop-before", "drop-end"));
     if (!body) return;
-    const tiles = [...body.querySelectorAll<HTMLElement>(":scope > .tile:not(.dragging)")];
-    if (tiles[index]) tiles[index].classList.add("drop-before");
+    const cards = droppable(body);
+    if (cards[index]) cards[index].classList.add("drop-before");
     else body.classList.add("drop-end");
   }
 
@@ -495,6 +562,7 @@ export class App {
       tile.update({ branch: branch.get(tile.path) ?? null, state: displayState(this.hook.get(tile.slug)?.state) });
     }
     if (Date.now() - this.usageAt >= USAGE_MS) await this.refreshUsage();
+    this.renderCards();
     this.renderChrome();
   }
 
@@ -688,9 +756,14 @@ export class App {
   }
 }
 
-/** Index among the lane's tiles before which a drop at `y` lands (ignoring the dragged tile). */
+/** The lane's project cards, without the one being dragged. */
+function droppable(body: HTMLElement): HTMLElement[] {
+  return [...body.querySelectorAll<HTMLElement>(":scope > .card:not(.dragging):not(:has(.tile.dragging))")];
+}
+
+/** Index among the lane's cards before which a drop at `y` lands (ignoring the dragged one). */
 function dropIndex(body: HTMLElement, y: number): number {
-  const tiles = [...body.querySelectorAll<HTMLElement>(":scope > .tile:not(.dragging)")];
+  const tiles = droppable(body);
   const i = tiles.findIndex((t) => {
     const r = t.getBoundingClientRect();
     return y < r.top + r.height / 2;

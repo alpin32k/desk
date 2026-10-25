@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentLabel, keyOf, nextInstance, parseKey } from "./sessions";
+import { agentLabel, keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
 
 describe("session keys", () => {
   it("keeps the bare path for the main Claude session", () => {
@@ -33,5 +33,11 @@ describe("session keys", () => {
   it("labels sub-sessions for people", () => {
     expect(agentLabel({ path: "/p", agent: "claude", instance: 0 })).toBe("claude");
     expect(agentLabel({ path: "/p", agent: "claude", instance: 1 })).toBe("claude #2");
+  });
+
+  it("counts sessions in Polish", () => {
+    expect([1, 2, 4, 5, 12, 22, 25].map(sessionsLabel)).toEqual([
+      "1 sesja", "2 sesje", "4 sesje", "5 sesji", "12 sesji", "22 sesje", "25 sesji",
+    ]);
   });
 });
