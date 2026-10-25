@@ -92,7 +92,7 @@ Zwykłe Esc trafia do terminala, więc dalej przerywa Claude.
 ## Instalacja
 
 Gotowe paczki są w [Releases](https://github.com/knehrybecki/desk/releases): `.dmg` na macOS
-(aarch64 dla Apple Silicon, x64 dla Intela), `.deb` i `.AppImage` na Linux, `*-setup.exe` na Windows. Aplikacja nie jest
+(tylko Apple Silicon, M1 i nowsze), `.deb` i `.AppImage` na Linux, `*-setup.exe` na Windows. Aplikacja nie jest
 podpisana, więc na macOS po skopiowaniu do Applications uruchom raz:
 
 ```bash
@@ -113,5 +113,5 @@ Dane: `~/Library/Application Support/desk/` (macOS) albo `~/.local/share/desk/` 
 Szczegóły hooków są w [docs/hooks.md](docs/hooks.md).
 
 Release: push tagu `v*` uruchamia `.github/workflows/release.yml`, który buduje wersje na macOS
-(Apple Silicon i Intel, `.app` + `.dmg`), Linux (`.deb` + `.AppImage`) i Windows (`setup.exe`) i dołącza je do szkicu
+(Apple Silicon, `.app` + `.dmg`), Linux (`.deb` + `.AppImage`) i Windows (`setup.exe`) i dołącza je do szkicu
 release na GitHubie.
