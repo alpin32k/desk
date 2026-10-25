@@ -1,3 +1,7 @@
+import { App } from "./app";
 import "./styles.css";
 
-document.querySelector("#app")!.textContent = "desk";
+const root = document.querySelector<HTMLElement>("#app")!;
+new App(root).start().catch((err) => {
+  root.textContent = `desk: ${err}`;
+});

@@ -51,6 +51,11 @@ fn bootstrap(app: State<App>) -> Bootstrap {
     }
 }
 
+#[tauri::command]
+fn list_sessions(app: State<App>) -> Vec<tmux::SessionInfo> {
+    app.tmux.list_sessions()
+}
+
 /// Ensure the project's tmux session exists; returns its slug.
 #[tauri::command]
 fn open_session(app: State<App>, path: String) -> Result<String, String> {
@@ -126,6 +131,23 @@ fn tile_info(app: State<App>, paths: Vec<String>) -> Vec<TileInfo> {
         .collect()
 }
 
+/// Git repos under ~ (3 levels) plus projects from ~/.claude/projects and
+/// hand-added folders. Read-only and local; runs off the main thread.
+#[tauri::command]
+async fn list_projects(extra: Vec<String>) -> Vec<discovery::Project> {
+    let home = env::home();
+    tauri::async_runtime::spawn_blocking(move || {
+        discovery::discover(&discovery::DiscoverOptions {
+            claude_projects_dir: home.join(".claude/projects"),
+            home,
+            max_depth: 3,
+            extra: extra.into_iter().map(PathBuf::from).collect(),
+        })
+    })
+    .await
+    .unwrap_or_default()
+}
+
 fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     // No "Close Window" (⌘W closes a tile) and no Select All / Undo, which
     // would act on the page instead of the focused terminal.
@@ -169,6 +191,7 @@ pub fn run() {
     env::init();
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .menu(menu)
         .setup(|app| {
             let support = env::support_dir();
@@ -194,6 +217,8 @@ pub fn run() {
             pty_close,
             save_layout,
             tile_info,
+            list_projects,
+            list_sessions,
         ])
         .build(tauri::generate_context!())
         .expect("error while building desk")
