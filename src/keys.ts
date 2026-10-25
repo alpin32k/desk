@@ -11,6 +11,8 @@ export type Action =
   | { type: "lock" }
   | { type: "chat" }
   | { type: "terminal" }
+  | { type: "files" }
+  | { type: "run" }
   | { type: "focus"; index: number }
   | { type: "fullscreen" }
   | { type: "exitFullscreen" }
@@ -47,6 +49,10 @@ export function actionFor(e: KeyLike): Action | null {
       return { type: "coffee" };
     case "b": // blokada
       return { type: "lock" };
+    case "f": // pliki
+      return { type: "files" };
+    case "u": // uruchom
+      return { type: "run" };
     case "t": // terminal
       return { type: "terminal" };
     case "r": // rozmowa
@@ -63,6 +69,8 @@ export const HINTS: [string, string][] = [
   ["⌘N", "nowy projekt"],
   ["⌘D", "druga sesja"],
   ["⌘T", "terminal"],
+  ["⌘F", "pliki"],
+  ["⌘U", "uruchom"],
   ["⌘R", "rozmowa"],
   ["⌘Z", "zamknij"],
   ["⌘⇧Z", "zabij"],

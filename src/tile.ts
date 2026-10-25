@@ -14,7 +14,7 @@ import { agentLabel, keyOf, type Spec } from "./sessions";
 
 export type TileState = Exclude<HookState, "exited"> | "shell" | "starting";
 
-export type TileAction = "close" | "kill" | "fullscreen" | "focus" | "color" | "attached" | "sub" | "terminal" | "branch";
+export type TileAction = "close" | "kill" | "fullscreen" | "focus" | "color" | "attached" | "sub" | "terminal" | "branch" | "run";
 
 const THEME = {
   background: "#0b0d10",
@@ -70,6 +70,8 @@ export class Tile {
   index = 0;
   /** Shown inside a project card with other sessions: the card names the project. */
   grouped = false;
+  /** For a ⌘U session: the command it runs ("pnpm dev"). */
+  detail: string | null = null;
 
   private term: Terminal;
   private fit = new FitAddon();
@@ -104,6 +106,7 @@ export class Tile {
         <span class="actions">
           <button data-a="sub" title="Druga sesja w tym projekcie (⌘D)">+</button>
           <button data-a="terminal" title="Terminal w tym projekcie (⌘T)">›_</button>
+          <button data-a="run" title="Uruchom w tym projekcie, np. dev serwer (⌘U)">▶</button>
           <button data-a="fullscreen" title="Ekran pełny (⌘E)">⤢</button>
           <button data-a="close" title="Zamknij kafelek, sesja zostaje (⌘Z)">×</button>
           <button data-a="kill" title="Zabij sesję (⌘⇧Z)">⏻</button>
@@ -269,8 +272,8 @@ export class Tile {
     this.el.classList.toggle("grouped", this.grouped);
     const parts = [
       this.grouped
-        ? `<b>${escapeHtml(agentLabel(this))}</b>`
-        : `<span class="agent">${escapeHtml(agentLabel(this))}</span>`,
+        ? `<b>${escapeHtml(this.label())}</b>`
+        : `<span class="agent">${escapeHtml(this.label())}</span>`,
       this.grouped ? "" : `<b>${escapeHtml(this.name)}</b>`,
       this.branch && !this.grouped
         ? `<span class="branch" data-a="branch" title="Zmień branch">${escapeHtml(this.branch)}</span>`
@@ -280,6 +283,10 @@ export class Tile {
     ].filter(Boolean);
     this.title.innerHTML = parts.join(`<span class="sep"> · </span>`);
     this.title.title = `${this.agent} · ${this.path}`;
+  }
+
+  private label(): string {
+    return this.detail ? `▶ ${this.detail}` : agentLabel(this);
   }
 
   /** Detach from tmux (the session keeps running) and free the terminal. */

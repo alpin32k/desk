@@ -19,6 +19,13 @@ export interface Layout {
   colors: Record<string, number>;
   agents: CustomAgent[];
   projectsDir: string | null;
+  /** Command of each ⌘U "run" session, by session key. */
+  runs: Record<string, string>;
+}
+
+export interface RunTarget {
+  source: string;
+  command: string;
 }
 
 export interface CustomAgent {
@@ -92,8 +99,12 @@ export const api = {
   bootstrap: () => invoke<Bootstrap>("bootstrap"),
   listProjects: (extra: string[]) => invoke<Project[]>("list_projects", { extra }),
   listSessions: () => invoke<SessionInfo[]>("list_sessions"),
-  openSession: (path: string, agent: string, instance: number) =>
-    invoke<string>("open_session", { path, agent, instance }),
+  openSession: (path: string, agent: string, instance: number, command?: string) =>
+    invoke<string>("open_session", { path, agent, instance, command: command ?? null }),
+  projectFiles: (path: string) => invoke<string[]>("project_files", { path }),
+  openFile: (path: string, file: string) => invoke<void>("open_file", { path, file }),
+  previewFile: (path: string, file: string) => invoke<void>("preview_file", { path, file }),
+  runTargets: (path: string) => invoke<RunTarget[]>("run_targets", { path }),
   listAgents: () => invoke<AgentInfo[]>("list_agents"),
   createProject: (parent: string, name: string, git: boolean) =>
     invoke<string>("create_project", { parent, name, git }),

@@ -32,8 +32,24 @@ export function confirmBox(message: string, okLabel = "Tak"): Promise<boolean> {
   });
 }
 
+export interface Picked {
+  value: string;
+  /** Chosen with ⌥↵ / ⌥-click. */
+  alt: boolean;
+}
+
+export interface PickOptions {
+  current?: string | null;
+  /** Footer hint for ⌥↵, when it does something. */
+  altHint?: string;
+  /** Extra text after an item (e.g. where a command comes from). */
+  note?: (item: string) => string;
+}
+
+const PICK_ROWS = 300;
+
 /** Pick one of `items` (type to filter, ↑↓, ↵); resolves to null on Esc. */
-export function pickBox(title: string, items: string[], current: string | null): Promise<string | null> {
+export function pickBox(title: string, items: string[], opts: PickOptions = {}): Promise<Picked | null> {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "overlay";
@@ -41,7 +57,9 @@ export function pickBox(title: string, items: string[], current: string | null):
       <div class="dialog palette pick">
         <input type="text" spellcheck="false" autocomplete="off" />
         <div class="list"></div>
-        <footer><span class="dim"></span><kbd>↵</kbd> wybierz <kbd>esc</kbd> zamknij</footer>
+        <footer><span class="dim"></span><kbd>↵</kbd> wybierz ${
+          opts.altHint ? `<kbd>⌥↵</kbd> ${escapeHtml(opts.altHint)} ` : ""
+        }<kbd>esc</kbd> zamknij</footer>
       </div>`;
     const input = overlay.querySelector("input")!;
     const list = overlay.querySelector<HTMLElement>(".list")!;
@@ -51,19 +69,20 @@ export function pickBox(title: string, items: string[], current: string | null):
     let sel = 0;
     const draw = () => {
       const q = input.value.toLowerCase();
-      shown = items.filter((i) => i.toLowerCase().includes(q));
+      const words = q.split(/\s+/).filter(Boolean);
+      shown = items.filter((i) => words.every((w) => i.toLowerCase().includes(w))).slice(0, PICK_ROWS);
       sel = Math.min(sel, Math.max(0, shown.length - 1));
       list.innerHTML = shown
         .map(
           (i, n) =>
             `<div class="row ${n === sel ? "sel" : ""}" data-i="${n}"><span class="name">${escapeHtml(i)}</span>${
-              i === current ? `<span class="dim">obecny</span>` : ""
-            }</div>`,
+              i === opts.current ? `<span class="dim">obecny</span>` : ""
+            }${opts.note ? `<span class="dim">${escapeHtml(opts.note(i))}</span>` : ""}</div>`,
         )
         .join("");
       list.querySelector(".sel")?.scrollIntoView({ block: "nearest" });
     };
-    const done = (v: string | null) => {
+    const done = (v: Picked | null) => {
       window.removeEventListener("keydown", onKey, true);
       overlay.remove();
       resolve(v);
@@ -71,7 +90,7 @@ export function pickBox(title: string, items: string[], current: string | null):
     const onKey = (e: KeyboardEvent) => {
       const keys: Record<string, () => void> = {
         Escape: () => done(null),
-        Enter: () => done(shown[sel] ?? null),
+        Enter: () => done(shown[sel] === undefined ? null : { value: shown[sel], alt: e.altKey }),
         ArrowDown: () => ((sel = Math.min(sel + 1, shown.length - 1)), draw()),
         ArrowUp: () => ((sel = Math.max(sel - 1, 0)), draw()),
       };
@@ -84,7 +103,7 @@ export function pickBox(title: string, items: string[], current: string | null):
     input.addEventListener("input", () => ((sel = 0), draw()));
     overlay.addEventListener("click", (e) => {
       const i = (e.target as HTMLElement).closest<HTMLElement>(".row")?.dataset.i;
-      if (i !== undefined) done(shown[Number(i)]);
+      if (i !== undefined) done({ value: shown[Number(i)], alt: e.altKey });
       else if (e.target === overlay) done(null);
     });
     window.addEventListener("keydown", onKey, true);

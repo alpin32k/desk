@@ -174,11 +174,12 @@ export class App {
   private async createTile(key: string): Promise<Tile | null> {
     const spec = parseKey(key);
     try {
-      const slug = await api.openSession(spec.path, spec.agent, spec.instance);
+      const slug = await api.openSession(spec.path, spec.agent, spec.instance, this.layout.runs[key]);
       this.running.add(key);
       this.usageAt = 0; // a new harness may need its limits on the next poll
       if (this.tiles.has(key)) return null; // opened meanwhile (startup restore vs palette)
       const tile = new Tile(spec, slug, (t, a) => void this.onTileAction(t, a));
+      tile.detail = this.layout.runs[key] ?? null;
       // One color per project (shared by its agents and sub-sessions), distinct from other projects.
       const taken = [...this.tiles.values()]
         .filter((t) => t.path !== spec.path)
@@ -241,7 +242,7 @@ export class App {
       return toast(`${name}: ${err}`);
     }
     const current = tiles[0]?.branch ?? null;
-    const choice = await pickBox(`Branch · ${name}`, branches, current);
+    const choice = (await pickBox(`Branch · ${name}`, branches, { current }))?.value;
     if (!choice || choice === current) return;
     if (tiles.some((t) => t.state === "working")) {
       const ok = await confirmBox(`W ${name} sesja właśnie pracuje. Zmienić branch na ${choice}?`, "Zmień");
@@ -254,6 +255,35 @@ export class App {
       toast(`${name}: ${err}`);
     }
     void this.poll();
+  }
+
+  /** ⌘F: find a file in the project; ↵ opens it in an editor, ⌥↵ previews it in desk. */
+  private async openFiles(path: string): Promise<void> {
+    const name = path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+    const files = await api.projectFiles(path);
+    if (!files.length) return toast(`${name}: brak plików`);
+    const picked = await pickBox(`Plik · ${name}`, files, { altHint: "podgląd w desk" });
+    if (!picked) return;
+    try {
+      if (picked.alt) await api.previewFile(path, picked.value);
+      else await api.openFile(path, picked.value);
+    } catch (err) {
+      toast(`${picked.value}: ${err}`);
+    }
+  }
+
+  /** ⌘U: run one of the project's commands (dev server, tests...) in its card. */
+  private async runInProject(path: string): Promise<void> {
+    const name = path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+    const targets = await api.runTargets(path);
+    if (!targets.length) return toast(`${name}: nie znalazłem nic do uruchomienia (package.json, Cargo.toml, Makefile...)`);
+    const source = new Map(targets.map((t) => [t.command, t.source]));
+    const picked = await pickBox(`Uruchom · ${name}`, [...source.keys()], { note: (c) => source.get(c) ?? "" });
+    if (!picked) return;
+    const taken = [...(await api.listSessions()), ...this.tiles.values()];
+    const key = keyOf({ path, agent: "run", instance: nextInstance(taken, path, "run") });
+    this.layout.runs[key] = picked.value;
+    await this.openTile(key);
   }
 
   /** A plain shell in a project's card (in the home folder with no tile focused). */
@@ -294,6 +324,10 @@ export class App {
     const slug = tile?.slug ?? (await api.listSessions()).find((s) => keyOf(s) === key)?.slug;
     if (slug) await api.killSession(slug).catch((err) => toast(String(err)));
     this.running.delete(key);
+    if (this.layout.runs[key]) {
+      delete this.layout.runs[key];
+      this.save();
+    }
     this.palette.refresh();
   }
 
@@ -304,6 +338,7 @@ export class App {
     if (action === "fullscreen") return this.toggleFullscreen(tile.key);
     if (action === "sub") return this.openSub(tile);
     if (action === "terminal") return this.openTerminal(tile.path);
+    if (action === "run") return this.runInProject(tile.path);
     if (action === "branch") return this.switchBranch(tile.path);
     if (action === "attached" && tile.ptyId !== null) {
       const slug = this.earlyExits.get(tile.ptyId);
@@ -413,7 +448,7 @@ export class App {
     card.innerHTML = `
       <header class="card-head" draggable="true">
         <span class="dot"></span><span class="card-title"></span>
-        <span class="actions"><button data-a="sub" title="Kolejna sesja w tym projekcie (⌘D)">+</button><button data-a="terminal" title="Terminal w tym projekcie (⌘T)">›_</button></span>
+        <span class="actions"><button data-a="sub" title="Kolejna sesja w tym projekcie (⌘D)">+</button><button data-a="terminal" title="Terminal w tym projekcie (⌘T)">›_</button><button data-a="run" title="Uruchom w tym projekcie, np. dev serwer (⌘U)">▶</button></span>
       </header>
       <div class="card-body"></div>`;
     const head = card.querySelector<HTMLElement>(".card-head")!;
@@ -433,6 +468,7 @@ export class App {
       if (a === "sub") void this.openSub(t);
       else if (a === "terminal") void this.openTerminal(project);
       else if (a === "branch") void this.switchBranch(project);
+      else if (a === "run") void this.runInProject(project);
       else this.setActive(t.key, true);
     });
     this.cards.set(project, card);
@@ -783,6 +819,16 @@ export class App {
       case "terminal":
         void this.openTerminal(this.tiles.get(this.active ?? "")?.path ?? this.home);
         break;
+      case "files":
+      case "run": {
+        const t = this.tiles.get(this.active ?? "");
+        if (!t) {
+          toast("Najpierw wybierz kafelek projektu");
+          break;
+        }
+        void (a.type === "files" ? this.openFiles(t.path) : this.runInProject(t.path));
+        break;
+      }
       case "focus":
         this.focusIndex(a.index);
         break;

@@ -22,6 +22,8 @@ pub struct Layout {
     pub colors: std::collections::BTreeMap<String, u32>,
     /// Agents added by hand (built-ins are always available).
     pub agents: Vec<crate::agents::CustomAgent>,
+    /// Command of each "run" session (⌘U), by session key, to start it again.
+    pub runs: std::collections::BTreeMap<String, String>,
     /// Where "new project" creates folders; None = ~/Documents/projects or ~.
     pub projects_dir: Option<String>,
 }
@@ -36,6 +38,7 @@ impl Default for Layout {
             notifications: true,
             colors: Default::default(),
             agents: Vec::new(),
+            runs: Default::default(),
             projects_dir: None,
         }
     }

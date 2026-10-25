@@ -9,6 +9,7 @@ pub mod layout;
 pub mod lock;
 pub mod new_project;
 pub mod preview;
+pub mod project;
 pub mod pty;
 pub mod state_watch;
 pub mod tmux;
@@ -69,6 +70,7 @@ fn open_session(
     path: String,
     agent: String,
     instance: u32,
+    command: Option<String>,
 ) -> Result<String, String> {
     let dir = Path::new(&path);
     if !dir.is_dir() {
@@ -84,9 +86,20 @@ fn open_session(
     {
         return Ok(s.slug);
     }
-    let custom = layout::load(&app.layout_path).agents;
-    let command =
-        agents::command_for(&agent, &custom).ok_or_else(|| format!("unknown agent: {agent}"))?;
+    let command = if agent == RUN_AGENT {
+        // Only a command the project itself defines (see project::run_targets).
+        let command = command.unwrap_or_default();
+        if !project::run_targets(dir)
+            .iter()
+            .any(|t| t.command == command)
+        {
+            return Err(format!("{path} nie definiuje polecenia „{command}”"));
+        }
+        command
+    } else {
+        let custom = layout::load(&app.layout_path).agents;
+        agents::command_for(&agent, &custom).ok_or_else(|| format!("unknown agent: {agent}"))?
+    };
     let slug = tmux::session_slug(dir, &agent, instance);
     if app.tmux.has_session(&slug) {
         return Err(format!(
@@ -216,6 +229,32 @@ fn pty_close(app: State<App>, id: u32) {
 #[tauri::command]
 fn save_layout(app: State<App>, layout: layout::Layout) -> Result<(), String> {
     layout::save(&app.layout_path, &layout).map_err(|e| e.to_string())
+}
+
+/// Sessions started with ⌘U: a project command (dev server, tests...).
+const RUN_AGENT: &str = "run";
+
+#[tauri::command]
+async fn project_files(path: String) -> Vec<String> {
+    tauri::async_runtime::spawn_blocking(move || project::files(Path::new(&path)))
+        .await
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+fn open_file(path: String, file: String) -> Result<(), String> {
+    project::open_in_editor(Path::new(&path), &file)
+}
+
+#[tauri::command]
+fn preview_file(handle: AppHandle, path: String, file: String) -> Result<(), String> {
+    let full = project::inside(Path::new(&path), &file)?;
+    preview::open(&handle, &full.display().to_string())
+}
+
+#[tauri::command]
+fn run_targets(path: String) -> Vec<project::RunTarget> {
+    project::run_targets(Path::new(&path))
 }
 
 #[tauri::command]
@@ -366,6 +405,10 @@ pub fn run() {
             save_layout,
             tile_info,
             git_branches,
+            project_files,
+            open_file,
+            preview_file,
+            run_targets,
             git_switch,
             list_projects,
             list_sessions,

@@ -134,7 +134,10 @@ mod tests {
         run(&["config", "core.fsmonitor", "touch fsmonitor-ran"]);
         switch(d, "main").unwrap();
         switch(d, "other").unwrap();
-        assert!(!d.join("fsmonitor-ran").exists(), "repo config ran a program");
+        assert!(
+            !d.join("fsmonitor-ran").exists(),
+            "repo config ran a program"
+        );
 
         // A change that the other branch would overwrite: git refuses.
         std::fs::write(d.join("a.txt"), "2").unwrap();

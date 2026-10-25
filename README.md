@@ -24,6 +24,8 @@ po jednej sesji Claude Code (albo Codex, opencode, Gemini, aider, shell) na proj
 | Rozmowa | Zwykły czat o czymkolwiek, niezwiązany z żadnym projektem (⌘R). Każde ⌘R otwiera nową rozmowę. Jej zachowanie ustawiasz w `rozmowa/CLAUDE.md` w danych desk. |
 | Limity | W górnym pasku zużycie planu (5h / 7d) dla otwartych agentów: Claude z wejścia status line, Codex z `~/.codex/sessions`. Kolor bursztynowy od 70%, czerwony od 90%. |
 | Kafelek | Projekt (każdy ma swój stonowany kolor), branch git (kliknij, aby przełączyć: `git switch`, który przy niezapisanych zmianach odmawia), stan. Powiadomienie, gdy sesja czeka, a okno nie ma fokusu. |
+| Pliki | ⌘F: wyszukiwarka plików projektu (z `git ls-files`, bez `node_modules`). ↵ otwiera w edytorze (VS Code, Cursor, Zed albo Sublime, a bez nich w domyślnym edytorze tekstu), ⌥↵ w podglądzie desk. |
+| Uruchom | ⌘U albo ▶: skrypty z `package.json` (z pnpm/yarn/npm/bun według lockfile), `cargo run`/`test`, cele z `Makefile`, `docker compose up`, Django. Uruchamia się w ramce projektu, a link `localhost` z wyjścia kliknięciem otwiera podgląd. |
 | Podgląd | Kliknięcie linku (http, lokalny html/svg/png/pdf) otwiera szybki podgląd w oknie desk, a ⌥-klik otwiera go w przeglądarce. |
 | Kawa | ⌘K: komputer nie zaśnie. Drugie ⌘K: także przy zamkniętej klapce. Wyłącza się sama przy przegrzaniu lub baterii ≤15%. |
 | Blokada | ⌘B: ekran zostaje włączony, terminale widać, ale nic nie da się wpisać, dopóki nie odblokujesz Touch ID albo hasłem (macOS). |
@@ -36,6 +38,8 @@ po jednej sesji Claude Code (albo Codex, opencode, Gemini, aider, shell) na proj
 | ⌘N | nowy projekt (folder + opcjonalnie git init) |
 | ⌘D | druga sesja w tym projekcie |
 | ⌘T | terminal (zwykły shell) w projekcie aktywnego kafelka |
+| ⌘F | pliki projektu |
+| ⌘U | uruchom (dev serwer, testy...) |
 | ⌘R | rozmowa (czat bez projektu) |
 | ⌘Z | zamknij kafelek (sesja w tmux zostaje) |
 | ⌘⇧Z | zabij sesję |
