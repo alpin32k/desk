@@ -30,6 +30,8 @@ pub struct Layout {
     pub projects_dir: Option<String>,
     /// Columns follow what is open and the window size; off = `lanes` as set by hand.
     pub auto_layout: bool,
+    /// Color theme id (see src/themes.ts).
+    pub theme: String,
 }
 
 impl Default for Layout {
@@ -46,6 +48,7 @@ impl Default for Layout {
             cards: Default::default(),
             projects_dir: None,
             auto_layout: true,
+            theme: "desk".into(),
         }
     }
 }

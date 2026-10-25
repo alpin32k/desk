@@ -5,11 +5,12 @@ import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
-import { Terminal } from "@xterm/xterm";
+import { Terminal, type ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { preview } from "./side";
 import { api, type HookState } from "./api";
 import { stripProbeReplies } from "./input";
+import { DEFAULT_THEME, terminalTheme, themeById } from "./themes";
 import { PLATFORM, shortcuts } from "./platform";
 import { actionFor } from "./keys";
 import { fileLinks } from "./links";
@@ -19,29 +20,12 @@ export type TileState = Exclude<HookState, "exited"> | "shell" | "starting";
 
 export type TileAction = "close" | "kill" | "fullscreen" | "focus" | "color" | "attached" | "sub" | "terminal" | "branch" | "run";
 
-const THEME = {
-  background: "#0b0d10",
-  foreground: "#c9d1d9",
-  cursor: "#e6edf3",
-  cursorAccent: "#0b0d10",
-  selectionBackground: "#264f78",
-  black: "#1b1f24",
-  red: "#ff7b72",
-  green: "#7ee787",
-  yellow: "#e3b341",
-  blue: "#79c0ff",
-  magenta: "#d2a8ff",
-  cyan: "#56d4dd",
-  white: "#c9d1d9",
-  brightBlack: "#6e7681",
-  brightRed: "#ffa198",
-  brightGreen: "#aff5b4",
-  brightYellow: "#f8e3a1",
-  brightBlue: "#a5d6ff",
-  brightMagenta: "#e2c5ff",
-  brightCyan: "#b3f0ff",
-  brightWhite: "#f0f6fc",
-};
+/** Terminal colors of the chosen theme (Options); new tiles start with them. */
+let termTheme: ITheme = terminalTheme(themeById(DEFAULT_THEME));
+
+export function setTerminalTheme(t: ITheme): void {
+  termTheme = t;
+}
 
 /** State shown on the tile: the hook state while claude runs, "shell" after it exits. */
 export function displayState(hook: HookState | undefined): TileState {
@@ -139,7 +123,7 @@ export class Tile {
       fontFamily: '"JetBrainsMono Nerd Font Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
       fontSize: 11.5,
       lineHeight: 1.08,
-      theme: THEME,
+      theme: termTheme,
       cursorBlink: false,
       allowProposedApi: true,
       scrollback: 1000,
@@ -237,6 +221,10 @@ export class Tile {
 
   focus(): void {
     this.term.focus();
+  }
+
+  setTheme(t: ITheme): void {
+    this.term.options.theme = t;
   }
 
   /** What the mini card in the side rail shows: the last lines with text. */

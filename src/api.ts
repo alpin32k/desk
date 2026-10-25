@@ -25,6 +25,8 @@ export interface Layout {
   cards: Record<string, string>;
   /** Columns follow what is open and the window size. */
   autoLayout: boolean;
+  /** Color theme id (themes.ts). */
+  theme: string;
 }
 
 /** Where the side panel's page sits in the window (CSS pixels). */

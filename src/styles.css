@@ -125,14 +125,14 @@ button:hover {
 
 .coffee.awake {
   color: var(--fg);
-  border-color: #6b5a3e;
-  background: #1d1912;
+  border-color: color-mix(in srgb, var(--waiting) 45%, var(--bg));
+  background: color-mix(in srgb, var(--waiting) 8%, var(--bg));
 }
 
 .coffee.lid {
-  color: #e8c98a;
-  border-color: #8a6d3b;
-  background: #2a2113;
+  color: var(--waiting);
+  border-color: color-mix(in srgb, var(--waiting) 60%, var(--bg));
+  background: color-mix(in srgb, var(--waiting) 14%, var(--bg));
 }
 
 .coffee.warn {
@@ -362,7 +362,7 @@ button:hover {
 }
 
 .tile.active header {
-  background: #141922;
+  background: color-mix(in srgb, var(--accent) 9%, var(--panel));
 }
 
 .tile .badge {
@@ -446,6 +446,18 @@ button:hover {
   height: 100%;
 }
 
+/* xterm.css paints the viewport black and lets it scroll sideways: a dark
+   strip under the last row in light themes. Follow the theme instead. */
+.tile .term,
+.tile .term .xterm .xterm-viewport {
+  background-color: var(--bg) !important;
+}
+
+.tile .term .xterm .xterm-viewport {
+  overflow-x: hidden;
+  scrollbar-color: var(--line-hi) transparent;
+}
+
 .tile .state::before {
   content: "●";
   margin-right: 4px;
@@ -482,7 +494,7 @@ button:hover {
 }
 
 .tile.state-waiting header {
-  background: #2a2110;
+  background: color-mix(in srgb, var(--waiting) 13%, var(--bg));
 }
 
 @keyframes pulse {
@@ -590,7 +602,7 @@ button:hover {
 }
 
 .palette .row.sel {
-  background: #1a2230;
+  background: color-mix(in srgb, var(--accent) 15%, var(--panel));
 }
 
 .palette .row.child {
@@ -1018,4 +1030,38 @@ button.danger {
 
 .side-save.dirty {
   color: var(--waiting);
+}
+
+/* ---- theme picker (Options) ---- */
+.themes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+
+.theme {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 7px 9px;
+  border: 1px solid var(--line-hi);
+  border-radius: 5px;
+  text-align: left;
+}
+
+.theme.sel {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.theme .swatches {
+  display: flex;
+  gap: 3px;
+}
+
+.theme .swatches i {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
 }

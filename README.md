@@ -5,6 +5,8 @@ po jednej sesji Claude Code (albo Codex, opencode, Gemini, aider, shell) na proj
 
 ![desk](docs/screenshot.png)
 
+![Panel podglądu: Markdown z diagramem obok aktywnej sesji, reszta sesji po lewej](docs/panel.png)
+
 - **Sesje żyją w tmux** na prywatnym sockecie (`tmux -L desk`, własny `tmux.conf`), więc
   zamknięcie desk ich nie zabija. Po ponownym otwarciu kafelki wracają w tym samym układzie.
 - **Stan z hooków Claude Code** (pracuje / czeka / bezczynna / shell). Hooki są doklejane przez
@@ -24,12 +26,19 @@ po jednej sesji Claude Code (albo Codex, opencode, Gemini, aider, shell) na proj
 | Rozmowa | Zwykły czat o czymkolwiek, niezwiązany z żadnym projektem (⌘R). Każde ⌘R otwiera nową rozmowę w ramce aktywnego projektu, jak ⌘D, ale działa ona w swoim czystym folderze. Jej zachowanie ustawiasz w `rozmowa/CLAUDE.md` w danych desk. |
 | Limity | W górnym pasku zużycie planu (5h / 7d) dla otwartych agentów: Claude z wejścia status line, Codex z `~/.codex/sessions`. Obok każdego okna czas do resetu (↻2h13m). Kolor bursztynowy od 70%, czerwony od 90%. |
 | Układ | Kolumny dobierają się same do liczby projektów, sesji i rozmiaru okna (1 projekt na całe okno, 2 obok siebie, więcej w kilku kolumnach). W Opcjach można to wyłączyć i ustawić liczbę kolumn ręcznie. |
+| Motywy | 16 motywów w Opcjach, ciemne i jasne: desk, Cursor Dark, One Dark, Dracula, Monokai, Nord, Tokyo Night, Catppuccin (Mocha, Latte), Gruvbox, Rosé Pine, Solarized (Dark, Light), GitHub (Dark, Light), Ayu Light. Zmieniają okno i terminale od razu. |
 | Kafelek | Projekt (każdy ma swój stonowany kolor), branch git (kliknij, aby przełączyć: `git switch`, który przy niezapisanych zmianach odmawia), stan. Powiadomienie, gdy sesja czeka, a okno nie ma fokusu. |
 | Pliki | ⌘F: wyszukiwarka plików projektu (z `git ls-files`, bez `node_modules`). ↵ otwiera w edytorze (VS Code, Cursor, Zed albo Sublime, a bez nich w domyślnym edytorze tekstu), ⌥↵ w podglądzie desk. |
 | Uruchom | ⌘U albo ▶: skrypty z `package.json` (z pnpm/yarn/npm/bun według lockfile), `cargo run`/`test`, cele z `Makefile`, `docker compose up`, Django. Uruchamia się w ramce projektu, a link `localhost` z wyjścia kliknięciem otwiera podgląd. |
-| Podgląd | Panel obok terminali (⌘W): kliknięty link (strona, `localhost`, plik) otwiera się w nim, a ⌥-klik w przeglądarce. Pokazuje strony i obrazki, PDF, Markdown z diagramami mermaid, pliki `.mmd`, JSON, CSV jako tabelę oraz kod i tekst. Pasek adresu działa jak przeglądarka (wstecz, odśwież, wpisany adres). Gdy panel jest otwarty, w środku zostaje aktywna sesja, a pozostałe są po lewej jako mini karty (stan i ostatnie linie). Kliknięcie albo ⌘1–9 przenosi sesję do środka. |
+| Podgląd | Panel obok terminali (⌘W): kliknięty link (strona, `localhost`, plik) otwiera się w nim, a ⌥-klik w przeglądarce. Pokazuje strony i obrazki, PDF, Markdown z diagramami mermaid, pliki `.mmd`, JSON, CSV jako tabelę oraz kod i tekst. Pasek adresu działa jak przeglądarka (wstecz, odśwież, wpisany adres). ✎ edytuje plik tekstowy (Markdown, JSON, kod) w panelu, ⌘S zapisuje, a „podgląd” wraca do widoku. ↗ otwiera stronę w przeglądarce, a plik w jego domyślnym programie. Gdy panel jest otwarty, w środku zostaje aktywna sesja, a pozostałe są po lewej jako mini karty (stan i ostatnie linie). Kliknięcie albo ⌘1–9 przenosi sesję do środka. |
 | Kawa | ⌘K: komputer nie zaśnie. Drugie ⌘K: także przy zamkniętej klapce. Wyłącza się sama przy przegrzaniu lub baterii ≤15%. |
 | Blokada | ⌘B: ekran zostaje włączony, terminale widać, ale nic nie da się wpisać, dopóki nie odblokujesz Touch ID albo hasłem (macOS). |
+
+## Motywy
+
+![Wybór motywu w Opcjach](docs/themes.png)
+
+![Jasny motyw GitHub Light](docs/light.png)
 
 ## Skróty
 

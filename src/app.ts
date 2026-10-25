@@ -21,7 +21,8 @@ import { Palette } from "./palette";
 import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
 import { keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
 import { Settings } from "./settings";
-import { displayState, escapeHtml, Tile, type TileAction } from "./tile";
+import { applyTheme, terminalTheme, themeById } from "./themes";
+import { displayState, escapeHtml, setTerminalTheme, Tile, type TileAction } from "./tile";
 import { confirmBox, newProjectBox, pickBox, toast } from "./ui";
 import { usageHtml } from "./usage";
 
@@ -104,6 +105,11 @@ export class App {
         this.layout.lanes = L.setLaneCount(this.layout.lanes, n);
         this.changed();
       },
+      setTheme: (id) => {
+        this.layout.theme = id;
+        this.applyTheme();
+        this.save();
+      },
       setAutoLayout: (on) => {
         this.layout.autoLayout = on;
         this.changed();
@@ -165,8 +171,10 @@ export class App {
       runs: boot.layout.runs ?? {},
       cards: boot.layout.cards ?? {},
       autoLayout: boot.layout.autoLayout ?? true,
+      theme: boot.layout.theme ?? "desk",
       lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length),
     };
+    this.applyTheme();
 
     window.addEventListener("keydown", (e) => this.onKey(e), true);
     for (const type of ["paste", "drop", "keypress", "input"]) {
@@ -607,6 +615,15 @@ export class App {
     const cards = droppable(body);
     if (cards[index]) cards[index].classList.add("drop-before");
     else body.classList.add("drop-end");
+  }
+
+  /** Window and terminal colors from the chosen theme. */
+  private applyTheme(): void {
+    const theme = themeById(this.layout.theme);
+    applyTheme(theme);
+    const term = terminalTheme(theme);
+    setTerminalTheme(term);
+    for (const t of this.tiles.values()) t.setTheme(term);
   }
 
   private changed(): void {
