@@ -6,6 +6,7 @@ pub mod env;
 pub mod git;
 pub mod hooks;
 pub mod layout;
+pub mod lock;
 pub mod new_project;
 pub mod pty;
 pub mod state_watch;
@@ -131,8 +132,32 @@ fn pty_attach(
 }
 
 #[tauri::command(async)]
-fn pty_write(app: State<App>, id: u32, data: String) -> Result<(), String> {
+fn pty_write(
+    app: State<App>,
+    lock: State<lock::Lock>,
+    id: u32,
+    data: String,
+) -> Result<(), String> {
+    if lock.is_locked() {
+        return Err("desk jest zablokowany".into());
+    }
     app.ptys.write(id, data.as_bytes())
+}
+
+#[tauri::command]
+fn lock_desk(handle: AppHandle, lock: State<lock::Lock>) -> Result<(), String> {
+    lock.lock(&handle)
+}
+
+/// Shows the Touch ID / password dialog, so it runs off the main thread.
+#[tauri::command(async)]
+fn unlock_desk(handle: AppHandle, lock: State<lock::Lock>) -> Result<(), String> {
+    lock.unlock(&handle)
+}
+
+#[tauri::command]
+fn is_locked(lock: State<lock::Lock>) -> bool {
+    lock.is_locked()
 }
 
 #[tauri::command]
@@ -249,6 +274,7 @@ pub fn run() {
             let tmux = tmux::Tmux::new(&support)?;
             let hooks = hooks::install(&support)?;
             let watcher = state_watch::watch(app.handle().clone(), &hooks.state_dir).ok();
+            app.manage(lock::Lock::default());
             app.manage(AppCoffee(coffee::Coffee::new(&support)));
             coffee::spawn_guard(app.handle().clone());
             app.manage(App {
@@ -276,12 +302,27 @@ pub fn run() {
             coffee_set,
             coffee_restore,
             coffee_uninstall,
+            lock_desk,
+            unlock_desk,
+            is_locked,
             list_agents,
             create_project,
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event
+                && window.state::<lock::Lock>().is_locked()
+            {
+                api.prevent_close();
+            }
+        })
         .build(tauri::generate_context!())
         .expect("error while building desk")
         .run(|handle, event| {
+            if let RunEvent::ExitRequested { api, .. } = &event
+                && handle.state::<lock::Lock>().is_locked()
+            {
+                api.prevent_exit();
+            }
             if let RunEvent::Exit = event {
                 // Detach every tile; the tmux sessions keep running.
                 handle.state::<App>().ptys.close_all();

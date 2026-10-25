@@ -672,3 +672,27 @@ button.danger {
   border: 1px solid var(--line-hi);
   border-radius: 4px;
 }
+
+/* lock: terminals stay visible, input is blocked until Touch ID / password */
+.lock-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgb(0 0 0 / 0.12);
+  cursor: not-allowed;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 34px;
+}
+
+.lock-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px 6px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line-hi);
+  border-radius: 6px;
+  cursor: default;
+}

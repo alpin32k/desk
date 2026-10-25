@@ -1,4 +1,4 @@
-// ⌘K project palette: search, Tab picks the agent, Enter opens a tile,
+// ⌘P project palette: search, Tab picks the agent, Enter opens a tile,
 // ⌘Enter toggles autostart, ⌘⌫ kills a running session.
 import type { AgentInfo, Project } from "./api";
 import { ago, rows, shortPath, type Row } from "./projects";

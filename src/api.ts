@@ -97,4 +97,7 @@ export const api = {
   coffeeSet: (level: CoffeeLevel) => invoke<CoffeeStatus>("coffee_set", { level }),
   coffeeRestore: () => invoke<CoffeeStatus>("coffee_restore"),
   coffeeUninstall: () => invoke<CoffeeStatus>("coffee_uninstall"),
+  lockDesk: () => invoke<void>("lock_desk"),
+  unlockDesk: () => invoke<void>("unlock_desk"),
+  isLocked: () => invoke<boolean>("is_locked"),
 };

@@ -98,10 +98,10 @@ export class Tile {
         <span class="badge"></span>
         <span class="title"></span>
         <span class="actions">
-          <button data-a="sub" title="Pod-sesja w tym projekcie (⌘T)">+</button>
-          <button data-a="fullscreen" title="Pełny ekran (⌘↵)">⤢</button>
-          <button data-a="close" title="Zamknij kafelek, sesja zostaje (⌘W)">×</button>
-          <button data-a="kill" title="Zabij sesję (⌘⇧W)">⏻</button>
+          <button data-a="sub" title="Druga sesja w tym projekcie (⌘D)">+</button>
+          <button data-a="fullscreen" title="Ekran pełny (⌘E)">⤢</button>
+          <button data-a="close" title="Zamknij kafelek, sesja zostaje (⌘Z)">×</button>
+          <button data-a="kill" title="Zabij sesję (⌘⇧Z)">⏻</button>
         </span>
       </header>
       <div class="term"></div>`;
@@ -184,7 +184,7 @@ export class Tile {
     try {
       this.ptyId = await api.ptyAttach(this.slug, this.term.cols, this.term.rows, ch);
     } catch (err) {
-      this.term.write(`\r\n\x1b[31mNie udało się podłączyć do sesji: ${err}\x1b[0m\r\n⌘W zamyka kafelek.\r\n`);
+      this.term.write(`\r\n\x1b[31mNie udało się podłączyć do sesji: ${err}\x1b[0m\r\n⌘Z zamyka kafelek.\r\n`);
       return;
     }
     if (this.disposed) void api.ptyClose(this.ptyId);

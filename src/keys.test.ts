@@ -11,24 +11,27 @@ const k = (key: string, mods: Partial<{ metaKey: boolean; shiftKey: boolean; alt
 });
 
 describe("actionFor", () => {
-  it("maps the documented shortcuts", () => {
-    expect(actionFor(k("k"))).toEqual({ type: "palette" });
+  it("maps the Polish-named shortcuts", () => {
+    expect(actionFor(k("p"))).toEqual({ type: "palette" });
     expect(actionFor(k("n"))).toEqual({ type: "new" });
-    expect(actionFor(k("w"))).toEqual({ type: "close" });
-    expect(actionFor(k("t"))).toEqual({ type: "sub" });
-    expect(actionFor(k("W", { shiftKey: true }))).toEqual({ type: "kill" });
-    expect(actionFor(k("C", { shiftKey: true }))).toEqual({ type: "coffee" });
+    expect(actionFor(k("d"))).toEqual({ type: "sub" });
+    expect(actionFor(k("z"))).toEqual({ type: "close" });
+    expect(actionFor(k("Z", { shiftKey: true }))).toEqual({ type: "kill" });
     expect(actionFor(k("3"))).toEqual({ type: "focus", index: 2 });
+    expect(actionFor(k("e"))).toEqual({ type: "fullscreen" });
     expect(actionFor(k("Enter"))).toEqual({ type: "fullscreen" });
     expect(actionFor(k("Escape"))).toEqual({ type: "exitFullscreen" });
-    expect(actionFor(k(","))).toEqual({ type: "settings" });
+    expect(actionFor(k("k"))).toEqual({ type: "coffee" });
+    expect(actionFor(k("b"))).toEqual({ type: "lock" });
+    expect(actionFor(k("o"))).toEqual({ type: "settings" });
   });
 
   it("leaves terminal keys alone", () => {
     expect(actionFor(k("Escape", { metaKey: false }))).toBeNull();
     expect(actionFor(k("c"))).toBeNull(); // copy
     expect(actionFor(k("v"))).toBeNull(); // paste
-    expect(actionFor(k("k", { ctrlKey: true }))).toBeNull();
+    expect(actionFor(k("p", { ctrlKey: true }))).toBeNull();
     expect(actionFor(k("0"))).toBeNull();
+    expect(actionFor(k("W", { shiftKey: true }))).toBeNull();
   });
 });

@@ -37,6 +37,8 @@ export class App {
   private missing: { key: string; lane: number }[] = [];
   private coffee: CoffeeStatus = { level: "off", helperInstalled: false, sleepDisabled: false, stoppedBecause: null };
   private fullscreen: string | null = null;
+  private locked = false;
+  private lockEl: HTMLElement | null = null;
 
   private grid: HTMLElement;
   private top: HTMLElement;
@@ -132,6 +134,10 @@ export class App {
     };
 
     window.addEventListener("keydown", (e) => this.onKey(e), true);
+    for (const type of ["paste", "drop", "keypress", "input"]) {
+      window.addEventListener(type, (e) => this.locked && (e.preventDefault(), e.stopPropagation()), true);
+    }
+    if (await api.isLocked()) this.showLock();
     window.addEventListener("resize", () => this.fitAll());
 
     // Reattach every tile from the saved layout (starting sessions tmux lost) and the autostart ones.
@@ -336,7 +342,7 @@ export class App {
   private laneEl(): HTMLElement {
     const lane = document.createElement("div");
     lane.className = "lane";
-    lane.innerHTML = `<div class="lane-head"></div><div class="lane-body"><div class="hint">⌘K — otwórz projekt</div></div>`;
+    lane.innerHTML = `<div class="lane-head"></div><div class="lane-body"><div class="hint">⌘P — otwórz projekt</div></div>`;
     const body = lane.querySelector<HTMLElement>(".lane-body")!;
     body.addEventListener("dragover", (e) => {
       if (!e.dataTransfer?.types.includes("text/x-desk-key")) return;
@@ -526,7 +532,7 @@ export class App {
     const c = this.coffee;
     const label = { off: "☕", awake: "☕ kawa", lid: "☕ kawa · klapka" }[c.level];
     const title = {
-      off: "Kawa wyłączona (⌘⇧C). Kliknij: nie usypiaj komputera, dopóki desk działa.",
+      off: "Kawa wyłączona (⌘K). Kliknij: nie usypiaj komputera, dopóki desk działa.",
       awake: c.helperInstalled
         ? "Kawa: komputer nie zaśnie. Kliknij: także przy zamkniętej klapce."
         : "Kawa: komputer nie zaśnie. Kliknij: także przy zamkniętej klapce (macOS raz zapyta o hasło).",
@@ -539,9 +545,57 @@ export class App {
     return `<span class="spacer" data-tauri-drag-region></span>${stray}<button class="coffee ${c.level}" data-coffee="cycle" title="${title}">${label}</button>`;
   }
 
+  // ---- lock --------------------------------------------------------------
+
+  private async lock(): Promise<void> {
+    try {
+      await api.lockDesk();
+    } catch (err) {
+      toast(`Blokada: ${err}`);
+      return;
+    }
+    this.palette.close();
+    this.settings.close();
+    if (this.coffee.level === "off") void this.cycleCoffee(); // keep the screen on while locked
+    this.showLock();
+  }
+
+  private showLock(): void {
+    this.locked = true;
+    (document.activeElement as HTMLElement | null)?.blur();
+    this.lockEl?.remove();
+    this.lockEl = document.createElement("div");
+    this.lockEl.className = "lock-screen";
+    this.lockEl.innerHTML = `<div class="lock-box">🔒 desk zablokowany <button data-unlock>Odblokuj · Touch ID / hasło <kbd>↵</kbd></button></div>`;
+    this.lockEl.addEventListener("click", (e) => {
+      if ((e.target as HTMLElement).closest("[data-unlock]")) void this.unlock();
+    });
+    document.body.appendChild(this.lockEl);
+  }
+
+  private async unlock(): Promise<void> {
+    try {
+      await api.unlockDesk();
+    } catch (err) {
+      toast(`Nie odblokowano: ${err}`);
+      return;
+    }
+    this.locked = false;
+    this.lockEl?.remove();
+    this.lockEl = null;
+    if (this.active) this.setActive(this.active, true);
+  }
+
   // ---- keys --------------------------------------------------------------
 
   private onKey(e: KeyboardEvent): void {
+    if (this.locked) {
+      // Nothing reaches the terminals; Enter asks for Touch ID / password.
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === "Enter" && e.type === "keydown") void this.unlock();
+      return;
+    }
     const action = actionFor(e);
     if (!action) return;
     const overlay = document.querySelector(".overlay") !== null;
@@ -575,6 +629,9 @@ export class App {
         break;
       case "coffee":
         void this.cycleCoffee();
+        break;
+      case "lock":
+        void this.lock();
         break;
       case "sub": {
         const t = this.tiles.get(this.active ?? "");

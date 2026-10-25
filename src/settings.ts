@@ -1,4 +1,4 @@
-// ⌘, options: lane count, notifications, which projects start with the app,
+// ⌘O options: lane count, notifications, which projects start with the app,
 // hand-added folders.
 import type { AgentInfo, CoffeeStatus, Layout, Project } from "./api";
 import { rows, shortPath } from "./projects";
@@ -101,7 +101,7 @@ export class Settings {
           (f) => `<div class="folder"><span>${escapeHtml(shortPath(f, this.ctx.home()))}</span><button data-rm="${escapeHtml(f)}">usuń</button></div>`,
         )
         .join("")}<button data-k="add">+ Dodaj folder…</button></div>
-      <h3>Kawa <span class="dim">(⌘⇧C)</span></h3>
+      <h3>Kawa <span class="dim">(⌘K)</span></h3>
       <div class="line dim">Wyłącza się sama przy przegrzaniu albo baterii ≤15%. ${
         this.ctx.coffee().helperInstalled
           ? `Zgoda na tryb z klapką jest zainstalowana (/etc/sudoers.d/desk-pmset, tylko pmset disablesleep). <button data-k="coffee-rm">Usuń zgodę</button>`

@@ -1,5 +1,6 @@
-// App shortcuts. Anything not listed here goes to the focused terminal, so
-// plain Esc still reaches Claude (it interrupts a turn there).
+// App shortcuts, named after the Polish actions (⌘P projekty, ⌘Z zamknij, ...).
+// Anything not listed here goes to the focused terminal, so plain Esc still
+// reaches Claude (it interrupts a turn there).
 export type Action =
   | { type: "palette" }
   | { type: "new" }
@@ -7,6 +8,7 @@ export type Action =
   | { type: "kill" }
   | { type: "sub" }
   | { type: "coffee" }
+  | { type: "lock" }
   | { type: "focus"; index: number }
   | { type: "fullscreen" }
   | { type: "exitFullscreen" }
@@ -23,26 +25,27 @@ export interface KeyLike {
 export function actionFor(e: KeyLike): Action | null {
   if (!e.metaKey || e.ctrlKey || e.altKey) return null;
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-  if (e.shiftKey) {
-    if (key === "w") return { type: "kill" };
-    if (key === "c") return { type: "coffee" };
-    return null;
-  }
+  if (e.shiftKey) return key === "z" ? { type: "kill" } : null;
   if (key >= "1" && key <= "9") return { type: "focus", index: Number(key) - 1 };
   switch (key) {
-    case "k":
+    case "p": // projekty
       return { type: "palette" };
-    case "n":
+    case "n": // nowa sesja
       return { type: "new" };
-    case "w":
-      return { type: "close" };
-    case "t":
+    case "d": // druga sesja w tym projekcie
       return { type: "sub" };
+    case "z": // zamknij
+      return { type: "close" };
+    case "e": // ekran pełny
     case "Enter":
       return { type: "fullscreen" };
     case "Escape":
       return { type: "exitFullscreen" };
-    case ",":
+    case "k": // kawa
+      return { type: "coffee" };
+    case "b": // blokada
+      return { type: "lock" };
+    case "o": // opcje
       return { type: "settings" };
     default:
       return null;
@@ -50,13 +53,14 @@ export function actionFor(e: KeyLike): Action | null {
 }
 
 export const HINTS: [string, string][] = [
-  ["⌘K", "projekty"],
-  ["⌘N", "nowa sesja"],
-  ["⌘T", "pod-sesja"],
-  ["⌘W", "zamknij"],
-  ["⌘⇧W", "zabij"],
+  ["⌘P", "projekty"],
+  ["⌘N", "nowa"],
+  ["⌘D", "druga sesja"],
+  ["⌘Z", "zamknij"],
+  ["⌘⇧Z", "zabij"],
   ["⌘1-9", "skok"],
-  ["⌘↵", "pełny ekran"],
-  ["⌘⇧C", "kawa"],
-  ["⌘,", "opcje"],
+  ["⌘E", "ekran"],
+  ["⌘K", "kawa"],
+  ["⌘B", "blokada"],
+  ["⌘O", "opcje"],
 ];
