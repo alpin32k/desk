@@ -151,9 +151,14 @@ pub fn install(version: &str) -> Result<Vec<String>, String> {
 /// be shared (Linux `/tmp`): a name someone else made first is an error, never
 /// reused, so nobody can slip their own package in.
 fn private_dir() -> Result<PathBuf, String> {
-    let mut builder = std::fs::DirBuilder::new();
     #[cfg(unix)]
-    std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+    let builder = {
+        let mut b = std::fs::DirBuilder::new();
+        std::os::unix::fs::DirBuilderExt::mode(&mut b, 0o700);
+        b
+    };
+    #[cfg(not(unix))]
+    let builder = std::fs::DirBuilder::new();
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.subsec_nanos())
