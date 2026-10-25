@@ -52,6 +52,9 @@ pub fn parse(link: &str) -> Result<Target, String> {
         "http" | "https" => Ok(Target::Web(url)),
         "file" => {
             let path = url.to_file_path().map_err(|_| "zła ścieżka".to_string())?;
+            if !local_path(&path) {
+                return Err(format!("tylko pliki na tym komputerze: {}", path.display()));
+            }
             let path = path
                 .canonicalize()
                 .map_err(|_| format!("nie ma pliku {}", path.display()))?;
@@ -63,6 +66,20 @@ pub fn parse(link: &str) -> Result<Target, String> {
         }
         other => Err(format!("nieobsługiwany adres ({other}:)")),
     }
+}
+
+/// A path on this machine. On Windows only drive paths (`C:\...`): touching a
+/// UNC path (`\\host\share`) would make Windows connect to that host and
+/// send it the user's NTLM credentials.
+pub fn local_path(path: &Path) -> bool {
+    use std::path::{Component, Prefix};
+    if !cfg!(windows) {
+        return !path.to_string_lossy().starts_with("//");
+    }
+    matches!(
+        path.components().next(),
+        Some(Component::Prefix(p)) if matches!(p.kind(), Prefix::Disk(_) | Prefix::VerbatimDisk(_))
+    )
 }
 
 /// `deskpreview://localhost/<token>/<file>`, registering the file's folder.
@@ -314,6 +331,20 @@ mod tests {
         std::fs::write(&script, "echo hi").unwrap();
         assert!(open_external(script.to_str().unwrap()).is_err());
         assert!(open_external("javascript:alert(1)").is_err());
+    }
+
+    #[test]
+    fn refuses_network_paths() {
+        assert!(parse("file://attacker.example/share/x.html").is_err());
+        #[cfg(windows)]
+        {
+            assert!(parse(r"\\attacker\share\x.html").is_err());
+            assert!(parse("//attacker/share/x.html").is_err());
+            assert!(!local_path(Path::new(r"\\?\UNC\attacker\share\x.html")));
+            assert!(local_path(Path::new(r"C:\Users\x.html")));
+        }
+        #[cfg(unix)]
+        assert!(!local_path(Path::new("//attacker/share/x.html")));
     }
 
     #[test]

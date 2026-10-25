@@ -1,7 +1,7 @@
 // Local files worth previewing when a path is printed in a terminal
 // (Claude often writes mockups to an .html file and prints its path).
 const FILE =
-  /(?:^|[\s'"(`])((?:~|\/|[A-Za-z]:[\\/])[^\s'"()`]*\.(?:html?|svg|png|jpe?g|gif|webp|pdf))(?=$|[\s'"),.:;`])/gi;
+  /(?:^|[\s'"(`])((?:~|\/(?!\/)|[A-Za-z]:[\\/])[^\s'"()`]*\.(?:html?|svg|png|jpe?g|gif|webp|pdf))(?=$|[\s'"),.:;`])/gi;
 
 export interface FileLink {
   path: string;

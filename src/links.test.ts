@@ -18,4 +18,8 @@ describe("fileLinks", () => {
     const line = "Zapisałem C:\\Users\\jan\\mock.html i C:/tmp/a.png";
     expect(fileLinks(line).map((l) => l.path)).toEqual(["C:\\Users\\jan\\mock.html", "C:/tmp/a.png"]);
   });
+
+  it("ignores network paths", () => {
+    expect(fileLinks("see //attacker/share/x.html and \\\\host\\s\\y.html")).toEqual([]);
+  });
 });
