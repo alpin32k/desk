@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalize } from "./address";
+import { mention, normalize } from "./address";
 
 describe("address bar", () => {
   it("turns what was typed into a link", () => {
@@ -10,5 +10,14 @@ describe("address bar", () => {
     expect(normalize("/Users/me/README.md")).toBe("/Users/me/README.md");
     expect(normalize("~/notes.md")).toBe("~/notes.md");
     expect(normalize("C:\\docs\\a.md")).toBe("C:\\docs\\a.md");
+  });
+
+  it("mentions a path for Claude Code", () => {
+    expect(mention("/p/app", "/p/app/src/a.ts")).toBe("@src/a.ts ");
+    expect(mention("/p/app", "/p/app")).toBe("@. ");
+    expect(mention("/p/app", "/p/application/x.ts")).toBe("@/p/application/x.ts ");
+    expect(mention("/p/app", "/p/app/My Docs/a.md")).toBe('@"My Docs/a.md" ');
+    expect(mention("C:\\p", "C:\\p\\src\\a.ts")).toBe("@src\\a.ts ");
+    expect(mention(null, "/x/y")).toBe("@/x/y ");
   });
 });

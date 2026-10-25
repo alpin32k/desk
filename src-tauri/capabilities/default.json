@@ -21,6 +21,8 @@
     "allow-tile-info",
     "allow-git-branches",
     "allow-project-files",
+    "allow-search-files",
+    "allow-reveal-path",
     "allow-open-file",
     "allow-preview-file",
     "allow-run-targets",

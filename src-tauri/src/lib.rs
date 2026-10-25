@@ -289,6 +289,18 @@ async fn project_files(path: String) -> Vec<String> {
 }
 
 #[tauri::command]
+async fn search_files(path: String, query: String) -> Vec<String> {
+    tauri::async_runtime::spawn_blocking(move || project::search(Path::new(&path), &query))
+        .await
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+fn reveal_path(path: String) -> Result<(), String> {
+    project::reveal(Path::new(&path))
+}
+
+#[tauri::command]
 fn open_file(path: String, file: String) -> Result<(), String> {
     project::open_in_editor(Path::new(&path), &file)
 }
@@ -465,6 +477,8 @@ pub fn run() {
             tile_info,
             git_branches,
             project_files,
+            search_files,
+            reveal_path,
             open_file,
             preview_file,
             run_targets,

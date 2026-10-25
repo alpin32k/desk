@@ -15,7 +15,7 @@ import {
 } from "./api";
 import { actionFor, hints, type Action } from "./keys";
 import { PLATFORM, shortcut, shortcuts } from "./platform";
-import { Side, previewFile } from "./side";
+import { Side } from "./side";
 import * as L from "./lanes";
 import { Palette } from "./palette";
 import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
@@ -78,7 +78,15 @@ export class App {
       const key = (e.target as HTMLElement).closest<HTMLElement>("[data-key]")?.dataset.key;
       if (key) this.setActive(key, true);
     });
-    this.side = new Side(() => this.layout && this.render());
+    this.side = new Side(() => this.layout && this.render(), {
+      project: () => (this.active ? this.projectOf(this.active) : null),
+      insert: (text) => {
+        const t = this.tiles.get(this.active ?? "");
+        if (t) t.type(text);
+        else toast("Najpierw wybierz sesję, do której dodać ścieżkę");
+      },
+      terminal: (path) => void this.openTerminal(path),
+    });
     root.querySelector(".middle")!.appendChild(this.side.el);
     this.footer = root.querySelector(".bottom")!;
 
@@ -302,21 +310,6 @@ export class App {
     void this.poll();
   }
 
-  /** ⌘F: find a file in the project; ↵ opens it in an editor, ⌥↵ previews it in desk. */
-  private async openFiles(path: string): Promise<void> {
-    const name = path.split(/[\\/]/).filter(Boolean).pop() ?? path;
-    const files = await api.projectFiles(path);
-    if (!files.length) return toast(`${name}: brak plików`);
-    const picked = await pickBox(`Plik · ${name}`, files, { altHint: "podgląd w desk" });
-    if (!picked) return;
-    try {
-      if (picked.alt) await previewFile(path, picked.value);
-      else await api.openFile(path, picked.value);
-    } catch (err) {
-      toast(`${picked.value}: ${err}`);
-    }
-  }
-
   /** ⌘U: run one of the project's commands (dev server, tests...) in its card. */
   private async runInProject(path: string): Promise<void> {
     const name = path.split(/[\\/]/).filter(Boolean).pop() ?? path;
@@ -428,6 +421,7 @@ export class App {
       this.tiles.get(key)?.setActive(true);
       if (this.fullscreen && this.fullscreen !== key) this.toggleFullscreen(key);
       if (this.focusMode()) this.render(); // the newly active session moves to the middle
+      this.side.projectChanged();
     }
     if (focus) this.tiles.get(key)?.focus();
   }
@@ -934,13 +928,15 @@ export class App {
         void this.openTerminal(this.tiles.get(this.active ?? "")?.path ?? this.home);
         break;
       case "files":
+        this.side.showFiles();
+        break;
       case "run": {
         const t = this.tiles.get(this.active ?? "");
         if (!t) {
           toast("Najpierw wybierz kafelek projektu");
           break;
         }
-        void (a.type === "files" ? this.openFiles(t.path) : this.runInProject(t.path));
+        void this.runInProject(t.path);
         break;
       }
       case "focus":

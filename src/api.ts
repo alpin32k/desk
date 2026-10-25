@@ -147,6 +147,10 @@ export const api = {
   previewNav: (action: "back" | "forward" | "reload") => invoke<void>("preview_nav", { action }),
   /** Text of a file shown in the side panel, to edit it there. */
   readText: (path: string) => invoke<string>("read_text", { path }),
+  /** Files of a project whose text contains `query`. */
+  searchFiles: (path: string, query: string) => invoke<string[]>("search_files", { path, query }),
+  /** Show a file or folder in Finder / Explorer / the file manager. */
+  revealPath: (path: string) => invoke<void>("reveal_path", { path }),
   writeText: (path: string, text: string) => invoke<void>("write_text", { path, text }),
   openExternal: (url: string) => invoke<void>("open_external", { url }),
   chatDir: () => invoke<string>("chat_dir"),

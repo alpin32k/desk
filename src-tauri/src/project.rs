@@ -137,6 +137,86 @@ pub fn open_path_in_editor(file: &Path) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// Files whose text contains `query` (case-insensitive): `git grep` in a
+/// repository, else the files of the bounded walk. At most 500.
+pub fn search(root: &Path, query: &str) -> Vec<String> {
+    const LIMIT: usize = 500;
+    if query.trim().is_empty() {
+        return Vec::new();
+    }
+    let git = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args([
+            "--no-optional-locks",
+            "-c",
+            "core.fsmonitor=false",
+            "grep",
+            "-l",
+            "-I",
+            "-i",
+            "-F",
+            "--untracked",
+            "-e",
+            query,
+        ])
+        .output();
+    if let Ok(out) = git
+        && (out.status.success() || out.status.code() == Some(1))
+        && !String::from_utf8_lossy(&out.stderr).contains("not a git repository")
+    {
+        return String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .take(LIMIT)
+            .map(str::to_string)
+            .collect();
+    }
+    let needle = query.to_lowercase();
+    files(root)
+        .into_iter()
+        .filter(|rel| {
+            let p = root.join(rel);
+            std::fs::metadata(&p).is_ok_and(|m| m.len() <= 1024 * 1024)
+                && std::fs::read_to_string(&p).is_ok_and(|t| t.to_lowercase().contains(&needle))
+        })
+        .take(LIMIT)
+        .collect()
+}
+
+/// Show a file or folder in Finder / Explorer / the file manager.
+pub fn reveal(path: &Path) -> Result<(), String> {
+    if !path.is_absolute() || !crate::preview::local_path(path) || !path.exists() {
+        return Err(format!("nie ma {}", path.display()));
+    }
+    #[cfg(target_os = "macos")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("open");
+        c.arg("-R").arg(path);
+        c
+    };
+    #[cfg(windows)]
+    let mut cmd = {
+        use std::os::windows::process::CommandExt;
+        let mut c = std::process::Command::new("explorer.exe");
+        // explorer wants `/select,"path"` as one argument, quoted its own way.
+        c.raw_arg(format!("/select,\"{}\"", path.display()));
+        c
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut cmd = {
+        // A folder (never a file: xdg-open would open that file's default app).
+        let dir = if path.is_dir() {
+            path
+        } else {
+            path.parent().unwrap_or(path)
+        };
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(dir);
+        c
+    };
+    cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct RunTarget {
     /// What it is, e.g. "package.json" or "Cargo.toml".
@@ -299,6 +379,27 @@ mod tests {
             "{cmds:?}"
         );
         assert!(cmds.contains(&"npm run test:e2e".to_string()));
+    }
+
+    #[test]
+    fn searches_file_contents() {
+        let tmp = tempfile::tempdir().unwrap();
+        let d = tmp.path();
+        std::fs::create_dir_all(d.join("src")).unwrap();
+        std::fs::write(d.join("src/a.ts"), "const Needle = 1;").unwrap();
+        std::fs::write(d.join("b.md"), "nothing here").unwrap();
+        // Not a repository: the walk.
+        assert_eq!(search(d, "needle"), ["src/a.ts"]);
+        assert!(search(d, "  ").is_empty());
+        // A repository: git grep, untracked files included, options are data.
+        std::process::Command::new("git")
+            .arg("init")
+            .arg("-q")
+            .arg(d)
+            .status()
+            .unwrap();
+        assert_eq!(search(d, "NEEDLE"), ["src/a.ts"]);
+        assert!(search(d, "--version").is_empty());
     }
 
     #[test]

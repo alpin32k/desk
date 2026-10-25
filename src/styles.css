@@ -1082,3 +1082,140 @@ button.danger {
   outline: none;
   border-color: var(--accent);
 }
+
+/* ---- side panel: file column and folder card ---- */
+.side-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.side-body > .side-view {
+  min-width: 0;
+}
+
+.side-tree {
+  flex: none;
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.side-tree[hidden] {
+  display: none;
+}
+
+.tree-filter {
+  margin: 8px;
+  height: 24px;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line-hi);
+  border-radius: 5px;
+  padding: 0 8px;
+  user-select: text;
+}
+
+.tree-filter:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.tree-list {
+  flex: 1;
+  overflow: auto;
+  padding: 0 4px 8px;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding-right: 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+}
+
+.tree-row:hover {
+  background: var(--line);
+}
+
+.tree-row.sel,
+.tree-row:focus {
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+}
+
+.tree-icon {
+  width: 12px;
+  flex: none;
+  color: var(--dim);
+  text-align: center;
+  transition: transform 0.1s;
+}
+
+.tree-row.open .tree-icon {
+  transform: rotate(90deg);
+}
+
+.tree-row:not(.dir) .tree-icon::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 9px;
+  border: 1px solid var(--dim);
+  border-radius: 1px;
+}
+
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-where {
+  margin-left: 6px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+}
+
+.tree-empty {
+  padding: 8px 10px;
+}
+
+.folder-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.folder-icon {
+  width: 34px;
+  height: 34px;
+  color: var(--dim);
+}
+
+.folder-name {
+  font-size: 13px;
+  color: var(--fg);
+}
+
+.folder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.folder-actions button {
+  padding: 4px 10px;
+  border-radius: 5px;
+}

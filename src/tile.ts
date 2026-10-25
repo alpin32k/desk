@@ -223,6 +223,12 @@ export class Tile {
     this.term.focus();
   }
 
+  /** Type `text` into the session as if pasted (no Enter). */
+  type(text: string): void {
+    if (this.ptyId !== null) void api.ptyWrite(this.ptyId, text);
+    this.focus();
+  }
+
   setTheme(t: ITheme): void {
     this.term.options.theme = t;
   }
