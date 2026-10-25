@@ -13,6 +13,13 @@
 //! Linux
 //! - `systemd-inhibit --what=idle:sleep[:handle-lid-switch]` held until desk exits.
 //!
+//! Windows
+//! - `Awake`: `SetThreadExecutionState` held by a PowerShell that lives as long as desk.
+//! - `Lid`: additionally the power plan's lid action ("when I close the lid")
+//!   set to "do nothing" with `powercfg` (no admin rights needed). The old
+//!   values are saved in `coffee-lid.txt`; desk puts them back when coffee goes
+//!   off, and that PowerShell does when desk exits or crashes.
+//!
 //! Every 20 s the guard checks temperature and battery and turns coffee off
 //! when the machine is too hot or the battery is low.
 
@@ -54,6 +61,9 @@ pub struct Coffee {
     /// Lid mode's watchdog (macOS only).
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     stop_file: PathBuf,
+    /// Windows: the lid actions to put back.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    lid_file: PathBuf,
     stopped_because: Mutex<Option<String>>,
 }
 
@@ -63,6 +73,7 @@ impl Coffee {
             level: Mutex::new(Level::Off),
             keepawake: Mutex::new(None),
             stop_file: support_dir.join("coffee.stop"),
+            lid_file: support_dir.join("coffee-lid.txt"),
             stopped_because: Mutex::new(None),
         }
     }
@@ -75,7 +86,7 @@ impl Coffee {
         Status {
             level: *self.level.lock().unwrap(),
             helper_installed: cfg!(target_os = "macos") && helper_installed(),
-            sleep_disabled: sleep_disabled(),
+            sleep_disabled: sleep_disabled() || (cfg!(windows) && self.lid_file.exists()),
             stopped_because: self.stopped_because.lock().unwrap().clone(),
         }
     }
@@ -84,9 +95,6 @@ impl Coffee {
         let current = *self.level.lock().unwrap();
         if level == current {
             return Ok(self.status());
-        }
-        if level == Level::Lid && cfg!(windows) {
-            return Err("na Windowsie zamknięcie klapki ustawisz w Opcjach zasilania (Działanie po zamknięciu pokrywy)".into());
         }
         if level != Level::Off
             && let Some(reason) = guard_reason(thermal_hot(), battery())
@@ -112,8 +120,21 @@ impl Coffee {
             let _ = c.kill();
             let _ = c.wait();
         }
+        #[cfg(windows)]
+        let restore = {
+            if current == Level::Lid {
+                win_lid::restore(&self.lid_file)?;
+            }
+            if level == Level::Lid {
+                Some(win_lid::disable(&self.lid_file)?)
+            } else {
+                None
+            }
+        };
+        #[cfg(not(windows))]
+        let restore: Option<String> = None;
         if level != Level::Off {
-            let child = keepawake_command(level)
+            let child = keepawake_command(level, restore.as_deref())
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
@@ -129,6 +150,8 @@ impl Coffee {
     /// Restore normal sleep when sleep is disabled but no watchdog of ours is
     /// running (left over from a reboot or a killed watchdog).
     pub fn restore_sleep(&self) -> Result<Status, String> {
+        #[cfg(windows)]
+        win_lid::restore(&self.lid_file)?;
         #[cfg(target_os = "macos")]
         {
             if helper_installed() {
@@ -188,7 +211,9 @@ pub fn guard_reason(hot: bool, battery: Option<Battery>) -> Option<String> {
     }
 }
 
-fn keepawake_command(level: Level) -> Command {
+/// `restore` (Windows lid mode): PowerShell that puts the lid actions back
+/// once desk is gone.
+fn keepawake_command(level: Level, restore: Option<&str>) -> Command {
     let pid = std::process::id().to_string();
     if cfg!(windows) {
         // SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED |
@@ -196,7 +221,8 @@ fn keepawake_command(level: Level) -> Command {
         let script = format!(
             "Add-Type -Namespace Desk -Name Power -MemberDefinition '[DllImport(\"kernel32.dll\")] public static extern uint SetThreadExecutionState(uint f);'; \
              [Desk.Power]::SetThreadExecutionState([uint32]2147483651) | Out-Null; \
-             Wait-Process -Id {pid}"
+             Wait-Process -Id {pid}; {}",
+            restore.unwrap_or("")
         );
         let mut c = Command::new("powershell.exe");
         c.args([
@@ -273,7 +299,24 @@ fn battery() -> Option<Battery> {
     parse_battery(&String::from_utf8_lossy(&out.stdout))
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+fn battery() -> Option<Battery> {
+    use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+    let mut s = SYSTEM_POWER_STATUS::default();
+    // SAFETY: fills the struct it is given.
+    unsafe { GetSystemPowerStatus(&mut s) }.ok()?;
+    windows_battery(s.BatteryFlag, s.BatteryLifePercent, s.ACLineStatus)
+}
+
+/// `GetSystemPowerStatus`: flag 128 means no battery, 255 unknown percent.
+pub fn windows_battery(flag: u8, percent: u8, ac_line: u8) -> Option<Battery> {
+    (flag & 128 == 0 && percent != 255).then_some(Battery {
+        percent,
+        charging: ac_line == 1,
+    })
+}
+
+#[cfg(target_os = "linux")]
 fn battery() -> Option<Battery> {
     let dir = std::fs::read_dir("/sys/class/power_supply")
         .ok()?
@@ -434,9 +477,141 @@ pub fn applescript_quote(s: &str) -> String {
     format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
+/// `powercfg /query ... LIDACTION`: the current AC and DC indexes are the
+/// only `0x` values in the output (its labels depend on the system language).
+pub fn parse_lid_actions(out: &str) -> Option<(u32, u32)> {
+    let hex: Vec<u32> = out
+        .split_whitespace()
+        .filter_map(|w| w.strip_prefix("0x"))
+        .filter_map(|h| u32::from_str_radix(h, 16).ok())
+        .collect();
+    match hex.as_slice() {
+        [.., ac, dc] => Some((*ac, *dc)),
+        _ => None,
+    }
+}
+
+/// PowerShell that sets the lid actions back and forgets the saved values.
+pub fn lid_restore_script(ac: u32, dc: u32, file: &Path) -> String {
+    format!(
+        "powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION {ac}; \
+         powercfg /setdcvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION {dc}; \
+         powercfg /setactive SCHEME_CURRENT; \
+         Remove-Item -LiteralPath '{}' -ErrorAction SilentlyContinue",
+        file.display().to_string().replace('\'', "''")
+    )
+}
+
+#[cfg(windows)]
+mod win_lid {
+    use super::{lid_restore_script, parse_lid_actions};
+    use std::path::Path;
+    use std::process::Command;
+
+    fn powercfg(args: &[&str]) -> Result<String, String> {
+        let out = Command::new("powercfg")
+            .args(args)
+            .output()
+            .map_err(|e| format!("powercfg: {e}"))?;
+        if !out.status.success() {
+            return Err(format!(
+                "powercfg {}: {}",
+                args.join(" "),
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    }
+
+    fn set(ac: u32, dc: u32) -> Result<(), String> {
+        for (flag, v) in [("/setacvalueindex", ac), ("/setdcvalueindex", dc)] {
+            powercfg(&[
+                flag,
+                "SCHEME_CURRENT",
+                "SUB_BUTTONS",
+                "LIDACTION",
+                &v.to_string(),
+            ])?;
+        }
+        powercfg(&["/setactive", "SCHEME_CURRENT"]).map(|_| ())
+    }
+
+    /// Lid closed: do nothing. Saves the old actions (kept if already saved,
+    /// so a crash never records "do nothing" as the original) and returns the
+    /// PowerShell that restores them.
+    pub fn disable(file: &Path) -> Result<String, String> {
+        let (ac, dc) = match std::fs::read_to_string(file)
+            .ok()
+            .and_then(|t| parse_saved(&t))
+        {
+            Some(saved) => saved,
+            None => {
+                let out = powercfg(&["/query", "SCHEME_CURRENT", "SUB_BUTTONS", "LIDACTION"])?;
+                let now =
+                    parse_lid_actions(&out).ok_or("powercfg: nie odczytałem działania pokrywy")?;
+                std::fs::write(file, format!("{} {}", now.0, now.1)).map_err(|e| e.to_string())?;
+                now
+            }
+        };
+        set(0, 0)?;
+        Ok(lid_restore_script(ac, dc, file))
+    }
+
+    pub fn restore(file: &Path) -> Result<(), String> {
+        let Some((ac, dc)) = std::fs::read_to_string(file)
+            .ok()
+            .and_then(|t| parse_saved(&t))
+        else {
+            return Ok(());
+        };
+        set(ac, dc)?;
+        let _ = std::fs::remove_file(file);
+        Ok(())
+    }
+
+    fn parse_saved(text: &str) -> Option<(u32, u32)> {
+        let mut it = text.split_whitespace().map(|v| v.parse().ok());
+        Some((it.next()??, it.next()??))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_and_restores_windows_lid_actions() {
+        // `powercfg /query` on a Polish Windows: labels are translated, values are not.
+        let out = "Identyfikator GUID ustawienia zasilania: 5ca83367-6e45-459f-a27b-476b1d01c936  (Działanie po zamknięciu pokrywy)
+      Możliwy indeks ustawienia: 000
+      Możliwa przyjazna nazwa ustawienia: Nic nie rób
+      Możliwy indeks ustawienia: 001
+    Indeks bieżącego ustawienia zasilania prądem przemiennym: 0x00000001
+    Indeks bieżącego ustawienia zasilania prądem stałym: 0x00000002
+";
+        assert_eq!(parse_lid_actions(out), Some((1, 2)));
+        assert_eq!(parse_lid_actions("no values"), None);
+        let script = lid_restore_script(1, 2, Path::new(r"C:\Users\o'neil\desk\coffee-lid.txt"));
+        assert!(script.contains("/setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 1"));
+        assert!(script.contains("/setdcvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 2"));
+        assert!(
+            script.contains("'C:\\Users\\o''neil\\desk\\coffee-lid.txt'"),
+            "{script}"
+        );
+    }
+
+    #[test]
+    fn windows_battery_status() {
+        assert_eq!(windows_battery(128, 255, 1), None, "no battery");
+        assert_eq!(
+            windows_battery(0, 12, 0),
+            Some(Battery {
+                percent: 12,
+                charging: false
+            })
+        );
+        assert_eq!(windows_battery(8, 80, 1).map(|b| b.charging), Some(true));
+    }
 
     #[test]
     fn parses_battery() {

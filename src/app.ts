@@ -178,7 +178,7 @@ export class App {
 
     window.addEventListener("keydown", (e) => this.onKey(e), true);
     for (const type of ["paste", "drop", "keypress", "input"]) {
-      window.addEventListener(type, (e) => this.locked && (e.preventDefault(), e.stopPropagation()), true);
+      window.addEventListener(type, (e) => this.locked && !isLockField(e.target) && (e.preventDefault(), e.stopPropagation()), true);
     }
     if (await api.isLocked()) this.showLock();
     let resizeTimer: number | undefined;
@@ -769,9 +769,7 @@ export class App {
   // ---- coffee ------------------------------------------------------------
 
   private async cycleCoffee(): Promise<void> {
-    // No lid mode on Windows (set it in the power options there).
-    const lid: CoffeeLevel = PLATFORM === "windows" ? "off" : "lid";
-    const next: Record<CoffeeLevel, CoffeeLevel> = { off: "awake", awake: lid, lid: "off" };
+    const next: Record<CoffeeLevel, CoffeeLevel> = { off: "awake", awake: "lid", lid: "off" };
     try {
       this.coffee = await api.coffeeSet(next[this.coffee.level]);
     } catch (err) {
@@ -805,14 +803,15 @@ export class App {
     const label = { off: "☕", awake: "☕ kawa", lid: "☕ kawa · klapka" }[c.level];
     const title = {
       off: "Kawa wyłączona (⌘K). Kliknij: nie usypiaj komputera, dopóki desk działa.",
-      awake: c.helperInstalled
-        ? "Kawa: komputer nie zaśnie. Kliknij: także przy zamkniętej klapce."
-        : "Kawa: komputer nie zaśnie. Kliknij: także przy zamkniętej klapce (macOS raz zapyta o hasło).",
+      awake:
+        PLATFORM === "mac" && !c.helperInstalled
+          ? "Kawa: komputer nie zaśnie. Kliknij: także przy zamkniętej klapce (macOS raz zapyta o hasło)."
+          : "Kawa: komputer nie zaśnie. Kliknij: także przy zamkniętej klapce.",
       lid: "Kawa z zamkniętą klapką. Wyłącza się sama przy przegrzaniu lub baterii ≤15%. Kliknij: wyłącz.",
     }[c.level];
     const stray =
       c.sleepDisabled && c.level !== "lid"
-        ? `<button class="coffee warn" data-coffee="restore" title="Usypianie jest wyłączone w systemie (pmset disablesleep 1), np. po restarcie w trakcie kawy. Kliknij, aby przywrócić.">sen wyłączony · przywróć</button>`
+        ? `<button class="coffee warn" data-coffee="restore" title="Usypianie po zamknięciu klapki jest wyłączone w systemie, np. po restarcie w trakcie kawy. Kliknij, aby przywrócić.">sen wyłączony · przywróć</button>`
         : "";
     return `${stray}<button class="coffee ${c.level}" data-coffee="cycle" title="${shortcuts(title)}">${label}</button>`;
   }
@@ -838,18 +837,27 @@ export class App {
     this.lockEl?.remove();
     this.lockEl = document.createElement("div");
     this.lockEl.className = "lock-screen";
-    this.lockEl.innerHTML = `<div class="lock-box">🔒 desk zablokowany <button data-unlock>Odblokuj · Touch ID / hasło <kbd>↵</kbd></button></div>`;
+    // Linux checks the account password typed here; macOS and Windows show their own dialog.
+    const how = { mac: "Touch ID / hasło", windows: "Windows Hello", linux: "hasło konta" }[PLATFORM];
+    const field = PLATFORM === "linux" ? `<input type="password" class="lock-password" placeholder="hasło konta" autocomplete="current-password" />` : "";
+    this.lockEl.innerHTML = `<div class="lock-box">🔒 desk zablokowany ${field}<button data-unlock>Odblokuj · ${how} <kbd>↵</kbd></button></div>`;
     this.lockEl.addEventListener("click", (e) => {
       if ((e.target as HTMLElement).closest("[data-unlock]")) void this.unlock();
     });
     document.body.appendChild(this.lockEl);
+    this.lockEl.querySelector<HTMLInputElement>(".lock-password")?.focus();
   }
 
   private async unlock(): Promise<void> {
+    const field = this.lockEl?.querySelector<HTMLInputElement>(".lock-password");
     try {
-      await api.unlockDesk();
+      await api.unlockDesk(field ? field.value : undefined);
     } catch (err) {
       toast(`Nie odblokowano: ${err}`);
+      if (field) {
+        field.value = "";
+        field.focus();
+      }
       return;
     }
     this.locked = false;
@@ -862,7 +870,12 @@ export class App {
 
   private onKey(e: KeyboardEvent): void {
     if (this.locked) {
-      // Nothing reaches the terminals; Enter asks for Touch ID / password.
+      // Nothing reaches the terminals; Enter unlocks. The password field (Linux) takes typing.
+      if (isLockField(e.target)) {
+        e.stopPropagation();
+        if (e.key === "Enter" && e.type === "keydown") void this.unlock();
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       if (e.key === "Enter" && e.type === "keydown") void this.unlock();
@@ -964,4 +977,9 @@ async function ensureNotificationPermission(): Promise<void> {
   } catch {
     // Notifications are optional.
   }
+}
+
+/** The lock screen's password field (Linux): the one input that works while locked. */
+function isLockField(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && target.classList.contains("lock-password");
 }

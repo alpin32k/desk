@@ -10,6 +10,8 @@ pub mod layout;
 pub mod lock;
 pub mod native;
 pub mod new_project;
+#[cfg(target_os = "linux")]
+mod pam;
 pub mod preview;
 pub mod project;
 pub mod pty;
@@ -178,10 +180,15 @@ fn lock_desk(handle: AppHandle, lock: State<lock::Lock>) -> Result<(), String> {
     lock.lock(&handle)
 }
 
-/// Shows the Touch ID / password dialog, so it runs off the main thread.
+/// Shows the system's dialog (Touch ID, Windows Hello) or checks the typed
+/// password (Linux), so it runs off the main thread.
 #[tauri::command(async)]
-fn unlock_desk(handle: AppHandle, lock: State<lock::Lock>) -> Result<(), String> {
-    lock.unlock(&handle)
+fn unlock_desk(
+    handle: AppHandle,
+    lock: State<lock::Lock>,
+    password: Option<String>,
+) -> Result<(), String> {
+    lock.unlock(&handle, password.as_deref())
 }
 
 /// Show a link in the side panel at `bounds`; returns what the address bar shows.

@@ -31,8 +31,8 @@ po jednej sesji Claude Code (albo Codex, opencode, Gemini, aider, shell) na proj
 | Pliki | ⌘F: wyszukiwarka plików projektu (z `git ls-files`, bez `node_modules`). ↵ otwiera w edytorze (VS Code, Cursor, Zed albo Sublime, a bez nich w domyślnym edytorze tekstu), ⌥↵ w podglądzie desk. |
 | Uruchom | ⌘U albo ▶: skrypty z `package.json` (z pnpm/yarn/npm/bun według lockfile), `cargo run`/`test`, cele z `Makefile`, `docker compose up`, Django. Uruchamia się w ramce projektu, a link `localhost` z wyjścia kliknięciem otwiera podgląd. |
 | Podgląd | Panel obok terminali (⌘W): kliknięty link (strona, `localhost`, plik) otwiera się w nim, a ⌥-klik w przeglądarce. Pokazuje strony i obrazki, PDF, Markdown z diagramami mermaid, pliki `.mmd`, JSON, CSV jako tabelę oraz kod i tekst. Pasek adresu działa jak przeglądarka (wstecz, odśwież, wpisany adres). ✎ edytuje plik tekstowy (Markdown, JSON, kod) w panelu, ⌘S zapisuje, a „podgląd” wraca do widoku. ↗ otwiera stronę w przeglądarce, a plik w jego domyślnym programie. Gdy panel jest otwarty, w środku zostaje aktywna sesja, a pozostałe są po lewej jako mini karty (stan i ostatnie linie). Kliknięcie albo ⌘1–9 przenosi sesję do środka. |
-| Kawa | ⌘K: komputer nie zaśnie. Drugie ⌘K: także przy zamkniętej klapce. Wyłącza się sama przy przegrzaniu lub baterii ≤15%. |
-| Blokada | ⌘B: ekran zostaje włączony, terminale widać, ale nic nie da się wpisać, dopóki nie odblokujesz Touch ID albo hasłem (macOS). |
+| Kawa | ⌘K: komputer nie zaśnie. Drugie ⌘K: także przy zamkniętej klapce. Wyłącza się sama przy przegrzaniu lub baterii ≤15%. Działa na macOS, Windows i Linuksie. |
+| Blokada | ⌘B: ekran zostaje włączony, terminale widać, ale nic nie da się wpisać, dopóki nie odblokujesz: Touch ID albo hasłem na macOS, Windows Hello (PIN, odcisk palca, twarz) na Windows, hasłem konta na Linuksie. |
 
 ## Motywy
 
@@ -75,8 +75,11 @@ Zwykłe Esc trafia do terminala, więc dalej przerywa Claude.
 - **Hooki i status line uruchamiają sam `desk.exe`**, więc nie potrzeba sh. Limity Claude
   działają, a status line z `~/.claude/settings.json` wywołuje się przez Git Bash albo PowerShell,
   tak jak robi to Claude Code.
-- **Kawa** trzyma komputer obudzonym. Zamknięcie klapki ustawisz w Opcjach zasilania Windows.
-  Blokada (Touch ID) jest tylko na macOS.
+- **Kawa** trzyma komputer obudzonym. Tryb z klapką ustawia w planie zasilania „po zamknięciu
+  pokrywy: nic nie rób” (`powercfg`, bez uprawnień administratora). Poprzednie ustawienie wraca po
+  wyłączeniu kawy, a także wtedy, gdy desk się zamknie albo padnie.
+- **Blokada** odblokowuje się przez Windows Hello (PIN, odcisk palca albo twarz). Bez
+  skonfigurowanego Windows Hello ustaw PIN w Ustawienia → Konta → Opcje logowania.
 
 ## Wymagania
 
@@ -92,8 +95,10 @@ Zwykłe Esc trafia do terminala, więc dalej przerywa Claude.
   `pmset -a disablesleep 1` i `0`. Później nie pyta. Regułę usuwasz w Opcje → Kawa. Jeśli desk
   zginie w trakcie, osobny strażnik przywraca usypianie.
 - **Blokada** chroni sesje desk, a nie cały komputer: inny program działający jako Ty nadal może
-  podłączyć się do `tmux -L desk`. Do zablokowania całego Maca używaj ekranu blokady macOS.
-  Na Linuksie blokada jest niedostępna.
+  podłączyć się do `tmux -L desk`. Do zablokowania całego komputera używaj ekranu blokady systemu.
+  Na Linuksie hasło konta sprawdza PAM (tak jak wygaszacze ekranu).
+- **Kawa na Linuksie** używa `systemd-inhibit` (z klapką: `handle-lid-switch`), a przegrzanie i
+  baterię czyta z `/sys`.
 - **Limity Claude** pojawiają się po pierwszej odpowiedzi w sesji uruchomionej przez desk, bo
   Claude Code przekazuje je do status line dopiero wtedy. Twoja własna status line działa dalej:
   desk ją wywołuje.

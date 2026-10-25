@@ -136,7 +136,8 @@ export const api = {
   coffeeRestore: () => invoke<CoffeeStatus>("coffee_restore"),
   coffeeUninstall: () => invoke<CoffeeStatus>("coffee_uninstall"),
   lockDesk: () => invoke<void>("lock_desk"),
-  unlockDesk: () => invoke<void>("unlock_desk"),
+  /** `password`: the account password typed on the lock screen (Linux). */
+  unlockDesk: (password?: string) => invoke<void>("unlock_desk", { password: password ?? null }),
   isLocked: () => invoke<boolean>("is_locked"),
   /** Show a link in the side panel at `bounds`; resolves to what its address bar shows. */
   openPreview: (url: string, bounds: PreviewBounds) => invoke<string>("open_preview", { url, bounds }),
