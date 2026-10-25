@@ -1,7 +1,8 @@
 name: release
 
-# Push a tag like v0.1.0: builds desk for macOS (Apple Silicon, Intel),
-# Linux and Windows and attaches the bundles to the GitHub release for that tag.
+# Push a tag like v0.1.0: builds desk for macOS (Apple Silicon), Linux and
+# Windows and attaches the bundles to the GitHub release for that tag. Run by
+# hand (workflow_dispatch) it only builds them, as artifacts of the run.
 on:
   push:
     tags: ["v*"]
@@ -49,18 +50,35 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: pnpm tauri build ${{ matrix.args }}
+
+      - uses: actions/upload-artifact@v4
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: desk ${{ github.ref_name }}
-          releaseBody: |
-            macOS: `desk_*_aarch64.dmg` (Apple Silicon) or `desk_*_x64.dmg` (Intel).
-            The app is not signed: after copying it to Applications run
-            `xattr -dr com.apple.quarantine /Applications/desk.app` once.
-            Linux: `.deb` or `.AppImage`. Requires tmux.
-            Windows: `desk_*_x64-setup.exe`. Sessions run without tmux and end when desk closes.
-          releaseDraft: false
-          prerelease: false
-          args: ${{ matrix.args }}
+          name: desk-${{ matrix.target }}
+          if-no-files-found: error
+          path: |
+            src-tauri/target/**/release/bundle/dmg/*.dmg
+            src-tauri/target/**/release/bundle/deb/*.deb
+            src-tauri/target/**/release/bundle/appimage/*.AppImage
+            src-tauri/target/**/release/bundle/nsis/*-setup.exe
+
+  # The bundles go to the GitHub release for the tag (on a tag push).
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "desk $GITHUB_REF_NAME" \
+            --notes-file - $(find dist -type f) <<'NOTES'
+          macOS (Apple Silicon): `desk_*_aarch64.dmg`. The app is not signed: after copying it to
+          Applications run `xattr -dr com.apple.quarantine /Applications/desk.app` once.
+          Linux: `.deb` or `.AppImage`. Requires tmux.
+          Windows: `desk_*_x64-setup.exe`. Sessions run without tmux and end when desk closes.
+          NOTES
