@@ -86,6 +86,26 @@ button:hover {
   align-self: stretch;
 }
 
+.usage {
+  margin-right: 8px;
+  padding: 0 7px;
+  line-height: 18px;
+  border: 1px solid var(--line-hi);
+  border-radius: 4px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.usage.warn {
+  color: var(--waiting);
+  border-color: var(--waiting);
+}
+
+.usage.high {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
 .coffee {
   margin-right: 8px;
   padding: 0 8px;

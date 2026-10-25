@@ -730,6 +730,7 @@ dependencies = [
  "objc2-app-kit",
  "objc2-foundation",
  "objc2-local-authentication",
+ "percent-encoding",
  "portable-pty",
  "serde",
  "serde_json",

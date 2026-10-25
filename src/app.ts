@@ -11,6 +11,7 @@ import {
   type Project,
   type PtyExit,
   type SessionState,
+  type Usage,
 } from "./api";
 import { actionFor, HINTS, type Action } from "./keys";
 import * as L from "./lanes";
@@ -20,8 +21,10 @@ import { keyOf, nextInstance, parseKey } from "./sessions";
 import { Settings } from "./settings";
 import { displayState, escapeHtml, Tile, type TileAction } from "./tile";
 import { confirmBox, newProjectBox, toast } from "./ui";
+import { usageHtml } from "./usage";
 
 const POLL_MS = 3000;
+const USAGE_MS = 30_000;
 
 export class App {
   private layout!: Layout;
@@ -35,6 +38,8 @@ export class App {
   private opening = new Map<string, Promise<void>>();
   private earlyExits = new Map<number, string>(); // pty-exit that arrived before attach returned
   private missing: { key: string; lane: number }[] = [];
+  private usage: Usage[] = [];
+  private usageAt = 0;
   private coffee: CoffeeStatus = { level: "off", helperInstalled: false, sleepDisabled: false, stoppedBecause: null };
   private fullscreen: string | null = null;
   private locked = false;
@@ -167,6 +172,7 @@ export class App {
     try {
       const slug = await api.openSession(spec.path, spec.agent, spec.instance);
       this.running.add(key);
+      this.usageAt = 0; // a new harness may need its limits on the next poll
       if (this.tiles.has(key)) return null; // opened meanwhile (startup restore vs palette)
       const tile = new Tile(spec, slug, (t, a) => void this.onTileAction(t, a));
       // One color per project (shared by its agents and sub-sessions), distinct from other projects.
@@ -477,7 +483,15 @@ export class App {
     for (const tile of this.tiles.values()) {
       tile.update({ branch: branch.get(tile.path) ?? null, state: displayState(this.hook.get(tile.slug)?.state) });
     }
+    if (Date.now() - this.usageAt >= USAGE_MS) await this.refreshUsage();
     this.renderChrome();
+  }
+
+  /** Limits only for the harnesses that have a tile open. */
+  private async refreshUsage(): Promise<void> {
+    this.usageAt = Date.now();
+    const agents = [...new Set([...this.tiles.values()].map((t) => t.agent))];
+    this.usage = agents.length ? await api.usage(agents).catch(() => this.usage) : [];
   }
 
   private onHookState(s: SessionState): void {
@@ -498,7 +512,7 @@ export class App {
     const waiting = count("waiting");
     this.top.innerHTML = `<span class="brand" data-tauri-drag-region>desk</span><span class="dim" data-tauri-drag-region> · ${this.tiles.size} sessions</span>${
       waiting ? `<span class="waiting-pill" data-tauri-drag-region>${waiting} czeka</span>` : ""
-    }${this.coffeeHtml()}`;
+    }<span class="spacer" data-tauri-drag-region></span>${usageHtml(this.usage, Date.now())}${this.coffeeHtml()}`;
     this.footer.innerHTML =
       HINTS.map(([k, label]) => `<span><kbd>${k}</kbd> ${escapeHtml(label)}</span>`).join("") +
       `<span class="spacer"></span><span class="counts"><b>${this.tiles.size}</b> sessions · <span class="c-working">${count("working")} working</span> · <span class="c-waiting">${waiting} waiting</span> · ${count("idle")} idle</span>`;
@@ -550,7 +564,7 @@ export class App {
       c.sleepDisabled && c.level !== "lid"
         ? `<button class="coffee warn" data-coffee="restore" title="Usypianie jest wyłączone w systemie (pmset disablesleep 1), np. po restarcie w trakcie kawy. Kliknij, aby przywrócić.">sen wyłączony · przywróć</button>`
         : "";
-    return `<span class="spacer" data-tauri-drag-region></span>${stray}<button class="coffee ${c.level}" data-coffee="cycle" title="${title}">${label}</button>`;
+    return `${stray}<button class="coffee ${c.level}" data-coffee="cycle" title="${title}">${label}</button>`;
   }
 
   // ---- lock --------------------------------------------------------------

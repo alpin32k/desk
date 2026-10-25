@@ -12,6 +12,7 @@ pub mod preview;
 pub mod pty;
 pub mod state_watch;
 pub mod tmux;
+pub mod usage;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -96,6 +97,11 @@ fn open_session(
     let env = [
         ("DESK_SLUG", slug.clone()),
         ("DESK_STATE_DIR", app.hooks.state_dir.display().to_string()),
+        // desk's --settings replaces the status line; the wrapper runs this one.
+        (
+            "DESK_STATUSLINE",
+            usage::user_statusline(dir, &env::home()).unwrap_or_default(),
+        ),
     ];
     app.tmux
         .new_session(&slug, dir, &script, &env, &agent, instance)?;
@@ -159,6 +165,12 @@ fn unlock_desk(handle: AppHandle, lock: State<lock::Lock>) -> Result<(), String>
 #[tauri::command]
 fn open_preview(handle: AppHandle, url: String) -> Result<(), String> {
     preview::open(&handle, &url)
+}
+
+/// Plan limits for the given agents, from local files only.
+#[tauri::command(async)]
+fn usage(app: State<App>, agents: Vec<String>) -> Vec<usage::Usage> {
+    usage::usage(&agents, &app.hooks.state_dir, &env::home())
 }
 
 /// Empty folder for loose questions that belong to no project.
@@ -294,6 +306,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
+        .register_uri_scheme_protocol(preview::SCHEME, |_ctx, req| preview::serve(&req))
         .menu(|app| menu(app, false))
         .setup(|app| {
             let support = env::support_dir();
@@ -334,6 +347,7 @@ pub fn run() {
             open_preview,
             open_external,
             scratch_dir,
+            usage,
             list_agents,
             create_project,
         ])

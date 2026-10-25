@@ -114,21 +114,29 @@ pub fn install(support_dir: &Path) -> std::io::Result<HookFiles> {
     let state_dir = support_dir.join("state");
     std::fs::create_dir_all(&state_dir)?;
     let script = support_dir.join("desk-hook.sh");
-    std::fs::write(&script, SCRIPT)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))?;
+    let statusline = support_dir.join("desk-statusline.sh");
+    for (path, text) in [
+        (&script, SCRIPT),
+        (&statusline, crate::usage::STATUSLINE_SCRIPT),
+    ] {
+        std::fs::write(path, text)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))?;
+        }
     }
     let settings = support_dir.join("claude-hooks.json");
-    std::fs::write(&settings, settings_json(&script).to_string())?;
+    std::fs::write(&settings, settings_json(&script, &statusline).to_string())?;
     Ok(HookFiles {
         settings,
         state_dir,
     })
 }
 
-pub fn settings_json(script: &Path) -> serde_json::Value {
+/// Hooks for session state, plus a status line wrapper that records the plan's
+/// rate limits and then runs the user's own status line (see usage.rs).
+pub fn settings_json(script: &Path, statusline: &Path) -> serde_json::Value {
     let quoted = crate::tmux::shell_quote(&script.display().to_string());
     let hooks: serde_json::Map<String, serde_json::Value> = EVENTS
         .iter()
@@ -139,7 +147,14 @@ pub fn settings_json(script: &Path) -> serde_json::Value {
             (e.to_string(), entry)
         })
         .collect();
-    serde_json::json!({ "hooks": hooks })
+    serde_json::json!({
+        "hooks": hooks,
+        "statusLine": {
+            "type": "command",
+            "command": crate::tmux::shell_quote(&statusline.display().to_string()),
+            "refreshInterval": 10
+        }
+    })
 }
 
 #[cfg(test)]
@@ -198,9 +213,11 @@ mod tests {
 
     #[test]
     fn settings_quote_script_path_with_spaces() {
-        let v = settings_json(Path::new(
-            "/Users/k/Library/Application Support/desk/desk-hook.sh",
-        ));
+        let v = settings_json(
+            Path::new("/Users/k/Library/Application Support/desk/desk-hook.sh"),
+            Path::new("/s/desk-statusline.sh"),
+        );
+        assert_eq!(v["statusLine"]["command"], "'/s/desk-statusline.sh'");
         let cmd = v["hooks"]["Stop"][0]["hooks"][0]["command"]
             .as_str()
             .unwrap();

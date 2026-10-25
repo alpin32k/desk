@@ -71,6 +71,18 @@ export interface CoffeeStatus {
   stoppedBecause: string | null;
 }
 
+export interface UsageWindow {
+  label: string;
+  usedPercent: number;
+  /** Unix seconds. */
+  resetsAt: number;
+}
+
+export interface Usage {
+  agent: string;
+  windows: UsageWindow[];
+}
+
 export interface PtyExit {
   id: number;
   slug: string;
@@ -103,4 +115,5 @@ export const api = {
   openPreview: (url: string) => invoke<void>("open_preview", { url }),
   openExternal: (url: string) => invoke<void>("open_external", { url }),
   scratchDir: () => invoke<string>("scratch_dir"),
+  usage: (agents: string[]) => invoke<Usage[]>("usage", { agents }),
 };
