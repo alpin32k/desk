@@ -135,16 +135,19 @@ pub fn install(version: &str) -> Result<Vec<String>, String> {
     if !file.is_file() {
         return Err(format!("nie pobrałem {asset}"));
     }
-    if cfg!(target_os = "macos") {
-        replace_bundle(&file, &dir, &target)?;
-        Ok(vec!["open".into(), target.to_string_lossy().into()])
-    } else if cfg!(windows) {
-        // Passive install (progress only), then desk is started again by the user.
-        Ok(vec![file.to_string_lossy().into(), "/P".into()])
-    } else {
-        replace_file(&file, &target)?;
-        Ok(vec![target.to_string_lossy().into()])
+    if cfg!(windows) {
+        // Passive install (progress only); the installer stays until it has run.
+        return Ok(vec![file.to_string_lossy().into(), "/P".into()]);
     }
+    let replaced = if cfg!(target_os = "macos") {
+        replace_bundle(&file, &dir, &target)
+    } else {
+        replace_file(&file, &target)
+    };
+    let _ = std::fs::remove_dir_all(&dir);
+    replaced?;
+    let target = target.to_string_lossy().into_owned();
+    Ok(if cfg!(target_os = "macos") { vec!["open".into(), target] } else { vec![target] })
 }
 
 /// A new folder only this user can enter, for the download. The temp dir can
