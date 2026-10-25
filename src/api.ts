@@ -115,5 +115,7 @@ export const api = {
   openPreview: (url: string) => invoke<void>("open_preview", { url }),
   openExternal: (url: string) => invoke<void>("open_external", { url }),
   chatDir: () => invoke<string>("chat_dir"),
+  gitBranches: (path: string) => invoke<string[]>("git_branches", { path }),
+  gitSwitch: (path: string, branch: string) => invoke<void>("git_switch", { path, branch }),
   usage: (agents: string[]) => invoke<Usage[]>("usage", { agents }),
 };

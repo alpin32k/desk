@@ -32,6 +32,68 @@ export function confirmBox(message: string, okLabel = "Tak"): Promise<boolean> {
   });
 }
 
+/** Pick one of `items` (type to filter, ↑↓, ↵); resolves to null on Esc. */
+export function pickBox(title: string, items: string[], current: string | null): Promise<string | null> {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "overlay";
+    overlay.innerHTML = `
+      <div class="dialog palette pick">
+        <input type="text" spellcheck="false" autocomplete="off" />
+        <div class="list"></div>
+        <footer><span class="dim"></span><kbd>↵</kbd> wybierz <kbd>esc</kbd> zamknij</footer>
+      </div>`;
+    const input = overlay.querySelector("input")!;
+    const list = overlay.querySelector<HTMLElement>(".list")!;
+    input.placeholder = title;
+    overlay.querySelector("footer .dim")!.textContent = title;
+    let shown: string[] = [];
+    let sel = 0;
+    const draw = () => {
+      const q = input.value.toLowerCase();
+      shown = items.filter((i) => i.toLowerCase().includes(q));
+      sel = Math.min(sel, Math.max(0, shown.length - 1));
+      list.innerHTML = shown
+        .map(
+          (i, n) =>
+            `<div class="row ${n === sel ? "sel" : ""}" data-i="${n}"><span class="name">${escapeHtml(i)}</span>${
+              i === current ? `<span class="dim">obecny</span>` : ""
+            }</div>`,
+        )
+        .join("");
+      list.querySelector(".sel")?.scrollIntoView({ block: "nearest" });
+    };
+    const done = (v: string | null) => {
+      window.removeEventListener("keydown", onKey, true);
+      overlay.remove();
+      resolve(v);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      const keys: Record<string, () => void> = {
+        Escape: () => done(null),
+        Enter: () => done(shown[sel] ?? null),
+        ArrowDown: () => ((sel = Math.min(sel + 1, shown.length - 1)), draw()),
+        ArrowUp: () => ((sel = Math.max(sel - 1, 0)), draw()),
+      };
+      const f = keys[e.key];
+      if (!f) return;
+      e.preventDefault();
+      e.stopPropagation();
+      f();
+    };
+    input.addEventListener("input", () => ((sel = 0), draw()));
+    overlay.addEventListener("click", (e) => {
+      const i = (e.target as HTMLElement).closest<HTMLElement>(".row")?.dataset.i;
+      if (i !== undefined) done(shown[Number(i)]);
+      else if (e.target === overlay) done(null);
+    });
+    window.addEventListener("keydown", onKey, true);
+    document.body.appendChild(overlay);
+    draw();
+    input.focus();
+  });
+}
+
 export function toast(message: string): void {
   const el = document.createElement("div");
   el.className = "toast";

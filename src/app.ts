@@ -20,7 +20,7 @@ import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
 import { keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
 import { Settings } from "./settings";
 import { displayState, escapeHtml, Tile, type TileAction } from "./tile";
-import { confirmBox, newProjectBox, toast } from "./ui";
+import { confirmBox, newProjectBox, pickBox, toast } from "./ui";
 import { usageHtml } from "./usage";
 
 const POLL_MS = 3000;
@@ -230,6 +230,32 @@ export class App {
     await this.openTile(keyOf({ path, agent, instance: nextInstance(taken, path, agent) }));
   }
 
+  /** Pick a branch for the project and `git switch` to it (git refuses rather than drop changes). */
+  private async switchBranch(path: string): Promise<void> {
+    const tiles = [...this.tiles.values()].filter((t) => t.path === path);
+    const name = tiles[0]?.name ?? path;
+    let branches: string[];
+    try {
+      branches = await api.gitBranches(path);
+    } catch (err) {
+      return toast(`${name}: ${err}`);
+    }
+    const current = tiles[0]?.branch ?? null;
+    const choice = await pickBox(`Branch · ${name}`, branches, current);
+    if (!choice || choice === current) return;
+    if (tiles.some((t) => t.state === "working")) {
+      const ok = await confirmBox(`W ${name} sesja właśnie pracuje. Zmienić branch na ${choice}?`, "Zmień");
+      if (!ok) return;
+    }
+    try {
+      await api.gitSwitch(path, choice);
+      toast(`${name}: ${choice}`);
+    } catch (err) {
+      toast(`${name}: ${err}`);
+    }
+    void this.poll();
+  }
+
   /** A plain shell in a project's card (in the home folder with no tile focused). */
   private async openTerminal(path: string): Promise<void> {
     const taken = [...(await api.listSessions()), ...this.tiles.values()];
@@ -278,6 +304,7 @@ export class App {
     if (action === "fullscreen") return this.toggleFullscreen(tile.key);
     if (action === "sub") return this.openSub(tile);
     if (action === "terminal") return this.openTerminal(tile.path);
+    if (action === "branch") return this.switchBranch(tile.path);
     if (action === "attached" && tile.ptyId !== null) {
       const slug = this.earlyExits.get(tile.ptyId);
       if (slug !== undefined) {
@@ -405,6 +432,7 @@ export class App {
       const a = (e.target as HTMLElement).closest<HTMLElement>("[data-a]")?.dataset.a;
       if (a === "sub") void this.openSub(t);
       else if (a === "terminal") void this.openTerminal(project);
+      else if (a === "branch") void this.switchBranch(project);
       else this.setActive(t.key, true);
     });
     this.cards.set(project, card);
@@ -420,7 +448,7 @@ export class App {
       const t = tiles[0];
       const parts = [
         `<b>${escapeHtml(t.name)}</b>`,
-        t.branch ? `<span class="branch">${escapeHtml(t.branch)}</span>` : "",
+        t.branch ? `<span class="branch" data-a="branch" title="Zmień branch">${escapeHtml(t.branch)}</span>` : "",
         `<span class="dim">${sessionsLabel(tiles.length)}</span>`,
       ].filter(Boolean);
       const title = card.querySelector<HTMLElement>(".card-title")!;

@@ -389,6 +389,16 @@ button:hover {
   color: var(--accent);
 }
 
+.tile .branch,
+.card-title .branch {
+  cursor: pointer;
+}
+
+.tile .branch:hover,
+.card-title .branch:hover {
+  text-decoration: underline;
+}
+
 .tile .actions {
   flex: none;
   display: flex;

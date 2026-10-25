@@ -23,7 +23,7 @@ po jednej sesji Claude Code (albo Codex, opencode, Gemini, aider, shell) na proj
 | Druga sesja | Kilka sesji w jednym projekcie (⌘D), w jednej ramce projektu. ⌘T dokłada do niej zwykły terminal. |
 | Rozmowa | Zwykły czat o czymkolwiek, niezwiązany z żadnym projektem (⌘R). Każde ⌘R otwiera nową rozmowę. Jej zachowanie ustawiasz w `rozmowa/CLAUDE.md` w danych desk. |
 | Limity | W górnym pasku zużycie planu (5h / 7d) dla otwartych agentów: Claude z wejścia status line, Codex z `~/.codex/sessions`. Kolor bursztynowy od 70%, czerwony od 90%. |
-| Kafelek | Projekt (każdy ma swój stonowany kolor), branch git, stan. Powiadomienie, gdy sesja czeka, a okno nie ma fokusu. |
+| Kafelek | Projekt (każdy ma swój stonowany kolor), branch git (kliknij, aby przełączyć: `git switch`, który przy niezapisanych zmianach odmawia), stan. Powiadomienie, gdy sesja czeka, a okno nie ma fokusu. |
 | Podgląd | Kliknięcie linku (http, lokalny html/svg/png/pdf) otwiera szybki podgląd w oknie desk, a ⌥-klik otwiera go w przeglądarce. |
 | Kawa | ⌘K: komputer nie zaśnie. Drugie ⌘K: także przy zamkniętej klapce. Wyłącza się sama przy przegrzaniu lub baterii ≤15%. |
 | Blokada | ⌘B: ekran zostaje włączony, terminale widać, ale nic nie da się wpisać, dopóki nie odblokujesz Touch ID albo hasłem (macOS). |

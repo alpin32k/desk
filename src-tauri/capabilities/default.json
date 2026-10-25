@@ -19,6 +19,8 @@
     "allow-pty-close",
     "allow-save-layout",
     "allow-tile-info",
+    "allow-git-branches",
+    "allow-git-switch",
     "allow-list-projects",
     "allow-list-sessions",
     "allow-coffee-status",

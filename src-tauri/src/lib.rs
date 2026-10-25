@@ -219,6 +219,16 @@ fn save_layout(app: State<App>, layout: layout::Layout) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn git_branches(path: String) -> Result<Vec<String>, String> {
+    git::branches(Path::new(&path))
+}
+
+#[tauri::command]
+fn git_switch(path: String, branch: String) -> Result<(), String> {
+    git::switch(Path::new(&path), &branch)
+}
+
+#[tauri::command]
 fn tile_info(paths: Vec<String>) -> Vec<TileInfo> {
     paths
         .into_iter()
@@ -355,6 +365,8 @@ pub fn run() {
             pty_close,
             save_layout,
             tile_info,
+            git_branches,
+            git_switch,
             list_projects,
             list_sessions,
             coffee_status,

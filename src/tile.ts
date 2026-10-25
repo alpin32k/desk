@@ -14,7 +14,7 @@ import { agentLabel, keyOf, type Spec } from "./sessions";
 
 export type TileState = Exclude<HookState, "exited"> | "shell" | "starting";
 
-export type TileAction = "close" | "kill" | "fullscreen" | "focus" | "color" | "attached" | "sub" | "terminal";
+export type TileAction = "close" | "kill" | "fullscreen" | "focus" | "color" | "attached" | "sub" | "terminal" | "branch";
 
 const THEME = {
   background: "#0b0d10",
@@ -272,7 +272,9 @@ export class Tile {
         ? `<b>${escapeHtml(agentLabel(this))}</b>`
         : `<span class="agent">${escapeHtml(agentLabel(this))}</span>`,
       this.grouped ? "" : `<b>${escapeHtml(this.name)}</b>`,
-      this.branch && !this.grouped ? `<span class="branch">${escapeHtml(this.branch)}</span>` : "",
+      this.branch && !this.grouped
+        ? `<span class="branch" data-a="branch" title="Zmień branch">${escapeHtml(this.branch)}</span>`
+        : "",
       // Only Claude Code reports working/waiting/idle through desk's hooks.
       this.agent === "claude" ? `<span class="state">${STATE_LABEL[this.state]}</span>` : "",
     ].filter(Boolean);

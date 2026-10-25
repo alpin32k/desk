@@ -11,6 +11,8 @@ const COMMANDS: &[&str] = &[
     "pty_close",
     "save_layout",
     "tile_info",
+    "git_branches",
+    "git_switch",
     "list_projects",
     "list_sessions",
     "coffee_status",
