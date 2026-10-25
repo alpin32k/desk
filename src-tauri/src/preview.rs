@@ -220,7 +220,11 @@ fn allow_navigation(u: &Url) -> bool {
 pub fn open_external(link: &str) -> Result<(), String> {
     let arg = match parse(link)? {
         Target::Web(u) => u.to_string(),
-        Target::File(p) => p.display().to_string(),
+        // Only documents a browser shows: the default app for a `.command`
+        // or `.terminal` file would run it. The path is absolute and URLs
+        // start with http, so neither can be taken for an option.
+        Target::File(p) if mime(&p).is_some() => p.display().to_string(),
+        Target::File(p) => return Err(format!("nie otwieram tego typu pliku: {}", p.display())),
     };
     let opener = if cfg!(target_os = "macos") {
         "open"
@@ -289,6 +293,15 @@ mod tests {
         let escape = path.replace("index.html", "..%2Fsecret.txt");
         assert_eq!(resolve(&escape), None);
         assert_eq!(resolve("/unknown-token/index.html"), None);
+    }
+
+    #[test]
+    fn opens_only_document_types_externally() {
+        let tmp = tempfile::tempdir().unwrap();
+        let script = tmp.path().join("run.command");
+        std::fs::write(&script, "echo hi").unwrap();
+        assert!(open_external(script.to_str().unwrap()).is_err());
+        assert!(open_external("javascript:alert(1)").is_err());
     }
 
     #[test]
