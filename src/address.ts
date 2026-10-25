@@ -9,6 +9,16 @@ export function normalize(input: string): string {
   return /^(localhost|127\.|\[::1\])/.test(s) ? `http://${s}` : `https://${s}`;
 }
 
+/** Shown rendered in the panel (Markdown, diagrams, tables, pages, images), not as text to edit. */
+export function rendered(path: string): boolean {
+  const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+  return path.includes(".") && RENDERED.has(ext);
+}
+
+const RENDERED = new Set(
+  "md markdown mdx mmd mermaid csv tsv html htm pdf png jpg jpeg gif webp avif bmp ico svg".split(" "),
+);
+
 /**
  * `@path` for Claude Code: relative to the project when inside it, quoted when
  * it has spaces. "" for a name with control characters or quotes: it is typed

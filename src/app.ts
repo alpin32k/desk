@@ -956,6 +956,8 @@ export class App {
     }
     const action = actionFor(e);
     if (!action) return;
+    // In a text field ⌘Z / ⌘⇧Z (Ctrl+Shift+Z) are undo and redo, not close and kill.
+    if ((action.type === "close" || action.type === "kill") && isTextField(e.target)) return;
     const overlay = document.querySelector(".overlay") !== null;
     if (overlay && !["palette", "new", "settings", "close"].includes(action.type)) return; // e.g. ⌘↵ in the palette
     e.preventDefault();
@@ -1055,6 +1057,11 @@ async function ensureNotificationPermission(): Promise<void> {
 }
 
 /** The lock screen's password field (Linux): the one input that works while locked. */
+/** Where typing edits text: inputs, text areas, the panel's editor. */
+function isTextField(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && (target.matches("input, textarea") || target.isContentEditable);
+}
+
 function isLockField(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && target.classList.contains("lock-password");
 }

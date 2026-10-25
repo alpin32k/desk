@@ -7,9 +7,10 @@ import { listen } from "@tauri-apps/api/event";
 import { api, type PreviewBounds } from "./api";
 import { PLATFORM, shortcut } from "./platform";
 import { toast } from "./ui";
-import { mention, normalize } from "./address";
+import { mention, normalize, rendered } from "./address";
 import { FileTree, itemsLabel } from "./treeview";
 import { escapeHtml } from "./tile";
+import { createEditor, type Editor } from "./editor";
 
 const WIDTH_KEY = "desk.sideWidth";
 const TREE_KEY = "desk.sideTree";
@@ -60,7 +61,7 @@ export class Side {
   private created = false;
   private covered = false;
   /** Editing this file in desk's window instead of showing the page. */
-  private editing: { path: string; text: string; area: HTMLTextAreaElement } | null = null;
+  private editing: { path: string; text: string; editor: Editor } | null = null;
   /** A folder card is shown instead of the page (absolute path). */
   private folder: string | null = null;
   private tree: FileTree;
@@ -173,6 +174,8 @@ export class Side {
       this.view.replaceChildren();
       // A new page shows at once: hide it again if a dialog is open.
       this.sync();
+      // Code and plain text open for editing; rendered documents stay a preview (✎ edits them).
+      if (isLocal(this.address.value) && !rendered(this.address.value)) await this.edit(true);
     } catch (err) {
       this.fail(err);
       throw err;
@@ -295,46 +298,42 @@ export class Side {
   }
 
   private dirty(): boolean {
-    return this.editing !== null && this.editing.area.value !== this.editing.text;
+    return this.editing !== null && this.editing.editor.value() !== this.editing.text;
   }
 
-  /** Edit the shown file in a plain editor in desk's own window. */
-  private async edit(): Promise<void> {
+  /**
+   * Edit the shown file in desk's own window, with syntax colors. `quiet`: it
+   * was opened for editing on its own, so a file that is not text just stays
+   * in the preview.
+   */
+  private async edit(quiet = false): Promise<void> {
     const path = this.address.value;
     let text: string;
     try {
       text = await api.readText(path);
     } catch (err) {
-      return toast(`Edycja: ${err}`);
+      if (!quiet) toast(`Edycja: ${err}`);
+      return;
     }
-    const area = document.createElement("textarea");
-    area.className = "side-editor";
-    area.spellcheck = false;
-    area.value = text;
-    area.addEventListener("input", () => this.syncButtons());
-    area.addEventListener("keydown", (e) => {
-      const mod = PLATFORM === "mac" ? e.metaKey : e.ctrlKey;
-      if (mod && e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        e.stopPropagation();
-        void this.save();
-      } else if (e.key === "Tab" && !e.shiftKey && !mod) {
-        e.preventDefault();
-        area.setRangeText("  ", area.selectionStart, area.selectionEnd, "end");
-        this.syncButtons();
-      }
+    if (this.address.value !== path || this.editing) return; // another file meanwhile
+    const box = document.createElement("div");
+    box.className = "side-editor";
+    this.view.replaceChildren(box);
+    const editor = createEditor(box, text, path.split(/[\\/]/).pop() ?? path, {
+      change: () => this.syncButtons(),
+      save: () => void this.save(),
     });
-    this.editing = { path, text, area };
-    this.view.replaceChildren(area);
+    this.editing = { path, text, editor };
     this.sync();
     this.syncButtons();
-    area.focus();
+    if (!quiet) editor.focus();
   }
 
   private async save(): Promise<boolean> {
     const ed = this.editing;
     if (!ed) return true;
-    const text = ed.area.value;
+    const text = ed.editor.value();
+    if (text === ed.text) return true; // unchanged: leave the file (and its date) alone
     try {
       await api.writeText(ed.path, text);
       ed.text = text;
@@ -349,6 +348,7 @@ export class Side {
   /** Back to the page: save first, then show it again, reloaded. */
   private async stopEditing(): Promise<boolean> {
     if (!(await this.save())) return false;
+    this.editing?.editor.destroy();
     this.editing = null;
     this.view.replaceChildren();
     this.sync();

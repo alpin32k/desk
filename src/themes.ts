@@ -268,6 +268,8 @@ export function uiColors(t: Theme): Record<UiVar, string> {
 
 export function applyTheme(t: Theme, root: HTMLElement = document.documentElement): void {
   for (const [k, v] of Object.entries(uiColors(t))) root.style.setProperty(`--${k}`, v);
+  // The editor's syntax colors (editor.ts).
+  t.ansi.forEach((c, i) => root.style.setProperty(`--ansi-${i}`, c));
   root.style.colorScheme = t.light ? "light" : "dark";
   root.dataset.theme = t.id;
 }

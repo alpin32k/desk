@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mention, normalize } from "./address";
+import { mention, normalize, rendered } from "./address";
 
 describe("address bar", () => {
   it("turns what was typed into a link", () => {
@@ -10,6 +10,11 @@ describe("address bar", () => {
     expect(normalize("/Users/me/README.md")).toBe("/Users/me/README.md");
     expect(normalize("~/notes.md")).toBe("~/notes.md");
     expect(normalize("C:\\docs\\a.md")).toBe("C:\\docs\\a.md");
+  });
+
+  it("tells documents shown rendered from text to edit", () => {
+    expect(["/p/README.md", "/p/plan.MMD", "/p/data.csv", "/p/logo.svg", "/p/a.pdf"].map(rendered)).toEqual([true, true, true, true, true]);
+    expect(["/p/src/app.ts", "/p/Cargo.toml", "/p/.env.example", "/p/Makefile", "/p/x.json"].map(rendered)).toEqual([false, false, false, false, false]);
   });
 
   it("mentions a path for Claude Code", () => {

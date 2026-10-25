@@ -1032,20 +1032,24 @@ button.danger {
 .side-view:has(.side-editor) {
   padding: 0;
   align-items: stretch;
+  text-align: left;
 }
 
 .side-editor {
   flex: 1;
   width: 100%;
-  resize: none;
-  border: none;
-  outline: none;
-  padding: 12px 16px;
-  font: 12px/1.55 var(--mono);
-  color: var(--fg);
+  min-height: 0;
+  overflow: hidden;
   background: var(--bg);
   user-select: text;
-  tab-size: 2;
+}
+
+.side-editor .cm-editor {
+  height: 100%;
+}
+
+.side-editor .cm-editor.cm-focused {
+  outline: none;
 }
 
 .side-save.dirty {
