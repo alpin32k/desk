@@ -158,8 +158,9 @@ pub fn parse_sessions(out: &str) -> Vec<SessionInfo> {
         .collect()
 }
 
-/// Stable tmux-safe session name: sanitized folder name + 4 hex chars of a
-/// hash of the full path (two `app` folders in different places do not clash).
+/// Stable tmux-safe session name: sanitized folder name + 8 hex chars of a
+/// hash of the full path (two `app` folders in different places do not clash;
+/// `open_session` still checks the path, so a hash collision cannot mix them up).
 pub fn slug(path: &Path) -> String {
     let name = path
         .file_name()
@@ -176,8 +177,8 @@ pub fn slug(path: &Path) -> String {
     let clean = clean.trim_matches('-');
     let clean = if clean.is_empty() { "project" } else { clean };
     format!(
-        "{clean}-{:04x}",
-        fnv1a(path.display().to_string().as_bytes()) & 0xffff
+        "{clean}-{:08x}",
+        fnv1a(path.display().to_string().as_bytes()) as u32
     )
 }
 
@@ -199,7 +200,7 @@ mod tests {
     fn slug_is_tmux_safe_and_stable() {
         let s = slug(Path::new("/Users/k/Documents/projects/mm.crm v2"));
         assert!(s.starts_with("mm-crm-v2-"), "{s}");
-        assert_eq!(s.len(), "mm-crm-v2-".len() + 4);
+        assert_eq!(s.len(), "mm-crm-v2-".len() + 8);
         assert!(s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'));
         assert_eq!(s, slug(Path::new("/Users/k/Documents/projects/mm.crm v2")));
     }
@@ -207,6 +208,11 @@ mod tests {
     #[test]
     fn same_name_different_path_differs() {
         assert_ne!(slug(Path::new("/a/app")), slug(Path::new("/b/app")));
+        // Collided with the old 16-bit suffix.
+        assert_ne!(
+            slug(Path::new("/projects/498/app")),
+            slug(Path::new("/projects/784/app"))
+        );
     }
 
     #[test]

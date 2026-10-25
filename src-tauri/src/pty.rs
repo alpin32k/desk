@@ -10,9 +10,12 @@ use std::sync::{Arc, Mutex};
 use tauri::ipc::{Channel, Response};
 use tauri::{AppHandle, Emitter};
 
+type Writer = Arc<Mutex<Box<dyn Write + Send>>>;
+
 struct Pty {
     master: Box<dyn MasterPty + Send>,
-    writer: Box<dyn Write + Send>,
+    /// Own lock, so a blocked write to one PTY never holds up the others.
+    writer: Writer,
     child: Box<dyn Child + Send + Sync>,
 }
 
@@ -73,7 +76,7 @@ impl PtyManager {
             id,
             Pty {
                 master: pair.master,
-                writer,
+                writer: Arc::new(Mutex::new(writer)),
                 child,
             },
         );
@@ -104,10 +107,17 @@ impl PtyManager {
         Ok(id)
     }
 
+    /// May block while the attach client is not reading; callers run it off
+    /// the main thread. The map lock is released before writing.
     pub fn write(&self, id: u32, data: &[u8]) -> Result<(), String> {
-        let mut ptys = self.ptys.lock().unwrap();
-        let p = ptys.get_mut(&id).ok_or("no such pty")?;
-        p.writer.write_all(data).map_err(|e| e.to_string())
+        let writer = {
+            let ptys = self.ptys.lock().unwrap();
+            ptys.get(&id).ok_or("no such pty")?.writer.clone()
+        };
+        let mut w = writer.lock().unwrap();
+        w.write_all(data)
+            .and_then(|_| w.flush())
+            .map_err(|e| e.to_string())
     }
 
     pub fn resize(&self, id: u32, cols: u16, rows: u16) -> Result<(), String> {

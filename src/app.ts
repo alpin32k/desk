@@ -21,6 +21,9 @@ export class App {
   private running = new Set<string>(); // project paths with a tmux session
   private projectCache: Promise<Project[]> | null = null;
   private active: string | null = null;
+  private opening = new Map<string, Promise<void>>();
+  private earlyExits = new Map<number, string>(); // pty-exit that arrived before attach returned
+  private missing: { path: string; lane: number }[] = [];
   private fullscreen: string | null = null;
 
   private grid: HTMLElement;
@@ -74,6 +77,9 @@ export class App {
   }
 
   async start(): Promise<void> {
+    // Listen before reading the snapshot so no state change falls in between.
+    await listen<SessionState>("session-state", (e) => this.onHookState(e.payload));
+    await listen<PtyExit>("pty-exit", (e) => void this.onPtyExit(e.payload));
     const boot = await api.bootstrap();
     this.home = boot.home;
     for (const s of boot.states) this.hook.set(s.slug, s);
@@ -83,14 +89,15 @@ export class App {
 
     window.addEventListener("keydown", (e) => this.onKey(e), true);
     window.addEventListener("resize", () => this.fitAll());
-    await listen<SessionState>("session-state", (e) => this.onHookState(e.payload));
-    await listen<PtyExit>("pty-exit", (e) => void this.onPtyExit(e.payload));
 
     // Reattach every tile from the saved layout (starting sessions tmux lost) and the autostart ones.
     const paths = L.flatten(this.layout.lanes);
     const opened = await Promise.all(paths.map((p) => this.createTile(p)));
     paths.forEach((p, i) => {
-      if (!opened[i]) this.layout.lanes = L.remove(this.layout.lanes, p);
+      if (opened[i]) return;
+      // Keep it in the saved layout (volume not mounted, tmux not ready...) for the next start.
+      this.missing.push({ path: p, lane: this.layout.lanes.findIndex((l) => l.includes(p)) });
+      this.layout.lanes = L.remove(this.layout.lanes, p);
     });
     this.render();
     await Promise.all([...this.tiles.values()].map((t) => t.start().catch((err) => toast(`${t.name}: ${err}`))));
@@ -108,6 +115,7 @@ export class App {
     try {
       const slug = await api.openSession(path);
       this.running.add(path);
+      if (this.tiles.has(path)) return null; // opened meanwhile (startup restore vs palette)
       const tile = new Tile(path, slug, (t, a) => void this.onTileAction(t, a));
       const taken = [...this.tiles.keys()].map((p) => this.layout.colors[p]).filter((i) => i !== undefined);
       this.layout.colors[path] = pickColor(path, this.layout.colors, taken);
@@ -120,9 +128,21 @@ export class App {
     }
   }
 
-  async openTile(path: string): Promise<void> {
-    const existing = this.tiles.get(path);
-    if (existing) return this.setActive(path, true);
+  openTile(path: string): Promise<void> {
+    if (this.tiles.has(path)) {
+      this.setActive(path, true);
+      return Promise.resolve();
+    }
+    let pending = this.opening.get(path);
+    if (!pending) {
+      pending = this.doOpenTile(path).finally(() => this.opening.delete(path));
+      this.opening.set(path, pending);
+    }
+    return pending;
+  }
+
+  private async doOpenTile(path: string): Promise<void> {
+    this.missing = this.missing.filter((m) => m.path !== path);
     const tile = await this.createTile(path);
     if (!tile) return;
     this.layout.lanes = L.add(this.layout.lanes, path);
@@ -168,6 +188,14 @@ export class App {
     if (action === "close") return this.closeTile(tile.path);
     if (action === "kill") return this.killSession(tile.path);
     if (action === "fullscreen") return this.toggleFullscreen(tile.path);
+    if (action === "attached" && tile.ptyId !== null) {
+      const slug = this.earlyExits.get(tile.ptyId);
+      if (slug !== undefined) {
+        this.earlyExits.delete(tile.ptyId);
+        return this.onPtyExit({ id: tile.ptyId, slug });
+      }
+      return;
+    }
     if (action === "color") {
       const next = ((this.layout.colors[tile.path] ?? 0) + 1) % PROJECT_COLORS.length;
       this.layout.colors[tile.path] = next;
@@ -178,8 +206,13 @@ export class App {
 
   private async onPtyExit(e: PtyExit): Promise<void> {
     const tile = [...this.tiles.values()].find((t) => t.ptyId === e.id);
-    if (!tile) return;
+    if (!tile) {
+      this.earlyExits.set(e.id, e.slug); // attach has not returned its id yet
+      return;
+    }
     const alive = (await api.listSessions()).some((s) => s.slug === e.slug);
+    // The tile may have been closed or replaced while we waited.
+    if (this.tiles.get(tile.path) !== tile || tile.ptyId !== e.id) return;
     if (alive) {
       await tile.attach(); // detached from outside (e.g. tmux detach-client): attach again
     } else {
@@ -286,7 +319,11 @@ export class App {
   private save(): void {
     clearTimeout(this.saveTimer);
     this.saveTimer = window.setTimeout(() => {
-      api.saveLayout(this.layout).catch((err) => toast(`Zapis układu: ${err}`));
+      const lanes = L.clone(this.layout.lanes);
+      for (const m of this.missing) {
+        if (!L.contains(lanes, m.path)) lanes[Math.min(Math.max(m.lane, 0), lanes.length - 1)].push(m.path);
+      }
+      api.saveLayout({ ...this.layout, lanes }).catch((err) => toast(`Zapis układu: ${err}`));
     }, 150);
   }
 
@@ -369,6 +406,8 @@ export class App {
   private onKey(e: KeyboardEvent): void {
     const action = actionFor(e);
     if (!action) return;
+    const overlay = document.querySelector(".overlay") !== null;
+    if (overlay && !["palette", "new", "settings", "close"].includes(action.type)) return; // e.g. ⌘↵ in the palette
     e.preventDefault();
     e.stopPropagation();
     this.run(action);

@@ -11,7 +11,7 @@ import { actionFor } from "./keys";
 
 export type TileState = Exclude<HookState, "exited"> | "shell" | "starting";
 
-export type TileAction = "close" | "kill" | "fullscreen" | "focus" | "color";
+export type TileAction = "close" | "kill" | "fullscreen" | "focus" | "color" | "attached";
 
 const THEME = {
   background: "#0b0d10",
@@ -140,7 +140,6 @@ export class Tile {
     this.term.onData((d) => {
       if (this.ptyId !== null) void api.ptyWrite(this.ptyId, d);
     });
-    this.term.textarea?.addEventListener("focus", () => this.onAction(this, "focus"));
 
     this.resizeObs = new ResizeObserver(() => this.queueFit());
     this.render();
@@ -149,6 +148,8 @@ export class Tile {
   /** Open the terminal and attach to tmux; call once the element is in the DOM. */
   async start(): Promise<void> {
     this.term.open(this.body);
+    // The textarea exists only after open(); clicking a terminal makes its tile active.
+    this.term.textarea?.addEventListener("focus", () => this.onAction(this, "focus"));
     if (webglBudget > 0) {
       try {
         const gl = new WebglAddon();
@@ -171,8 +172,15 @@ export class Tile {
   async attach(): Promise<void> {
     const ch = new Channel<ArrayBuffer>();
     ch.onmessage = (buf) => this.term.write(new Uint8Array(buf));
-    this.ptyId = await api.ptyAttach(this.slug, this.term.cols, this.term.rows, ch);
+    this.ptyId = null;
+    try {
+      this.ptyId = await api.ptyAttach(this.slug, this.term.cols, this.term.rows, ch);
+    } catch (err) {
+      this.term.write(`\r\n\x1b[31mNie udało się podłączyć do sesji: ${err}\x1b[0m\r\n⌘W zamyka kafelek.\r\n`);
+      return;
+    }
     if (this.disposed) void api.ptyClose(this.ptyId);
+    else this.onAction(this, "attached");
   }
 
   focus(): void {

@@ -49,6 +49,8 @@ pub fn cwd_from_transcript(path: &Path) -> Option<PathBuf> {
     None
 }
 
+const MAX_SPAN: usize = 8;
+
 /// Resolve one existing component at a time, longest encoded component first.
 /// A dash may stand for a literal dash, a dot, or a component boundary.
 pub fn decode_dir_name(name: &str, exists: &dyn Fn(&Path) -> bool) -> Option<PathBuf> {
@@ -82,7 +84,9 @@ pub fn decode_dir_name(name: &str, exists: &dyn Fn(&Path) -> bool) -> Option<Pat
     let mut offset = 0;
     while offset < tokens.len() {
         let mut found = None;
-        for end in (offset + 1..=tokens.len()).rev() {
+        // A single path component rarely spans more than a few dashes; the cap
+        // keeps the dash/dot combinations (2^(span-1)) small.
+        for end in (offset + 1..=tokens.len().min(offset + MAX_SPAN)).rev() {
             if let Some(next) = candidate(
                 &path,
                 &tokens[offset..end],
@@ -207,6 +211,17 @@ mod tests {
         );
         assert_eq!(decode_dir_name("-Users-kamil-missing", &exists), None);
         assert_eq!(decode_dir_name("Users-kamil", &exists), None);
+        // Long names that exist nowhere finish quickly instead of exploring 2^30 candidates.
+        let calls = std::cell::Cell::new(0u32);
+        let long = format!("-{}", vec!["x"; 31].join("-"));
+        assert_eq!(
+            decode_dir_name(&long, &|_| {
+                calls.set(calls.get() + 1);
+                false
+            }),
+            None
+        );
+        assert!(calls.get() < 1000, "{} exists() calls", calls.get());
         assert_eq!(
             decode_dir_name("-a-b", &|path| ["/a", "/a-b", "/a/b"]
                 .iter()

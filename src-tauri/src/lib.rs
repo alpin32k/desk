@@ -60,11 +60,24 @@ fn open_session(app: State<App>, path: String) -> Result<String, String> {
     if !dir.is_dir() {
         return Err(format!("folder does not exist: {path}"));
     }
-    let slug = tmux::slug(dir);
-    if !app.tmux.has_session(&slug) {
-        app.tmux
-            .new_session(&slug, dir, &app.hooks.settings, &app.hooks.state_dir)?;
+    // Find the session by the project path it was started for, so a slug
+    // collision or an older naming scheme never attaches to another project.
+    if let Some(s) = app
+        .tmux
+        .list_sessions()
+        .into_iter()
+        .find(|s| s.path == path)
+    {
+        return Ok(s.slug);
     }
+    let slug = tmux::slug(dir);
+    if app.tmux.has_session(&slug) {
+        return Err(format!(
+            "tmux session {slug} already belongs to another folder"
+        ));
+    }
+    app.tmux
+        .new_session(&slug, dir, &app.hooks.settings, &app.hooks.state_dir)?;
     Ok(slug)
 }
 
@@ -88,7 +101,7 @@ fn pty_attach(
         .attach(handle, &app.tmux, &slug, cols, rows, on_data)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn pty_write(app: State<App>, id: u32, data: String) -> Result<(), String> {
     app.ptys.write(id, data.as_bytes())
 }
