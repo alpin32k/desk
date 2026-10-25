@@ -73,6 +73,8 @@ export class Tile {
   grouped = false;
   /** For a ⌘U session: the command it runs ("pnpm dev"). */
   detail: string | null = null;
+  /** A ⌘R conversation, labelled "rozmowa" instead of the agent. */
+  chat = false;
 
   private term: Terminal;
   private fit = new FitAddon();
@@ -288,7 +290,9 @@ export class Tile {
   }
 
   private label(): string {
-    return this.detail ? `▶ ${this.detail}` : agentLabel(this);
+    if (this.detail) return `▶ ${this.detail}`;
+    if (this.chat) return this.instance > 0 ? `rozmowa #${this.instance + 1}` : "rozmowa";
+    return agentLabel(this);
   }
 
   /** Detach from tmux (the session keeps running) and free the terminal. */

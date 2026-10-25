@@ -96,6 +96,10 @@ button:hover {
   white-space: nowrap;
 }
 
+.usage .reset {
+  opacity: 0.7;
+}
+
 .usage.warn {
   color: var(--waiting);
   border-color: var(--waiting);

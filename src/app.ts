@@ -24,7 +24,6 @@ import { confirmBox, newProjectBox, pickBox, toast } from "./ui";
 import { usageHtml } from "./usage";
 
 const POLL_MS = 3000;
-const projectOf = (key: string): string => parseKey(key).path;
 const USAGE_MS = 30_000;
 
 export class App {
@@ -42,6 +41,10 @@ export class App {
   private creatingProject = false;
   /** One card per project in the grid; its sessions' tiles sit inside. */
   private cards = new Map<string, HTMLElement>();
+  /** Folder of ⌘R conversations (they run there, but sit in a project's card). */
+  private chatPath = "";
+  /** The card a session belongs to: its project, or for a conversation the card it was opened in. */
+  private projectOf = (key: string): string => this.layout.cards[key] ?? parseKey(key).path;
   private usage: Usage[] = [];
   private usageAt = 0;
   private coffee: CoffeeStatus = { level: "off", helperInstalled: false, sleepDisabled: false, stoppedBecause: null };
@@ -133,6 +136,7 @@ export class App {
     this.coffee = await api.coffeeStatus();
     this.agents = await api.listAgents();
     this.home = boot.home;
+    this.chatPath = await api.chatDir().catch(() => "");
     for (const s of boot.states) this.hook.set(s.slug, s);
     for (const s of boot.sessions) this.running.add(keyOf(s));
 
@@ -140,6 +144,8 @@ export class App {
       ...boot.layout,
       colors: boot.layout.colors ?? {},
       agents: boot.layout.agents ?? [],
+      runs: boot.layout.runs ?? {},
+      cards: boot.layout.cards ?? {},
       lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length),
     };
 
@@ -180,6 +186,7 @@ export class App {
       if (this.tiles.has(key)) return null; // opened meanwhile (startup restore vs palette)
       const tile = new Tile(spec, slug, (t, a) => void this.onTileAction(t, a));
       tile.detail = this.layout.runs[key] ?? null;
+      tile.chat = spec.path === this.chatPath;
       // One color per project (shared by its agents and sub-sessions), distinct from other projects.
       const taken = [...this.tiles.values()]
         .filter((t) => t.path !== spec.path)
@@ -212,7 +219,7 @@ export class App {
     this.missing = this.missing.filter((m) => m.key !== key);
     const tile = await this.createTile(key);
     if (!tile) return;
-    this.layout.lanes = L.add(this.layout.lanes, key, projectOf);
+    this.layout.lanes = L.add(this.layout.lanes, key, this.projectOf);
     this.render();
     try {
       await tile.start();
@@ -227,8 +234,13 @@ export class App {
   /** A plain conversation, not about any project: a new session each time. */
   private async openChat(agent = "claude"): Promise<void> {
     const path = await api.chatDir();
+    this.chatPath = path;
     const taken = [...(await api.listSessions()), ...this.tiles.values()];
-    await this.openTile(keyOf({ path, agent, instance: nextInstance(taken, path, agent) }));
+    const key = keyOf({ path, agent, instance: nextInstance(taken, path, agent) });
+    // Next to what you are working on, like ⌘D; it still runs in its own folder.
+    const active = this.tiles.get(this.active ?? "");
+    if (active) this.layout.cards[key] = this.projectOf(active.key);
+    await this.openTile(key);
   }
 
   /** Pick a branch for the project and `git switch` to it (git refuses rather than drop changes). */
@@ -324,8 +336,9 @@ export class App {
     const slug = tile?.slug ?? (await api.listSessions()).find((s) => keyOf(s) === key)?.slug;
     if (slug) await api.killSession(slug).catch((err) => toast(String(err)));
     this.running.delete(key);
-    if (this.layout.runs[key]) {
+    if (this.layout.runs[key] || this.layout.cards[key]) {
       delete this.layout.runs[key];
+      delete this.layout.cards[key];
       this.save();
     }
     this.palette.refresh();
@@ -402,7 +415,7 @@ export class App {
   // ---- layout ------------------------------------------------------------
 
   private render(): void {
-    this.layout.lanes = L.group(this.layout.lanes, projectOf);
+    this.layout.lanes = L.group(this.layout.lanes, this.projectOf);
     const lanes = this.layout.lanes;
     while (this.grid.children.length > lanes.length) this.grid.lastElementChild!.remove();
     while (this.grid.children.length < lanes.length) this.grid.appendChild(this.laneEl());
@@ -414,8 +427,8 @@ export class App {
       const body = lane.querySelector<HTMLElement>(".lane-body")!;
       const open = paths.filter((p) => this.tiles.has(p));
       // Order inside the lane: one card per project, its sessions top to bottom.
-      for (const keys of L.groups(open, projectOf)) {
-        const card = this.card(projectOf(keys[0]));
+      for (const keys of L.groups(open, this.projectOf)) {
+        const card = this.card(this.projectOf(keys[0]));
         const cardBody = card.querySelector<HTMLElement>(".card-body")!;
         for (const k of keys) {
           const t = this.tiles.get(k)!;
@@ -452,7 +465,10 @@ export class App {
       </header>
       <div class="card-body"></div>`;
     const head = card.querySelector<HTMLElement>(".card-head")!;
-    const first = () => [...this.tiles.values()].find((t) => t.path === project);
+    const first = () => {
+      const tiles = [...this.tiles.values()].filter((t) => this.projectOf(t.key) === project);
+      return tiles.find((t) => t.path === project) ?? tiles[0];
+    };
     head.addEventListener("dragstart", (e) => {
       const t = first();
       if (!t) return;
@@ -478,13 +494,14 @@ export class App {
   /** Card headers: project color, name, branch and how many sessions it holds. */
   private renderCards(): void {
     for (const [project, card] of this.cards) {
-      const tiles = [...this.tiles.values()].filter((t) => t.path === project);
+      const tiles = [...this.tiles.values()].filter((t) => this.projectOf(t.key) === project);
       if (!tiles.length) continue;
       card.style.setProperty("--proj", projectColor(project, this.layout.colors));
-      const t = tiles[0];
+      const own = tiles.find((t) => t.path === project);
+      const name = own?.name ?? project.split(/[\\/]/).filter(Boolean).pop() ?? project;
       const parts = [
-        `<b>${escapeHtml(t.name)}</b>`,
-        t.branch ? `<span class="branch" data-a="branch" title="Zmień branch">${escapeHtml(t.branch)}</span>` : "",
+        `<b>${escapeHtml(name)}</b>`,
+        own?.branch ? `<span class="branch" data-a="branch" title="Zmień branch">${escapeHtml(own.branch)}</span>` : "",
         `<span class="dim">${sessionsLabel(tiles.length)}</span>`,
       ].filter(Boolean);
       const title = card.querySelector<HTMLElement>(".card-title")!;
@@ -515,7 +532,7 @@ export class App {
       const laneIdx = Number(lane.dataset.lane);
       const index = dropIndex(body, e.clientY);
       // A project moves as a whole card, with all its sessions.
-      this.layout.lanes = L.moveGroup(this.layout.lanes, projectOf(key), projectOf, laneIdx, index);
+      this.layout.lanes = L.moveGroup(this.layout.lanes, this.projectOf(key), this.projectOf, laneIdx, index);
       this.changed();
       this.setActive(key, true);
     });

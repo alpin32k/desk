@@ -21,6 +21,8 @@ export interface Layout {
   projectsDir: string | null;
   /** Command of each ⌘U "run" session, by session key. */
   runs: Record<string, string>;
+  /** Card of a session opened inside another project's card (⌘R conversations), by key. */
+  cards: Record<string, string>;
 }
 
 export interface RunTarget {

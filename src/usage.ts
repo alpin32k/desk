@@ -16,12 +16,23 @@ export function resetsIn(resetsAt: number, nowMs: number): string {
   return `${Math.floor(h / 24)} d ${h % 24} h`;
 }
 
+/** Compact time to reset for the chip: "45m", "2h13m", "3d4h". */
+export function shortReset(resetsAt: number, nowMs: number): string {
+  const min = Math.max(0, Math.round((resetsAt * 1000 - nowMs) / 60000));
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h${String(min % 60).padStart(2, "0")}m`;
+  return `${Math.floor(h / 24)}d${h % 24}h`;
+}
+
 export function usageHtml(list: Usage[], nowMs: number): string {
   return list
     .filter((u) => u.windows.length)
     .map((u) => {
       const worst = Math.max(...u.windows.map((w) => w.usedPercent));
-      const parts = u.windows.map((w) => `${w.label} ${Math.round(w.usedPercent)}%`).join(" · ");
+      const parts = u.windows
+        .map((w) => `${w.label} ${Math.round(w.usedPercent)}% <span class="reset">↻${shortReset(w.resetsAt, nowMs)}</span>`)
+        .join(" · ");
       const title = u.windows
         .map((w) => `${w.label}: ${w.usedPercent.toFixed(1)}%, reset za ${resetsIn(w.resetsAt, nowMs)}`)
         .join("\n");
