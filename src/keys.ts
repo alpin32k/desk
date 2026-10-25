@@ -6,6 +6,7 @@ export type Action =
   | { type: "close" }
   | { type: "kill" }
   | { type: "sub" }
+  | { type: "coffee" }
   | { type: "focus"; index: number }
   | { type: "fullscreen" }
   | { type: "exitFullscreen" }
@@ -22,7 +23,11 @@ export interface KeyLike {
 export function actionFor(e: KeyLike): Action | null {
   if (!e.metaKey || e.ctrlKey || e.altKey) return null;
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-  if (e.shiftKey) return key === "w" ? { type: "kill" } : null;
+  if (e.shiftKey) {
+    if (key === "w") return { type: "kill" };
+    if (key === "c") return { type: "coffee" };
+    return null;
+  }
   if (key >= "1" && key <= "9") return { type: "focus", index: Number(key) - 1 };
   switch (key) {
     case "k":
@@ -52,5 +57,6 @@ export const HINTS: [string, string][] = [
   ["⌘⇧W", "zabij"],
   ["⌘1-9", "skok"],
   ["⌘↵", "pełny ekran"],
+  ["⌘⇧C", "kawa"],
   ["⌘,", "opcje"],
 ];

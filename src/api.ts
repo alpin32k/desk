@@ -66,6 +66,7 @@ export type CoffeeLevel = "off" | "awake" | "lid";
 
 export interface CoffeeStatus {
   level: CoffeeLevel;
+  helperInstalled: boolean;
   sleepDisabled: boolean;
   stoppedBecause: string | null;
 }
@@ -95,4 +96,5 @@ export const api = {
   coffeeStatus: () => invoke<CoffeeStatus>("coffee_status"),
   coffeeSet: (level: CoffeeLevel) => invoke<CoffeeStatus>("coffee_set", { level }),
   coffeeRestore: () => invoke<CoffeeStatus>("coffee_restore"),
+  coffeeUninstall: () => invoke<CoffeeStatus>("coffee_uninstall"),
 };

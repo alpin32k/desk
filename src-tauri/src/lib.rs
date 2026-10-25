@@ -173,6 +173,11 @@ fn coffee_set(coffee: State<AppCoffee>, level: coffee::Level) -> Result<coffee::
 }
 
 #[tauri::command(async)]
+fn coffee_uninstall(coffee: State<AppCoffee>) -> Result<coffee::Status, String> {
+    coffee.0.uninstall_helper()
+}
+
+#[tauri::command(async)]
 fn coffee_restore(coffee: State<AppCoffee>) -> Result<coffee::Status, String> {
     coffee.0.restore_sleep()
 }
@@ -270,6 +275,7 @@ pub fn run() {
             coffee_status,
             coffee_set,
             coffee_restore,
+            coffee_uninstall,
             list_agents,
             create_project,
         ])

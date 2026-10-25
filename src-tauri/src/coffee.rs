@@ -4,10 +4,11 @@
 //!
 //! macOS
 //! - `Awake`: `caffeinate -dims -w <desk pid>` (no admin rights needed).
-//! - `Lid`: additionally `pmset -a disablesleep 1`, which needs an admin
-//!   password (macOS asks in its own dialog). It runs together with a small
-//!   root watchdog that sets `disablesleep 0` again as soon as desk exits or
-//!   desk creates the stop file, so sleep is restored without a second prompt.
+//! - `Lid`: additionally `pmset -a disablesleep 1`. The first time, macOS asks
+//!   for an admin password once to install `/etc/sudoers.d/desk-pmset`, which
+//!   allows exactly `pmset -a disablesleep 1` and `... 0` without a password
+//!   (like Amphetamine Enhancer). A watchdog process restores sleep as soon as
+//!   desk exits or coffee is turned off, even if desk crashes.
 //!
 //! Linux
 //! - `systemd-inhibit --what=idle:sleep[:handle-lid-switch]` held until desk exits.
@@ -38,6 +39,8 @@ pub enum Level {
 #[serde(rename_all = "camelCase")]
 pub struct Status {
     pub level: Level,
+    /// macOS: the one-time sudoers rule for lid mode is installed.
+    pub helper_installed: bool,
     /// `pmset` SleepDisabled is on (also true when left over from a crash or reboot).
     pub sleep_disabled: bool,
     /// Why coffee was last turned off automatically, if it was.
@@ -69,6 +72,7 @@ impl Coffee {
     pub fn status(&self) -> Status {
         Status {
             level: *self.level.lock().unwrap(),
+            helper_installed: cfg!(target_os = "macos") && helper_installed(),
             sleep_disabled: sleep_disabled(),
             stopped_because: self.stopped_because.lock().unwrap().clone(),
         }
@@ -87,11 +91,16 @@ impl Coffee {
         #[cfg(target_os = "macos")]
         {
             if level == Level::Lid {
+                if !helper_installed() {
+                    install_helper()?; // the only password prompt
+                }
+                pmset_disablesleep(true)?;
                 let _ = std::fs::remove_file(&self.stop_file);
-                start_lid_watchdog(&self.stop_file)?;
+                spawn_watchdog(&self.stop_file)?;
             } else if current == Level::Lid {
-                // The root watchdog sees this file and restores sleep.
+                // The watchdog sees this file and also restores sleep.
                 std::fs::write(&self.stop_file, b"stop").map_err(|e| e.to_string())?;
+                let _ = pmset_disablesleep(false);
             }
         }
         if let Some(mut c) = self.keepawake.lock().unwrap().take() {
@@ -113,11 +122,26 @@ impl Coffee {
     }
 
     /// Restore normal sleep when sleep is disabled but no watchdog of ours is
-    /// running (left over from a reboot or a killed watchdog). Asks for the
-    /// admin password.
+    /// running (left over from a reboot or a killed watchdog).
     pub fn restore_sleep(&self) -> Result<Status, String> {
         #[cfg(target_os = "macos")]
-        run_admin("/usr/bin/pmset -a disablesleep 0")?;
+        {
+            if helper_installed() {
+                pmset_disablesleep(false)?;
+            } else {
+                run_admin("/usr/bin/pmset -a disablesleep 0")?;
+            }
+        }
+        Ok(self.status())
+    }
+
+    /// Remove the sudoers rule (asks for the admin password).
+    pub fn uninstall_helper(&self) -> Result<Status, String> {
+        #[cfg(target_os = "macos")]
+        {
+            let _ = self.set(Level::Off);
+            run_admin(&format!("/bin/rm -f {}", crate::tmux::shell_quote(SUDOERS)))?;
+        }
         Ok(self.status())
     }
 
@@ -277,27 +301,93 @@ pub fn parse_sleep_disabled(out: &str) -> bool {
     })
 }
 
-/// Root shell command: disable sleep, then wait in the background until desk
-/// exits or the stop file appears, and enable sleep again.
-pub fn watchdog_script(pid: u32, stop_file: &Path) -> String {
-    let stop = crate::tmux::shell_quote(&stop_file.display().to_string());
+pub const SUDOERS: &str = "/etc/sudoers.d/desk-pmset";
+
+fn helper_installed() -> bool {
+    Path::new(SUDOERS).exists()
+}
+
+/// The sudoers line: this user may run exactly these two pmset commands.
+pub fn sudoers_rule(user: &str) -> Result<String, String> {
+    let ok = !user.is_empty()
+        && user
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
+        && !user.starts_with('-');
+    if !ok {
+        return Err(format!("nieobsługiwana nazwa użytkownika: {user:?}"));
+    }
+    Ok(format!(
+        "{user} ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0\n"
+    ))
+}
+
+/// Root script: write the rule to a temp file, validate it with visudo, install it 0440.
+pub fn install_script(rule: &str) -> String {
     format!(
-        "/usr/bin/pmset -a disablesleep 1; \
-         ( while /bin/kill -0 {pid} 2>/dev/null && [ ! -e {stop} ]; do /bin/sleep 5; done; \
-         /usr/bin/pmset -a disablesleep 0 ) >/dev/null 2>&1 &"
+        "t=$(/usr/bin/mktemp /tmp/desk-pmset.XXXXXX) && printf '%s' {} > \"$t\" && \
+         /usr/sbin/visudo -cf \"$t\" >/dev/null && \
+         /usr/bin/install -m 0440 -o root -g wheel \"$t\" {}; rc=$?; /bin/rm -f \"$t\"; exit $rc",
+        crate::tmux::shell_quote(rule),
+        crate::tmux::shell_quote(SUDOERS)
     )
 }
 
 #[cfg(target_os = "macos")]
-fn start_lid_watchdog(stop_file: &Path) -> Result<(), String> {
-    run_admin(&watchdog_script(std::process::id(), stop_file))
+fn install_helper() -> Result<(), String> {
+    let user = std::env::var("USER").map_err(|_| "brak zmiennej USER".to_string())?;
+    run_admin(&install_script(&sudoers_rule(&user)?))
+}
+
+#[cfg(target_os = "macos")]
+fn pmset_disablesleep(on: bool) -> Result<(), String> {
+    let out = Command::new("/usr/bin/sudo")
+        .args([
+            "-n",
+            "/usr/bin/pmset",
+            "-a",
+            "disablesleep",
+            if on { "1" } else { "0" },
+        ])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
+/// Shell loop that waits until desk exits or the stop file appears, then
+/// re-enables sleep. Runs as the user (sudo rule), outlives a desk crash.
+pub fn watchdog_script(pid: u32, stop_file: &Path) -> String {
+    let stop = crate::tmux::shell_quote(&stop_file.display().to_string());
+    format!(
+        "while /bin/kill -0 {pid} 2>/dev/null && [ ! -e {stop} ]; do /bin/sleep 5; done; \
+         /usr/bin/sudo -n /usr/bin/pmset -a disablesleep 0"
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn spawn_watchdog(stop_file: &Path) -> Result<(), String> {
+    let mut child = Command::new("/bin/sh")
+        .args(["-c", &watchdog_script(std::process::id(), stop_file)])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
 }
 
 /// Run a fixed shell command as root; macOS shows its own password dialog.
 #[cfg(target_os = "macos")]
 fn run_admin(script: &str) -> Result<(), String> {
     let apple = format!(
-        "do shell script {} with administrator privileges with prompt \"desk: kawa z zamkniętą klapką wymaga hasła administratora (pmset disablesleep).\"",
+        "do shell script {} with administrator privileges with prompt \"desk: jednorazowa zgoda na tryb kawy z zamkniętą klapką (pmset disablesleep). Później desk nie będzie już pytać.\"",
         applescript_quote(script)
     );
     let out = Command::new("/usr/bin/osascript")
@@ -389,11 +479,26 @@ mod tests {
             42,
             Path::new("/Users/k/Library/Application Support/desk/coffee.stop"),
         );
-        assert!(s.starts_with("/usr/bin/pmset -a disablesleep 1;"));
         assert!(s.contains("/bin/kill -0 42"));
         assert!(s.contains("[ ! -e '/Users/k/Library/Application Support/desk/coffee.stop' ]"));
-        assert!(s.contains("/usr/bin/pmset -a disablesleep 0 )"));
-        assert!(s.ends_with('&'));
+        assert!(s.ends_with("/usr/bin/sudo -n /usr/bin/pmset -a disablesleep 0"));
+    }
+
+    #[test]
+    fn sudoers_rule_is_minimal_and_validated() {
+        let r = sudoers_rule("kamil").unwrap();
+        assert_eq!(
+            r,
+            "kamil ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0\n"
+        );
+        assert!(sudoers_rule("").is_err());
+        assert!(sudoers_rule("a b").is_err());
+        assert!(sudoers_rule("x ALL=(ALL) ALL").is_err());
+        assert!(sudoers_rule("-x").is_err());
+        let script = install_script(&r);
+        assert!(script.contains("visudo -cf"));
+        assert!(script.contains("install -m 0440 -o root -g wheel"));
+        assert!(script.contains("'/etc/sudoers.d/desk-pmset'"));
     }
 
     /// Spawns a real keep-awake process; run with `cargo test -- --ignored`.

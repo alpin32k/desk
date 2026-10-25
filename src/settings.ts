@@ -1,6 +1,6 @@
 // ⌘, options: lane count, notifications, which projects start with the app,
 // hand-added folders.
-import type { AgentInfo, Layout, Project } from "./api";
+import type { AgentInfo, CoffeeStatus, Layout, Project } from "./api";
 import { rows, shortPath } from "./projects";
 import { escapeHtml } from "./tile";
 
@@ -13,6 +13,8 @@ export interface SettingsContext {
   toggleAutostart: (path: string) => void;
   addFolder: () => Promise<void>;
   removeFolder: (path: string) => void;
+  coffee: () => CoffeeStatus;
+  uninstallCoffee: () => Promise<void>;
   agents: () => AgentInfo[];
   addAgent: (id: string, command: string) => Promise<void>;
   removeAgent: (id: string) => Promise<void>;
@@ -99,6 +101,12 @@ export class Settings {
           (f) => `<div class="folder"><span>${escapeHtml(shortPath(f, this.ctx.home()))}</span><button data-rm="${escapeHtml(f)}">usuń</button></div>`,
         )
         .join("")}<button data-k="add">+ Dodaj folder…</button></div>
+      <h3>Kawa <span class="dim">(⌘⇧C)</span></h3>
+      <div class="line dim">Wyłącza się sama przy przegrzaniu albo baterii ≤15%. ${
+        this.ctx.coffee().helperInstalled
+          ? `Zgoda na tryb z klapką jest zainstalowana (/etc/sudoers.d/desk-pmset, tylko pmset disablesleep). <button data-k="coffee-rm">Usuń zgodę</button>`
+          : "Tryb z zamkniętą klapką zapyta raz o hasło administratora."
+      }</div>
       <p class="dim small">Ustawienia: ~/Library/Application Support/desk/layout.json · sesje: tmux -L desk ls</p>`;
 
     const filter = box.querySelector<HTMLInputElement>('[data-k="filter"]')!;
@@ -126,6 +134,10 @@ export class Settings {
         void this.reload();
       }),
     );
+    box.querySelector<HTMLButtonElement>('[data-k="coffee-rm"]')?.addEventListener("click", async () => {
+      await this.ctx.uninstallCoffee();
+      this.render();
+    });
     box.querySelectorAll<HTMLButtonElement>("[data-rm-agent]").forEach((b) =>
       b.addEventListener("click", async () => {
         await this.ctx.removeAgent(b.dataset.rmAgent!);

@@ -35,7 +35,7 @@ export class App {
   private opening = new Map<string, Promise<void>>();
   private earlyExits = new Map<number, string>(); // pty-exit that arrived before attach returned
   private missing: { key: string; lane: number }[] = [];
-  private coffee: CoffeeStatus = { level: "off", sleepDisabled: false, stoppedBecause: null };
+  private coffee: CoffeeStatus = { level: "off", helperInstalled: false, sleepDisabled: false, stoppedBecause: null };
   private fullscreen: string | null = null;
 
   private grid: HTMLElement;
@@ -86,6 +86,14 @@ export class App {
         this.layout.extraFolders = this.layout.extraFolders.filter((f) => f !== p);
         this.projectCache = null;
         this.save();
+      },
+      coffee: () => this.coffee,
+      uninstallCoffee: async () => {
+        this.coffee = await api.coffeeUninstall().catch((err) => {
+          toast(`Kawa: ${err}`);
+          return this.coffee;
+        });
+        this.renderChrome();
       },
       agents: () => this.agents,
       addAgent: async (id, command) => {
@@ -518,8 +526,10 @@ export class App {
     const c = this.coffee;
     const label = { off: "☕", awake: "☕ kawa", lid: "☕ kawa · klapka" }[c.level];
     const title = {
-      off: "Kawa wyłączona. Kliknij: nie usypiaj komputera, dopóki desk działa.",
-      awake: "Kawa: komputer nie zaśnie. Kliknij: także przy zamkniętej klapce (wymaga hasła na macOS).",
+      off: "Kawa wyłączona (⌘⇧C). Kliknij: nie usypiaj komputera, dopóki desk działa.",
+      awake: c.helperInstalled
+        ? "Kawa: komputer nie zaśnie. Kliknij: także przy zamkniętej klapce."
+        : "Kawa: komputer nie zaśnie. Kliknij: także przy zamkniętej klapce (macOS raz zapyta o hasło).",
       lid: "Kawa z zamkniętą klapką. Wyłącza się sama przy przegrzaniu lub baterii ≤15%. Kliknij: wyłącz.",
     }[c.level];
     const stray =
@@ -562,6 +572,9 @@ export class App {
         break;
       case "kill":
         if (this.active) void this.killSession(this.active);
+        break;
+      case "coffee":
+        void this.cycleCoffee();
         break;
       case "sub": {
         const t = this.tiles.get(this.active ?? "");
