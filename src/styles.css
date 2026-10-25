@@ -157,7 +157,7 @@ button:hover {
 
 .tile {
   --proj: var(--dim);
-  border-left: 3px solid var(--proj);
+  border-left: 2px solid var(--proj);
 }
 
 .tile.active {

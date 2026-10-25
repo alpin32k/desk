@@ -77,18 +77,18 @@ export function ago(ms: number, now = Date.now()): string {
   return `${Math.floor(s / 86400)}d`;
 }
 
-/** Distinct hues for telling projects apart at a glance (dark background). */
+/** Muted, distinct hues for telling projects apart at a glance (dark background). */
 export const PROJECT_COLORS = [
-  "#79c0ff", // blue
-  "#ff9b6a", // orange
-  "#7ee787", // green
-  "#d2a8ff", // purple
-  "#f778ba", // pink
-  "#56d4dd", // cyan
-  "#e3b341", // yellow
-  "#ff7b72", // red
-  "#b5e853", // lime
-  "#c4a07a", // tan
+  "#6f8fb3", // blue
+  "#b58a6e", // clay
+  "#7a9e7e", // sage
+  "#9887b5", // lavender
+  "#b07d95", // mauve
+  "#6a9ea3", // teal
+  "#ad9a64", // ochre
+  "#b37470", // brick
+  "#8fa36a", // olive
+  "#9c8b78", // taupe
 ];
 
 /** Stable palette index for a path (FNV-1a), so a project keeps its color everywhere. */
