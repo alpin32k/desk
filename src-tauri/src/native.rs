@@ -139,7 +139,22 @@ impl Native {
             .name(format!("session-out-{slug}"))
             .spawn(move || {
                 let mut buf = vec![0u8; 64 * 1024];
-                while let Ok(n @ 1..) = reader.read(&mut buf) {
+                // ConPTY asks for the cursor position once at start and waits for
+                // the answer. Answer it here: no tile may be open yet, and a reply
+                // from a tile replaying the scrollback later would be typed in.
+                let mut startup_query = cfg!(windows);
+                while let Ok(mut n @ 1..) = reader.read(&mut buf) {
+                    if startup_query && let Some(at) = find(&buf[..n], CURSOR_QUERY) {
+                        startup_query = false;
+                        buf.copy_within(at + CURSOR_QUERY.len()..n, at);
+                        n -= CURSOR_QUERY.len();
+                        if let Some(w) = out.writer.lock().unwrap().as_mut() {
+                            let _ = w.write_all(b"\x1b[1;1R");
+                        }
+                        if n == 0 {
+                            continue;
+                        }
+                    }
                     let mut sh = out.shared.lock().unwrap();
                     sh.scrollback.extend_from_slice(&buf[..n]);
                     if sh.scrollback.len() > SCROLLBACK {
@@ -263,6 +278,13 @@ impl Native {
             .ok_or("no such pty")?;
         self.session(&slug)
     }
+}
+
+/// Device Status Report: "where is the cursor?"
+const CURSOR_QUERY: &[u8] = b"\x1b[6n";
+
+fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|w| w == needle)
 }
 
 #[cfg(test)]

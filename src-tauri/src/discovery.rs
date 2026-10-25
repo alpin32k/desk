@@ -239,7 +239,10 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("session.jsonl");
         fs::write(&path, serde_json::json!({"cwd": cwd}).to_string()).unwrap();
-        File::open(path)
+        // Write access: Windows refuses to set times through a read-only handle.
+        File::options()
+            .write(true)
+            .open(path)
             .unwrap()
             .set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(seconds))
             .unwrap();

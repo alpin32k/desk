@@ -334,6 +334,8 @@ mod tests {
         assert_eq!(v["hooks"].as_object().unwrap().len(), EVENTS.len());
     }
 
+    /// The shell hook (macOS, Linux); Windows runs `desk --desk-hook`.
+    #[cfg(unix)]
     #[test]
     fn script_writes_state_file_end_to_end() {
         let tmp = tempfile::tempdir().unwrap();
