@@ -128,9 +128,7 @@ pub fn install(version: &str) -> Result<Vec<String>, String> {
         .ok_or("w tym release nie ma paczki dla tego systemu")?
         .clone();
     let target = target()?;
-    let dir = std::env::temp_dir().join(format!("desk-update-{version}"));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let dir = private_dir()?;
     let dir_s = dir.to_string_lossy().to_string();
     gh(&["release", "download", &tag, "--repo", REPO, "--pattern", &asset, "--dir", &dir_s, "--clobber"])?;
     let file = dir.join(&asset);
@@ -147,6 +145,22 @@ pub fn install(version: &str) -> Result<Vec<String>, String> {
         replace_file(&file, &target)?;
         Ok(vec![target.to_string_lossy().into()])
     }
+}
+
+/// A new folder only this user can enter, for the download. The temp dir can
+/// be shared (Linux `/tmp`): a name someone else made first is an error, never
+/// reused, so nobody can slip their own package in.
+fn private_dir() -> Result<PathBuf, String> {
+    let mut builder = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or_default();
+    let dir = std::env::temp_dir().join(format!("desk-update-{}-{nanos:09}", std::process::id()));
+    builder.create(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    Ok(dir)
 }
 
 /// macOS: mount the dmg, copy its `desk.app` next to the running one, then
@@ -197,6 +211,20 @@ fn replace_file(new: &Path, target: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn downloads_into_a_new_private_folder() {
+        let a = private_dir().unwrap();
+        let b = private_dir().unwrap();
+        assert_ne!(a, b);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(std::fs::metadata(&a).unwrap().permissions().mode() & 0o777, 0o700);
+        }
+        std::fs::remove_dir(a).unwrap();
+        std::fs::remove_dir(b).unwrap();
+    }
 
     #[test]
     fn compares_release_tags() {
