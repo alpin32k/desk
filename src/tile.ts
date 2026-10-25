@@ -13,8 +13,11 @@ import { stripProbeReplies } from "./input";
 import { DEFAULT_THEME, terminalTheme, themeById } from "./themes";
 import { PLATFORM, shortcuts } from "./platform";
 import { actionFor } from "./keys";
-import { fileLinks } from "./links";
+import { rowLinks, type Row } from "./links";
 import { agentLabel, keyOf, type Spec } from "./sessions";
+
+/** Rows looked at above and below a hovered one for a wrapped path. */
+const LINK_ROWS = 4;
 
 export type TileState = Exclude<HookState, "exited"> | "shell" | "starting";
 
@@ -141,10 +144,17 @@ export class Tile {
     this.term.loadAddon(new WebLinksAddon(openLink));
     this.term.registerLinkProvider({
       provideLinks: (y, callback) => {
-        const line = this.term.buffer.active.getLine(y - 1)?.translateToString(true) ?? "";
+        // A few rows around this one: a long path can be wrapped over several.
+        const buf = this.term.buffer.active;
+        const top = Math.max(0, y - 1 - LINK_ROWS);
+        const rows: Row[] = [];
+        for (let i = top; i < Math.min(buf.length, y + LINK_ROWS); i++) {
+          const line = buf.getLine(i);
+          rows.push({ text: line?.translateToString(true) ?? "", wrapped: line?.isWrapped ?? false });
+        }
         callback(
-          fileLinks(line).map((l) => ({
-            range: { start: { x: l.start + 1, y }, end: { x: l.end, y } },
+          rowLinks(rows, y - 1 - top, this.term.cols).map((l) => ({
+            range: { start: { x: l.start.col + 1, y: top + l.start.row + 1 }, end: { x: l.end.col, y: top + l.end.row + 1 } },
             text: l.path,
             activate: (e: MouseEvent, text: string) => openLink(e, text),
           })),
