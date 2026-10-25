@@ -119,19 +119,36 @@ pub fn usage(agents: &[String], state_dir: &Path, home: &Path) -> Vec<Usage> {
         .collect()
 }
 
-/// Newest status line snapshot that carries rate limits (they are account-wide).
+/// The plan's limits from every session's status line input. Each Claude Code
+/// session keeps the limits it last fetched, so an idle one shows old numbers:
+/// per window, the freshest reading wins (see `freshest`).
 fn claude(state_dir: &Path, now: u64) -> Option<Vec<Window>> {
-    let mut files: Vec<(SystemTime, PathBuf)> = std::fs::read_dir(state_dir)
+    let readings = std::fs::read_dir(state_dir)
         .ok()?
         .flatten()
         .filter(|e| e.path().extension().is_some_and(|x| x == "status"))
-        .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
-        .collect();
-    files.sort_by_key(|f| std::cmp::Reverse(f.0));
-    files.iter().find_map(|(_, p)| {
-        let v: Value = serde_json::from_str(&std::fs::read_to_string(p).ok()?).ok()?;
-        claude_windows(&v, now)
-    })
+        .filter_map(|e| {
+            let v: Value = serde_json::from_str(&std::fs::read_to_string(e.path()).ok()?).ok()?;
+            claude_windows(&v, now)
+        });
+    let w = freshest(readings);
+    (!w.is_empty()).then_some(w)
+}
+
+/// Per window label, the latest reading: within a window usage only grows, and
+/// a reset moves `resets_at` on, so the later reset, then the higher share,
+/// is the newer number. Labels keep their first-seen order (5h before 7d).
+pub fn freshest(readings: impl IntoIterator<Item = Vec<Window>>) -> Vec<Window> {
+    let mut out: Vec<Window> = Vec::new();
+    for w in readings.into_iter().flatten() {
+        match out.iter_mut().find(|o| o.label == w.label) {
+            Some(o) if (w.resets_at, w.used_percent) > (o.resets_at, o.used_percent) => *o = w,
+            Some(_) => {}
+            None => out.push(w),
+        }
+    }
+    out.sort_by_key(|w| if w.label == "5h" { 0 } else { 1 });
+    out
 }
 
 pub fn claude_windows(status: &Value, now: u64) -> Option<Vec<Window>> {
@@ -291,6 +308,19 @@ mod tests {
         assert_eq!(u.len(), 2);
         assert_eq!(u[0].windows[0].used_percent, 50.0);
         assert_eq!(u[1].windows[0].used_percent, 7.0);
+    }
+
+    #[test]
+    fn idle_sessions_old_limits_lose_to_fresh_ones() {
+        let w = |label: &str, used: f64, resets_at: u64| Window { label: label.into(), used_percent: used, resets_at };
+        let got = freshest([
+            vec![w("7d", 75.0, 9000)],                // idle since this morning
+            vec![w("5h", 13.0, 5000), w("7d", 80.0, 9000)], // working now
+            vec![w("5h", 40.0, 3000)],                // before the last 5h reset
+            vec![w("7d", 76.0, 9000)],
+        ]);
+        assert_eq!(got, vec![w("5h", 13.0, 5000), w("7d", 80.0, 9000)]);
+        assert!(freshest(Vec::<Vec<Window>>::new()).is_empty());
     }
 
     /// `cargo test live_usage -- --ignored --nocapture` prints this machine's limits.

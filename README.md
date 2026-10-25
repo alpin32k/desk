@@ -99,9 +99,10 @@ Zwykłe Esc trafia do terminala, więc dalej przerywa Claude.
   Na Linuksie hasło konta sprawdza PAM (tak jak wygaszacze ekranu).
 - **Kawa na Linuksie** używa `systemd-inhibit` (z klapką: `handle-lid-switch`), a przegrzanie i
   baterię czyta z `/sys`.
-- **Limity Claude** pojawiają się po pierwszej odpowiedzi w sesji uruchomionej przez desk, bo
-  Claude Code przekazuje je do status line dopiero wtedy. Twoja własna status line działa dalej:
-  desk ją wywołuje.
+- **Limity Claude** przychodzą z status line sesji uruchomionych przez desk (Claude Code pobiera je
+  sam, bez tokenów; desk prosi o odświeżenie status line co 10 s). Każda sesja pamięta limity z
+  chwili, gdy ostatnio je pobrała, więc desk bierze z wszystkich sesji najświeższy odczyt każdego
+  okna. Twoja własna status line działa dalej: desk ją wywołuje.
 - **Podgląd lokalnych plików** widzi tylko folder podglądanego pliku. Panel podglądu nie ma
   dostępu do API desk. Markdown i inne dokumenty desk renderuje sam: ich własne skrypty się nie
   uruchamiają (mermaid jest wbudowany, działa bez internetu).
