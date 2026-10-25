@@ -24,7 +24,8 @@ pub struct Layout {
     pub agents: Vec<crate::agents::CustomAgent>,
     /// Command of each "run" session (⌘U), by session key, to start it again.
     pub runs: std::collections::BTreeMap<String, String>,
-    /// Card a session sits in when it is not its own project's (⌘R conversations), by key.
+    /// Card a session sits in when it is not its own project's, by key (none are
+    /// set now; ⌘R conversations used to join the active card).
     pub cards: std::collections::BTreeMap<String, String>,
     /// Where "new project" creates folders; None = ~/Documents/projects or ~.
     pub projects_dir: Option<String>,

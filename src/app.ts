@@ -194,7 +194,8 @@ export class App {
       colors: boot.layout.colors ?? {},
       agents: boot.layout.agents ?? [],
       runs: boot.layout.runs ?? {},
-      cards: boot.layout.cards ?? {},
+      // Conversations used to sit in the active project's card: back to their own.
+      cards: Object.fromEntries(Object.entries(boot.layout.cards ?? {}).filter(([k]) => parseKey(k).path !== this.chatPath)),
       autoLayout: boot.layout.autoLayout ?? true,
       theme: boot.layout.theme ?? "desk",
       browser: boot.layout.browser ?? "auto",
@@ -299,11 +300,8 @@ export class App {
     const path = await api.chatDir();
     this.chatPath = path;
     const taken = [...(await api.listSessions()), ...this.tiles.values()];
-    const key = keyOf({ path, agent, instance: nextInstance(taken, path, agent) });
-    // Next to what you are working on, like ⌘D; it still runs in its own folder.
-    const active = this.tiles.get(this.active ?? "");
-    if (active) this.layout.cards[key] = this.projectOf(active.key);
-    await this.openTile(key);
+    // Its own "rozmowa" card, like a new project (not inside the active one's).
+    await this.openTile(keyOf({ path, agent, instance: nextInstance(taken, path, agent) }));
   }
 
   /** Pick a branch for the project and `git switch` to it (git refuses rather than drop changes). */
