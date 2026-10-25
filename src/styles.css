@@ -78,6 +78,37 @@ button:hover {
   color: var(--fg);
 }
 
+.top .spacer {
+  flex: 1;
+  align-self: stretch;
+}
+
+.coffee {
+  margin-right: 8px;
+  padding: 0 8px;
+  line-height: 18px;
+  background: none;
+  border-color: var(--line-hi);
+  color: var(--dim);
+}
+
+.coffee.awake {
+  color: var(--fg);
+  border-color: #6b5a3e;
+  background: #1d1912;
+}
+
+.coffee.lid {
+  color: #e8c98a;
+  border-color: #8a6d3b;
+  background: #2a2113;
+}
+
+.coffee.warn {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
 .waiting-pill {
   margin-left: 8px;
   color: var(--bg);

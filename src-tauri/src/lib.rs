@@ -1,4 +1,5 @@
 pub mod claude_projects;
+pub mod coffee;
 pub mod discovery;
 pub mod env;
 pub mod git;
@@ -13,6 +14,9 @@ use std::sync::Mutex;
 use tauri::ipc::{Channel, Response};
 use tauri::menu::{Menu, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Manager, RunEvent, State};
+
+/// Coffee state lives in its own managed value so the guard thread can reach it.
+pub struct AppCoffee(pub coffee::Coffee);
 
 struct App {
     tmux: tmux::Tmux,
@@ -132,6 +136,22 @@ fn tile_info(paths: Vec<String>) -> Vec<TileInfo> {
         .collect()
 }
 
+#[tauri::command]
+fn coffee_status(coffee: State<AppCoffee>) -> coffee::Status {
+    coffee.0.status()
+}
+
+/// May show the macOS admin password dialog, so it runs off the main thread.
+#[tauri::command(async)]
+fn coffee_set(coffee: State<AppCoffee>, level: coffee::Level) -> Result<coffee::Status, String> {
+    coffee.0.set(level)
+}
+
+#[tauri::command(async)]
+fn coffee_restore(coffee: State<AppCoffee>) -> Result<coffee::Status, String> {
+    coffee.0.restore_sleep()
+}
+
 /// Git repos under ~ (3 levels) plus projects from ~/.claude/projects and
 /// hand-added folders. Read-only and local; runs off the main thread.
 #[tauri::command]
@@ -199,6 +219,8 @@ pub fn run() {
             let tmux = tmux::Tmux::new(&support)?;
             let hooks = hooks::install(&support)?;
             let watcher = state_watch::watch(app.handle().clone(), &hooks.state_dir).ok();
+            app.manage(AppCoffee(coffee::Coffee::new(&support)));
+            coffee::spawn_guard(app.handle().clone());
             app.manage(App {
                 tmux,
                 hooks,
@@ -220,6 +242,9 @@ pub fn run() {
             tile_info,
             list_projects,
             list_sessions,
+            coffee_status,
+            coffee_set,
+            coffee_restore,
         ])
         .build(tauri::generate_context!())
         .expect("error while building desk")
@@ -227,6 +252,8 @@ pub fn run() {
             if let RunEvent::Exit = event {
                 // Detach every tile; the tmux sessions keep running.
                 handle.state::<App>().ptys.close_all();
+                // Sleep goes back to normal (the lid watchdog also notices desk is gone).
+                handle.state::<AppCoffee>().0.shutdown(None);
             }
         });
 }

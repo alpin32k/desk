@@ -46,6 +46,14 @@ export interface TileInfo {
   branch: string | null;
 }
 
+export type CoffeeLevel = "off" | "awake" | "lid";
+
+export interface CoffeeStatus {
+  level: CoffeeLevel;
+  sleepDisabled: boolean;
+  stoppedBecause: string | null;
+}
+
 export interface PtyExit {
   id: number;
   slug: string;
@@ -64,4 +72,7 @@ export const api = {
   ptyWrite: (id: number, data: string) => invoke<void>("pty_write", { id, data }),
   ptyResize: (id: number, cols: number, rows: number) => invoke<void>("pty_resize", { id, cols, rows }),
   ptyClose: (id: number) => invoke<void>("pty_close", { id }),
+  coffeeStatus: () => invoke<CoffeeStatus>("coffee_status"),
+  coffeeSet: (level: CoffeeLevel) => invoke<CoffeeStatus>("coffee_set", { level }),
+  coffeeRestore: () => invoke<CoffeeStatus>("coffee_restore"),
 };

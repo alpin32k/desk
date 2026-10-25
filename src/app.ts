@@ -2,7 +2,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-import { api, type Layout, type Project, type PtyExit, type SessionState } from "./api";
+import { api, type CoffeeLevel, type CoffeeStatus, type Layout, type Project, type PtyExit, type SessionState } from "./api";
 import { actionFor, HINTS, type Action } from "./keys";
 import * as L from "./lanes";
 import { Palette } from "./palette";
@@ -24,6 +24,7 @@ export class App {
   private opening = new Map<string, Promise<void>>();
   private earlyExits = new Map<number, string>(); // pty-exit that arrived before attach returned
   private missing: { path: string; lane: number }[] = [];
+  private coffee: CoffeeStatus = { level: "off", sleepDisabled: false, stoppedBecause: null };
   private fullscreen: string | null = null;
 
   private grid: HTMLElement;
@@ -80,7 +81,14 @@ export class App {
     // Listen before reading the snapshot so no state change falls in between.
     await listen<SessionState>("session-state", (e) => this.onHookState(e.payload));
     await listen<PtyExit>("pty-exit", (e) => void this.onPtyExit(e.payload));
+    await listen<CoffeeStatus>("coffee", (e) => this.onCoffeeStopped(e.payload));
+    this.top.addEventListener("click", (e) => {
+      const a = (e.target as HTMLElement).closest<HTMLElement>("[data-coffee]")?.dataset.coffee;
+      if (a === "cycle") void this.cycleCoffee();
+      if (a === "restore") void this.restoreSleep();
+    });
     const boot = await api.bootstrap();
+    this.coffee = await api.coffeeStatus();
     this.home = boot.home;
     for (const s of boot.states) this.hook.set(s.slug, s);
     for (const s of boot.sessions) this.running.add(s.path);
@@ -395,10 +403,57 @@ export class App {
     const waiting = count("waiting");
     this.top.innerHTML = `<span class="brand" data-tauri-drag-region>desk</span><span class="dim" data-tauri-drag-region> · ${this.tiles.size} sessions</span>${
       waiting ? `<span class="waiting-pill" data-tauri-drag-region>${waiting} czeka</span>` : ""
-    }`;
+    }${this.coffeeHtml()}`;
     this.footer.innerHTML =
       HINTS.map(([k, label]) => `<span><kbd>${k}</kbd> ${escapeHtml(label)}</span>`).join("") +
       `<span class="spacer"></span><span class="counts"><b>${this.tiles.size}</b> sessions · <span class="c-working">${count("working")} working</span> · <span class="c-waiting">${waiting} waiting</span> · ${count("idle")} idle</span>`;
+  }
+
+  // ---- coffee ------------------------------------------------------------
+
+  private async cycleCoffee(): Promise<void> {
+    const next: Record<CoffeeLevel, CoffeeLevel> = { off: "awake", awake: "lid", lid: "off" };
+    try {
+      this.coffee = await api.coffeeSet(next[this.coffee.level]);
+    } catch (err) {
+      toast(`Kawa: ${err}`);
+      if (next[this.coffee.level] === "lid") this.coffee = await api.coffeeSet("off").catch(() => this.coffee);
+    }
+    this.renderChrome();
+  }
+
+  private async restoreSleep(): Promise<void> {
+    try {
+      this.coffee = await api.coffeeRestore();
+    } catch (err) {
+      toast(`Usypianie: ${err}`);
+    }
+    this.renderChrome();
+  }
+
+  private onCoffeeStopped(s: CoffeeStatus): void {
+    this.coffee = s;
+    this.renderChrome();
+    if (s.stoppedBecause) {
+      const msg = `Kawa wyłączona: ${s.stoppedBecause}`;
+      toast(msg);
+      sendNotification({ title: "desk", body: msg });
+    }
+  }
+
+  private coffeeHtml(): string {
+    const c = this.coffee;
+    const label = { off: "☕", awake: "☕ kawa", lid: "☕ kawa · klapka" }[c.level];
+    const title = {
+      off: "Kawa wyłączona. Kliknij: nie usypiaj komputera, dopóki desk działa.",
+      awake: "Kawa: komputer nie zaśnie. Kliknij: także przy zamkniętej klapce (wymaga hasła na macOS).",
+      lid: "Kawa z zamkniętą klapką. Wyłącza się sama przy przegrzaniu lub baterii ≤15%. Kliknij: wyłącz.",
+    }[c.level];
+    const stray =
+      c.sleepDisabled && c.level !== "lid"
+        ? `<button class="coffee warn" data-coffee="restore" title="Usypianie jest wyłączone w systemie (pmset disablesleep 1), np. po restarcie w trakcie kawy. Kliknij, aby przywrócić.">sen wyłączony · przywróć</button>`
+        : "";
+    return `<span class="spacer" data-tauri-drag-region></span>${stray}<button class="coffee ${c.level}" data-coffee="cycle" title="${title}">${label}</button>`;
   }
 
   // ---- keys --------------------------------------------------------------

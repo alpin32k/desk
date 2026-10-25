@@ -725,6 +725,7 @@ version = "0.1.0"
 dependencies = [
  "dirs",
  "notify",
+ "objc2-foundation",
  "portable-pty",
  "serde",
  "serde_json",
