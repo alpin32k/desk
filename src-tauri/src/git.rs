@@ -76,16 +76,19 @@ pub fn parse_refs(out: &str) -> Vec<String> {
 /// `git switch <branch>`: git refuses (and says why) when local changes would
 /// be overwritten, so nothing is lost. Only names from `branches` are accepted.
 pub fn switch(work_tree: &Path, branch: &str) -> Result<(), String> {
-    if !branches(work_tree)?.iter().any(|b| b == branch) {
+    if branch.starts_with('-') || !branches(work_tree)?.iter().any(|b| b == branch) {
         return Err(format!("nie ma brancha {branch}"));
     }
-    git(work_tree, &["switch", branch]).map(|_| ())
+    git(work_tree, &["switch", "--end-of-options", branch]).map(|_| ())
 }
 
 fn git(work_tree: &Path, args: &[&str]) -> Result<String, String> {
+    // A repository's own config cannot start a program through fsmonitor;
+    // its hooks still run, as with `git switch` in a terminal.
     let out = std::process::Command::new("git")
         .arg("-C")
         .arg(work_tree)
+        .args(["--no-optional-locks", "-c", "core.fsmonitor=false"])
         .args(args)
         .output()
         .map_err(|e| format!("git: {e}"))?;
@@ -128,6 +131,10 @@ mod tests {
         switch(d, "other").unwrap();
         assert_eq!(branch(d).as_deref(), Some("other"));
         assert!(switch(d, "--orphan").is_err(), "only listed branches");
+        run(&["config", "core.fsmonitor", "touch fsmonitor-ran"]);
+        switch(d, "main").unwrap();
+        switch(d, "other").unwrap();
+        assert!(!d.join("fsmonitor-ran").exists(), "repo config ran a program");
 
         // A change that the other branch would overwrite: git refuses.
         std::fs::write(d.join("a.txt"), "2").unwrap();
