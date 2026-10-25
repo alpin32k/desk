@@ -14,7 +14,7 @@ import { agentLabel, keyOf, type Spec } from "./sessions";
 
 export type TileState = Exclude<HookState, "exited"> | "shell" | "starting";
 
-export type TileAction = "close" | "kill" | "fullscreen" | "focus" | "color" | "attached" | "sub";
+export type TileAction = "close" | "kill" | "fullscreen" | "focus" | "color" | "attached" | "sub" | "terminal";
 
 const THEME = {
   background: "#0b0d10",
@@ -103,6 +103,7 @@ export class Tile {
         <span class="title"></span>
         <span class="actions">
           <button data-a="sub" title="Druga sesja w tym projekcie (⌘D)">+</button>
+          <button data-a="terminal" title="Terminal w tym projekcie (⌘T)">›_</button>
           <button data-a="fullscreen" title="Ekran pełny (⌘E)">⤢</button>
           <button data-a="close" title="Zamknij kafelek, sesja zostaje (⌘Z)">×</button>
           <button data-a="kill" title="Zabij sesję (⌘⇧Z)">⏻</button>

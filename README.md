@@ -20,7 +20,7 @@ po jednej sesji Claude Code (albo Codex, opencode, Gemini, aider, shell) na proj
 | Nowy projekt | ⌘N: tworzy folder (opcjonalnie `git init`) i od razu otwiera w nim sesję. |
 | Autostart | W opcjach wybierasz, które projekty startują z desk. Domyślnie żaden. |
 | Agenci | Claude Code, Codex, opencode, Gemini, aider, shell, a w opcjach także własne komendy. Tab w palecie przełącza agenta. |
-| Druga sesja | Kilka sesji w jednym projekcie (⌘D). |
+| Druga sesja | Kilka sesji w jednym projekcie (⌘D), w jednej ramce projektu. ⌘T dokłada do niej zwykły terminal. |
 | Rozmowa | Zwykły czat o czymkolwiek, niezwiązany z żadnym projektem (⌘R). Każde ⌘R otwiera nową rozmowę. Jej zachowanie ustawiasz w `rozmowa/CLAUDE.md` w danych desk. |
 | Limity | W górnym pasku zużycie planu (5h / 7d) dla otwartych agentów: Claude z wejścia status line, Codex z `~/.codex/sessions`. Kolor bursztynowy od 70%, czerwony od 90%. |
 | Kafelek | Projekt (każdy ma swój stonowany kolor), branch git, stan. Powiadomienie, gdy sesja czeka, a okno nie ma fokusu. |
@@ -35,6 +35,7 @@ po jednej sesji Claude Code (albo Codex, opencode, Gemini, aider, shell) na proj
 | ⌘P | projekty (paleta) |
 | ⌘N | nowy projekt (folder + opcjonalnie git init) |
 | ⌘D | druga sesja w tym projekcie |
+| ⌘T | terminal (zwykły shell) w projekcie aktywnego kafelka |
 | ⌘R | rozmowa (czat bez projektu) |
 | ⌘Z | zamknij kafelek (sesja w tmux zostaje) |
 | ⌘⇧Z | zabij sesję |

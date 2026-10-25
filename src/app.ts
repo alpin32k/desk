@@ -230,6 +230,12 @@ export class App {
     await this.openTile(keyOf({ path, agent, instance: nextInstance(taken, path, agent) }));
   }
 
+  /** A plain shell in a project's card (in the home folder with no tile focused). */
+  private async openTerminal(path: string): Promise<void> {
+    const taken = [...(await api.listSessions()), ...this.tiles.values()];
+    await this.openTile(keyOf({ path, agent: "shell", instance: nextInstance(taken, path, "shell") }));
+  }
+
   /** Another session of the same agent in the same project, next to it. */
   private async openSub(tile: Tile): Promise<void> {
     const sessions = await api.listSessions();
@@ -271,6 +277,7 @@ export class App {
     if (action === "kill") return this.killSession(tile.key);
     if (action === "fullscreen") return this.toggleFullscreen(tile.key);
     if (action === "sub") return this.openSub(tile);
+    if (action === "terminal") return this.openTerminal(tile.path);
     if (action === "attached" && tile.ptyId !== null) {
       const slug = this.earlyExits.get(tile.ptyId);
       if (slug !== undefined) {
@@ -379,7 +386,7 @@ export class App {
     card.innerHTML = `
       <header class="card-head" draggable="true">
         <span class="dot"></span><span class="card-title"></span>
-        <span class="actions"><button data-a="sub" title="Kolejna sesja w tym projekcie (⌘D)">+</button></span>
+        <span class="actions"><button data-a="sub" title="Kolejna sesja w tym projekcie (⌘D)">+</button><button data-a="terminal" title="Terminal w tym projekcie (⌘T)">›_</button></span>
       </header>
       <div class="card-body"></div>`;
     const head = card.querySelector<HTMLElement>(".card-head")!;
@@ -395,7 +402,9 @@ export class App {
     head.addEventListener("click", (e) => {
       const t = first();
       if (!t) return;
-      if ((e.target as HTMLElement).closest("[data-a='sub']")) void this.openSub(t);
+      const a = (e.target as HTMLElement).closest<HTMLElement>("[data-a]")?.dataset.a;
+      if (a === "sub") void this.openSub(t);
+      else if (a === "terminal") void this.openTerminal(project);
       else this.setActive(t.key, true);
     });
     this.cards.set(project, card);
@@ -743,6 +752,9 @@ export class App {
         if (t) void this.openSub(t);
         break;
       }
+      case "terminal":
+        void this.openTerminal(this.tiles.get(this.active ?? "")?.path ?? this.home);
+        break;
       case "focus":
         this.focusIndex(a.index);
         break;

@@ -24,6 +24,7 @@ describe("actionFor", () => {
     expect(actionFor(k("k"))).toEqual({ type: "coffee" });
     expect(actionFor(k("b"))).toEqual({ type: "lock" });
     expect(actionFor(k("r"))).toEqual({ type: "chat" });
+    expect(actionFor(k("t"))).toEqual({ type: "terminal" });
     expect(actionFor(k("o"))).toEqual({ type: "settings" });
   });
 
