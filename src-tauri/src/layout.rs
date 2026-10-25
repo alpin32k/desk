@@ -32,6 +32,9 @@ pub struct Layout {
     pub auto_layout: bool,
     /// Color theme id (see src/themes.ts).
     pub theme: String,
+    /// Where web pages open outside desk: "auto" (Brave, then Chrome),
+    /// "brave", "chrome" or "system" (see browser.rs).
+    pub browser: String,
 }
 
 impl Default for Layout {
@@ -49,6 +52,7 @@ impl Default for Layout {
             projects_dir: None,
             auto_layout: true,
             theme: "desk".into(),
+            browser: "auto".into(),
         }
     }
 }

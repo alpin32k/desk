@@ -7,7 +7,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { preview } from "./side";
+import { openOutside, preview } from "./side";
 import { api, type HookState } from "./api";
 import { stripProbeReplies } from "./input";
 import { DEFAULT_THEME, terminalTheme, themeById } from "./themes";
@@ -133,9 +133,9 @@ export class Tile {
     });
     this.term.loadAddon(this.fit);
     this.term.loadAddon(new ClipboardAddon());
-    // Click a link: preview inside desk; Option-click: system browser.
+    // Click a link: preview inside desk; Option-click: Brave / Chrome / system browser.
     const openLink = (e: MouseEvent, uri: string) => {
-      const p = e.altKey ? api.openExternal(uri) : preview(uri);
+      const p = e.altKey ? openOutside(uri) : preview(uri);
       p.catch((err) => this.term.write(`\r\n\x1b[33m${err}\x1b[0m\r\n`));
     };
     this.term.loadAddon(new WebLinksAddon(openLink));

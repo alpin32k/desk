@@ -1,5 +1,6 @@
 pub mod agents;
 pub mod backend;
+pub mod browser;
 pub mod claude_projects;
 pub mod coffee;
 pub mod discovery;
@@ -17,6 +18,7 @@ pub mod project;
 pub mod pty;
 pub mod state_watch;
 pub mod tmux;
+pub mod update;
 pub mod usage;
 
 use std::path::{Path, PathBuf};
@@ -254,8 +256,8 @@ uruchamiaj poleceń, chyba że wyraźnie o to poproszę.
 ";
 
 #[tauri::command]
-fn open_external(url: String) -> Result<(), String> {
-    preview::open_external(&url)
+fn open_external(url: String, browser: Option<String>) -> Result<(), String> {
+    preview::open_external(&url, browser.as_deref().unwrap_or("auto"))
 }
 
 #[tauri::command]
@@ -293,6 +295,46 @@ async fn search_files(path: String, query: String) -> Vec<String> {
     tauri::async_runtime::spawn_blocking(move || project::search(Path::new(&path), &query))
         .await
         .unwrap_or_default()
+}
+
+/// The browser web pages go to ("Brave", "Chrome"), or None for the system's.
+#[tauri::command]
+fn browser_name(browser: String) -> Option<&'static str> {
+    browser::find(&browser).map(|b| b.name)
+}
+
+/// A newer desk release, if any (an error without the GitHub CLI).
+#[tauri::command]
+async fn update_check() -> Result<Option<update::Update>, String> {
+    tauri::async_runtime::spawn_blocking(update::check)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Download and put `version` in place, start it and quit.
+#[tauri::command]
+async fn update_install(handle: AppHandle, version: String) -> Result<(), String> {
+    let start = tauri::async_runtime::spawn_blocking(move || update::install(&version))
+        .await
+        .map_err(|e| e.to_string())??;
+    let mut cmd = if cfg!(windows) {
+        let (exe, args) = start.split_first().ok_or("nic do uruchomienia")?;
+        let mut c = std::process::Command::new(exe);
+        c.args(args);
+        c
+    } else {
+        // Start the new desk once this one is gone (arguments stay arguments).
+        let mut c = std::process::Command::new("/bin/sh");
+        c.arg("-c")
+            .arg(r#"while kill -0 "$1" 2>/dev/null; do sleep 0.2; done; shift; exec "$@""#)
+            .arg("sh")
+            .arg(std::process::id().to_string())
+            .args(&start);
+        c
+    };
+    cmd.spawn().map_err(|e| format!("start: {e}"))?;
+    handle.exit(0);
+    Ok(())
 }
 
 #[tauri::command]
@@ -479,6 +521,9 @@ pub fn run() {
             project_files,
             search_files,
             reveal_path,
+            browser_name,
+            update_check,
+            update_install,
             open_file,
             preview_file,
             run_targets,

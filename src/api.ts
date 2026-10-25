@@ -27,6 +27,16 @@ export interface Layout {
   autoLayout: boolean;
   /** Color theme id (themes.ts). */
   theme: string;
+  /** Web pages outside desk: "auto" (Brave, then Chrome), "brave", "chrome", "system". */
+  browser: string;
+}
+
+/** A newer desk release. */
+export interface Update {
+  version: string;
+  url: string;
+  /** desk can install it itself; else the release page opens. */
+  installable: boolean;
 }
 
 /** Where the side panel's page sits in the window (CSS pixels). */
@@ -152,7 +162,13 @@ export const api = {
   /** Show a file or folder in Finder / Explorer / the file manager. */
   revealPath: (path: string) => invoke<void>("reveal_path", { path }),
   writeText: (path: string, text: string) => invoke<void>("write_text", { path, text }),
-  openExternal: (url: string) => invoke<void>("open_external", { url }),
+  /** A web page in Brave / Chrome / the system browser (`browser`, see Layout), a file in its default app. */
+  openExternal: (url: string, browser?: string) => invoke<void>("open_external", { url, browser }),
+  /** "Brave" or "Chrome" when that is where web pages go; null = the system browser. */
+  browserName: (browser: string) => invoke<string | null>("browser_name", { browser }),
+  updateCheck: () => invoke<Update | null>("update_check"),
+  /** Downloads `version`, starts it and quits desk. */
+  updateInstall: (version: string) => invoke<void>("update_install", { version }),
   chatDir: () => invoke<string>("chat_dir"),
   gitBranches: (path: string) => invoke<string[]>("git_branches", { path }),
   gitSwitch: (path: string, branch: string) => invoke<void>("git_switch", { path, branch }),

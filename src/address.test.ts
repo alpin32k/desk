@@ -19,5 +19,8 @@ describe("address bar", () => {
     expect(mention("/p/app", "/p/app/My Docs/a.md")).toBe('@"My Docs/a.md" ');
     expect(mention("C:\\p", "C:\\p\\src\\a.ts")).toBe("@src\\a.ts ");
     expect(mention(null, "/x/y")).toBe("@/x/y ");
+    expect(mention("/p", "/p/a\nrm -rf ~\n.md")).toBe("");
+    expect(mention("/p", "/p/\x1b[201~x")).toBe("");
+    expect(mention("/p", '/p/a" b.md')).toBe("");
   });
 });

@@ -1,5 +1,6 @@
 // ⌘O options: lane count, notifications, which projects start with the app,
 // hand-added folders.
+import { getVersion } from "@tauri-apps/api/app";
 import { DEFAULT_THEME, THEMES } from "./themes";
 import type { AgentInfo, CoffeeStatus, Layout, Project } from "./api";
 import { rows, shortPath } from "./projects";
@@ -12,6 +13,9 @@ export interface SettingsContext {
   setLaneCount: (n: number) => void;
   setAutoLayout: (on: boolean) => void;
   setTheme: (id: string) => void;
+  setBrowser: (id: string) => void;
+  /** Ask GitHub for a newer desk now. */
+  checkUpdate: () => Promise<void>;
   setNotifications: (on: boolean) => void;
   toggleAutostart: (path: string) => void;
   addFolder: () => Promise<void>;
@@ -75,6 +79,14 @@ export class Settings {
       <label class="line"><input type="checkbox" data-k="auto-layout" ${layout.autoLayout ? "checked" : ""}/> Układ automatyczny <span class="dim">(kolumny według otwartych projektów, sesji i rozmiaru okna)</span></label>
       <label class="line">Kolumny <input type="number" min="1" max="8" value="${layout.lanes.length}" data-k="lanes" ${layout.autoLayout ? "disabled" : ""}/></label>
       <label class="line"><input type="checkbox" data-k="notify" ${layout.notifications ? "checked" : ""}/> Powiadomienie macOS, gdy sesja czeka na ciebie</label>
+      <label class="line">Strony poza desk (↗, ⌥klik) <select data-k="browser">${[
+        ["auto", "Brave, a gdy go nie ma Chrome"],
+        ["brave", "Brave"],
+        ["chrome", "Chrome"],
+        ["system", "przeglądarka systemowa"],
+      ]
+        .map(([v, label]) => `<option value="${v}" ${(layout.browser || "auto") === v ? "selected" : ""}>${label}</option>`)
+        .join("")}</select></label>
       <h3>Motyw</h3>
       <div class="themes">${THEMES.map(
         (t) => `<button class="theme ${t.id === (layout.theme || DEFAULT_THEME) ? "sel" : ""}" data-theme="${t.id}" style="background:${t.bg};color:${t.fg}">
@@ -116,6 +128,8 @@ export class Settings {
           ? `Zgoda na tryb z klapką jest zainstalowana (/etc/sudoers.d/desk-pmset, tylko pmset disablesleep). <button data-k="coffee-rm">Usuń zgodę</button>`
           : "Tryb z zamkniętą klapką zapyta raz o hasło administratora."
       }</div>
+      <h3>Aktualizacje</h3>
+      <div class="line"><span class="dim">desk <span data-k="version"></span> · sprawdza raz dziennie (przez GitHub CLI, gh)</span> <button data-k="update">Sprawdź teraz</button></div>
       <p class="dim small">Ustawienia: ~/Library/Application Support/desk/layout.json · sesje: tmux -L desk ls</p>`;
 
     const filter = box.querySelector<HTMLInputElement>('[data-k="filter"]')!;
@@ -137,6 +151,21 @@ export class Settings {
         this.render();
       }),
     );
+    void getVersion().then((v) => {
+      const el = this.el?.querySelector('[data-k="version"]');
+      if (el) el.textContent = v;
+    });
+    box.querySelector<HTMLButtonElement>('[data-k="update"]')!.addEventListener("click", async (e) => {
+      const b = e.target as HTMLButtonElement;
+      b.disabled = true;
+      b.textContent = "sprawdzam…";
+      await this.ctx.checkUpdate();
+      b.disabled = false;
+      b.textContent = "Sprawdź teraz";
+    });
+    box.querySelector<HTMLSelectElement>('[data-k="browser"]')!.addEventListener("change", (e) => {
+      this.ctx.setBrowser((e.target as HTMLSelectElement).value);
+    });
     box.querySelector<HTMLInputElement>('[data-k="auto-layout"]')!.addEventListener("change", (e) => {
       this.ctx.setAutoLayout((e.target as HTMLInputElement).checked);
       this.render();

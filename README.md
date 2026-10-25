@@ -30,7 +30,7 @@ po jednej sesji Claude Code (albo Codex, opencode, Gemini, aider, shell) na proj
 | Kafelek | Projekt (każdy ma swój stonowany kolor), branch git (kliknij, aby przełączyć: `git switch`, który przy niezapisanych zmianach odmawia), stan. Powiadomienie, gdy sesja czeka, a okno nie ma fokusu. |
 | Pliki | ⌘F: drzewo plików aktywnego projektu w panelu obok (z `git ls-files`, bez `node_modules`), jak w Claude Desktop. Filtr po nazwie, a `?tekst` szuka w treści plików. Kliknięty plik pokazuje się w podglądzie, dwuklik otwiera go w edytorze. Folder ma kartę z akcjami: dodaj do sesji (`@ścieżka` w aktywnym Claude), terminal tutaj, pokaż w Finderze. `@` w pasku panelu dodaje do sesji pokazany plik. |
 | Uruchom | ⌘U albo ▶: skrypty z `package.json` (z pnpm/yarn/npm/bun według lockfile), `cargo run`/`test`, cele z `Makefile`, `docker compose up`, Django. Uruchamia się w ramce projektu, a link `localhost` z wyjścia kliknięciem otwiera podgląd. |
-| Podgląd | Panel obok terminali (⌘W): kliknięty link (strona, `localhost`, plik) otwiera się w nim, a ⌥-klik w przeglądarce. Pokazuje strony i obrazki, PDF, Markdown z diagramami mermaid, pliki `.mmd`, JSON, CSV jako tabelę oraz kod i tekst. Pasek adresu działa jak przeglądarka (wstecz, odśwież, wpisany adres). ✎ edytuje plik tekstowy (Markdown, JSON, kod) w panelu, ⌘S zapisuje, a „podgląd” wraca do widoku. ↗ otwiera stronę w przeglądarce, a plik w jego domyślnym programie. Gdy panel jest otwarty, w środku zostaje aktywna sesja, a pozostałe są po lewej jako mini karty (stan i ostatnie linie). Kliknięcie albo ⌘1–9 przenosi sesję do środka. |
+| Podgląd | Panel obok terminali (⌘W): kliknięty link (strona, `localhost`, plik) otwiera się w nim, a ⌥-klik w przeglądarce. Przycisk „🌐 przeglądarka” u góry otwiera panel z paskiem adresu. Pokazuje strony i obrazki, PDF, Markdown z diagramami mermaid, pliki `.mmd`, JSON, CSV jako tabelę oraz kod i tekst. Pasek adresu działa jak przeglądarka (wstecz, odśwież, wpisany adres). ✎ edytuje plik tekstowy (Markdown, JSON, kod) w panelu, ⌘S zapisuje, a „podgląd” wraca do widoku. ↗ otwiera stronę w Brave, a gdy go nie ma w Chrome (do zmiany w Opcjach, także na przeglądarkę systemową), a plik w jego domyślnym programie. Gdy panel jest otwarty, w środku zostaje aktywna sesja, a pozostałe są po lewej jako mini karty (stan i ostatnie linie). Kliknięcie albo ⌘1–9 przenosi sesję do środka. |
 | Kawa | ⌘K: komputer nie zaśnie. Drugie ⌘K: także przy zamkniętej klapce. Wyłącza się sama przy przegrzaniu lub baterii ≤15%. Działa na macOS, Windows i Linuksie. |
 | Blokada | ⌘B: ekran zostaje włączony, terminale widać, ale nic nie da się wpisać, dopóki nie odblokujesz: Touch ID albo hasłem na macOS, Windows Hello (PIN, odcisk palca, twarz) na Windows, hasłem konta na Linuksie. |
 
@@ -105,6 +105,17 @@ Zwykłe Esc trafia do terminala, więc dalej przerywa Claude.
 - **Podgląd lokalnych plików** widzi tylko folder podglądanego pliku. Panel podglądu nie ma
   dostępu do API desk. Markdown i inne dokumenty desk renderuje sam: ich własne skrypty się nie
   uruchamiają (mermaid jest wbudowany, działa bez internetu).
+
+## Aktualizacje
+
+desk raz dziennie sprawdza, czy w Releases jest nowsza wersja (Opcje → Aktualizacje → „Sprawdź
+teraz” sprawdza od razu). Repozytorium jest prywatne, więc desk pyta przez GitHub CLI (`gh`,
+zalogowane kontem z dostępem); bez `gh` po prostu nie ma powiadomień. Nowa wersja pojawia się
+u góry jako `↑ 0.1.x`. Kliknięcie pobiera ją, podmienia aplikację i uruchamia ją ponownie:
+
+- macOS: podmienia `desk.app` tam, gdzie leży; sesje w tmux działają dalej,
+- Windows: uruchamia nowy instalator; sesje w oknie desk się kończą,
+- Linux: podmienia plik `.AppImage`; przy instalacji z `.deb` otwiera stronę wydania.
 
 ## Instalacja
 

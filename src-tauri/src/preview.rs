@@ -657,13 +657,19 @@ fn external(link: &str) -> Result<External, String> {
     })
 }
 
-/// Open in the system browser, a local file in its default app, or (for
-/// anything a default app might run, like a `.command` script) in an editor.
-pub fn open_external(link: &str) -> Result<(), String> {
+/// Open a web page in Brave or Chrome (`browser`: see browser.rs) or the
+/// system browser, a local file in its default app, or (for anything a
+/// default app might run, like a `.command` script) in an editor.
+pub fn open_external(link: &str, browser: &str) -> Result<(), String> {
     let arg = match external(link)? {
         External::Open(arg) => arg,
         External::Editor(p) => return crate::project::open_path_in_editor(&p),
     };
+    if arg.starts_with("http")
+        && let Some(b) = crate::browser::find(browser)
+    {
+        return crate::browser::open(&b, &arg);
+    }
     let mut cmd = if cfg!(target_os = "macos") {
         std::process::Command::new("open")
     } else if cfg!(windows) {
@@ -843,7 +849,7 @@ mod tests {
             external(notes.to_str().unwrap()),
             Ok(External::Open(_))
         ));
-        assert!(open_external("javascript:alert(1)").is_err());
+        assert!(open_external("javascript:alert(1)", "system").is_err());
     }
 
     #[test]

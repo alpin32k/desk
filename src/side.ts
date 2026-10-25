@@ -22,6 +22,8 @@ export interface SideContext {
   insert(text: string): void;
   /** A plain terminal in this folder. */
   terminal(path: string): void;
+  /** Where web pages open outside desk (Layout.browser). */
+  browser(): string;
 }
 
 
@@ -35,6 +37,11 @@ export function preview(link: string): Promise<void> {
 /** A project file in the panel (⌘F, ⌥↵). */
 export function previewFile(path: string, file: string): Promise<void> {
   return Side.current ? Side.current.open(file, path) : Promise.reject("panel podglądu nie jest gotowy");
+}
+
+/** A link outside desk: a web page in Brave / Chrome (Options), a file in its default app. */
+export function openOutside(link: string): Promise<void> {
+  return api.openExternal(link, Side.current?.browserPref());
 }
 
 /** A local file (not a web page) is what the address bar shows. */
@@ -57,6 +64,8 @@ export class Side {
   /** A folder card is shown instead of the page (absolute path). */
   private folder: string | null = null;
   private tree: FileTree;
+  /** "Brave" / "Chrome", or null when web pages go to the system browser. */
+  private browserName: string | null = null;
 
   constructor(
     private onLayout: () => void,
@@ -101,7 +110,7 @@ export class Side {
     this.view.addEventListener("click", (e) => {
       const f = (e.target as HTMLElement).closest<HTMLElement>("[data-f]")?.dataset.f;
       if (!f || !this.folder) return;
-      if (f === "attach") this.ctx.insert(mention(this.tree.project, this.folder));
+      if (f === "attach") this.attach(this.folder);
       else if (f === "terminal") this.ctx.terminal(this.folder);
       else if (f === "reveal") void api.revealPath(this.folder).catch(this.fail);
     });
@@ -116,10 +125,10 @@ export class Side {
       const a = (e.target as HTMLElement).closest<HTMLElement>("[data-a]")?.dataset.a;
       if (a === "close") this.close();
       else if (a === "files") this.toggleTree();
-      else if (a === "attach") this.ctx.insert(mention(this.tree.project, this.folder ?? this.editing?.path ?? this.address.value));
+      else if (a === "attach") this.attach(this.folder ?? this.editing?.path ?? this.address.value);
       else if (a === "edit") void (this.editing ? this.stopEditing() : this.edit());
       else if (a === "save") void this.save();
-      else if (a === "external" && this.address.value) void api.openExternal(this.editing?.path ?? this.address.value).catch(this.fail);
+      else if (a === "external" && this.address.value) void openOutside(this.editing?.path ?? this.address.value).catch(this.fail);
       else if ((a === "back" || a === "forward" || a === "reload") && this.created && !this.editing) {
         void api.previewNav(a).catch(this.fail);
       }
@@ -138,6 +147,12 @@ export class Side {
       if (document.activeElement !== this.address && !this.editing) this.address.value = e.payload;
       this.syncButtons();
     });
+  }
+
+  private attach(path: string): void {
+    const text = mention(this.tree.project, path);
+    if (text) this.ctx.insert(text);
+    else toast("Tej ścieżki nie da się bezpiecznie wpisać do terminala (cudzysłów albo znak sterujący w nazwie)");
   }
 
   get isOpen(): boolean {
@@ -164,6 +179,24 @@ export class Side {
     } finally {
       this.syncButtons();
     }
+  }
+
+  browserPref(): string {
+    return this.ctx.browser();
+  }
+
+  /** The browser setting changed (or desk started): name it on the ↗ button. */
+  async browserChanged(): Promise<void> {
+    this.browserName = await api.browserName(this.ctx.browser()).catch(() => null);
+    this.syncButtons();
+  }
+
+  /** The browser button: the panel at its address bar, ready for a URL. */
+  browse(): void {
+    this.show();
+    this.sync();
+    this.address.focus();
+    this.address.select();
   }
 
   /** ⌘W: show or hide; an empty panel starts at its address bar. */
@@ -255,6 +288,10 @@ export class Side {
     this.editBtn.title = this.editing ? "Zapisz i pokaż podgląd" : "Edytuj plik";
     this.saveBtn.hidden = !this.editing;
     this.saveBtn.classList.toggle("dirty", this.dirty());
+    const ext = this.el.querySelector<HTMLElement>('[data-a="external"]')!;
+    const web = !local && !this.folder && /^https?:/i.test(this.address.value);
+    ext.textContent = web && this.browserName ? `↗ ${this.browserName}` : "↗";
+    ext.title = web ? `Otwórz w ${this.browserName ?? "przeglądarce systemowej"}` : "Otwórz w domyślnym programie";
   }
 
   private dirty(): boolean {

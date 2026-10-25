@@ -1,4 +1,5 @@
 // Main controller: lanes of tiles, shortcuts, session state, persistence.
+import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
@@ -11,6 +12,7 @@ import {
   type Project,
   type PtyExit,
   type SessionState,
+  type Update,
   type Usage,
 } from "./api";
 import { actionFor, hints, type Action } from "./keys";
@@ -27,6 +29,9 @@ import { confirmBox, newProjectBox, pickBox, toast } from "./ui";
 import { usageHtml } from "./usage";
 
 const POLL_MS = 3000;
+/** desk asks GitHub for a newer release once a day (and from Options on demand). */
+const UPDATE_CHECK_MS = 24 * 60 * 60 * 1000;
+const UPDATE_KEY = "desk.updateCheckedAt";
 const USAGE_MS = 30_000;
 
 export class App {
@@ -49,6 +54,8 @@ export class App {
   /** The card a session belongs to: its project, or for a conversation the card it was opened in. */
   private projectOf = (key: string): string => this.layout.cards[key] ?? parseKey(key).path;
   private usage: Usage[] = [];
+  /** A newer desk release, shown as a chip in the top bar. */
+  private update: Update | null = null;
   private usageAt = 0;
   private coffee: CoffeeStatus = { level: "off", helperInstalled: false, sleepDisabled: false, stoppedBecause: null };
   private fullscreen: string | null = null;
@@ -86,6 +93,7 @@ export class App {
         else toast("Najpierw wybierz sesję, do której dodać ścieżkę");
       },
       terminal: (path) => void this.openTerminal(path),
+      browser: () => this.layout?.browser ?? "auto",
     });
     root.querySelector(".middle")!.appendChild(this.side.el);
     this.footer = root.querySelector(".bottom")!;
@@ -117,6 +125,12 @@ export class App {
         this.layout.theme = id;
         this.applyTheme();
         this.save();
+      },
+      checkUpdate: () => this.checkUpdate(true),
+      setBrowser: (id) => {
+        this.layout.browser = id;
+        this.save();
+        void this.side.browserChanged();
       },
       setAutoLayout: (on) => {
         this.layout.autoLayout = on;
@@ -163,6 +177,9 @@ export class App {
       const a = (e.target as HTMLElement).closest<HTMLElement>("[data-coffee]")?.dataset.coffee;
       if (a === "cycle") void this.cycleCoffee();
       if (a === "restore") void this.restoreSleep();
+      const t = (e.target as HTMLElement).closest<HTMLElement>("[data-top]")?.dataset.top;
+      if (t === "browser") this.side.browse();
+      if (t === "update") void this.installUpdate();
     });
     const boot = await api.bootstrap();
     this.coffee = await api.coffeeStatus();
@@ -180,6 +197,7 @@ export class App {
       cards: boot.layout.cards ?? {},
       autoLayout: boot.layout.autoLayout ?? true,
       theme: boot.layout.theme ?? "desk",
+      browser: boot.layout.browser ?? "auto",
       lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length),
     };
     this.applyTheme();
@@ -212,6 +230,10 @@ export class App {
     this.save();
     void this.poll();
     setInterval(() => void this.poll(), POLL_MS);
+    void this.side.browserChanged();
+    // Hourly look at the clock, so a laptop that slept still checks once a day.
+    window.setTimeout(() => void this.checkUpdateDaily(), 10_000);
+    setInterval(() => void this.checkUpdateDaily(), 60 * 60 * 1000);
     if (this.layout.notifications) void ensureNotificationPermission();
     if (!this.tiles.size) void this.palette.show();
   }
@@ -754,10 +776,69 @@ export class App {
     const waiting = count("waiting");
     this.top.innerHTML = `<span class="brand" data-tauri-drag-region>desk</span><span class="dim" data-tauri-drag-region> · ${this.tiles.size} sessions</span>${
       waiting ? `<span class="waiting-pill" data-tauri-drag-region>${waiting} czeka</span>` : ""
-    }<span class="spacer" data-tauri-drag-region></span>${usageHtml(this.usage, Date.now())}${this.coffeeHtml()}`;
+    }<span class="spacer" data-tauri-drag-region></span>${this.updateHtml()}${usageHtml(this.usage, Date.now())}<button class="top-btn" data-top="browser" title="Przeglądarka w panelu obok (${shortcut("⌘W")}); ↗ otwiera stronę w Brave albo Chrome">🌐 przeglądarka</button>${this.coffeeHtml()}`;
     this.footer.innerHTML =
       hints().map(([k, label]) => `<span><kbd>${k}</kbd> ${escapeHtml(label)}</span>`).join("") +
       `<span class="spacer"></span><span class="counts"><b>${this.tiles.size}</b> sessions · <span class="c-working">${count("working")} working</span> · <span class="c-waiting">${waiting} waiting</span> · ${count("idle")} idle</span>`;
+  }
+
+  // ---- updates -----------------------------------------------------------
+
+  private async checkUpdateDaily(): Promise<void> {
+    let last = 0;
+    try {
+      last = Number(localStorage.getItem(UPDATE_KEY)) || 0;
+    } catch {
+      // not remembered: check now
+    }
+    if (Date.now() - last < UPDATE_CHECK_MS) return;
+    try {
+      localStorage.setItem(UPDATE_KEY, String(Date.now()));
+    } catch {
+      // checked again next hour
+    }
+    await this.checkUpdate(false);
+  }
+
+  /** `manual` (Options): say what came out, errors included; else quiet unless there is news. */
+  private async checkUpdate(manual: boolean): Promise<void> {
+    let u: Update | null;
+    try {
+      u = await api.updateCheck();
+    } catch (err) {
+      if (manual) toast(`Aktualizacje: ${err}`);
+      return;
+    }
+    const news = u !== null && u.version !== this.update?.version;
+    this.update = u;
+    this.renderChrome();
+    if (news) toast(`Jest nowa wersja desk ${u!.version}. Kliknij ↑ ${u!.version} u góry.`);
+    else if (manual) toast(u ? `Nowa wersja ${u.version} czeka: ↑ u góry.` : `Masz najnowszą wersję desk ${await getVersion()}.`);
+  }
+
+  private updateHtml(): string {
+    const u = this.update;
+    if (!u) return "";
+    const title = u.installable ? "Zainstaluj nową wersję desk" : "Otwórz stronę nowej wersji desk";
+    return `<button class="top-btn update" data-top="update" title="${title}">↑ ${escapeHtml(u.version)}</button>`;
+  }
+
+  private async installUpdate(): Promise<void> {
+    const u = this.update;
+    if (!u) return;
+    if (!u.installable) {
+      return void api.openExternal(u.url, this.layout.browser).catch((err) => toast(`Aktualizacja: ${err}`));
+    }
+    const sessions =
+      PLATFORM === "windows" ? "Sesje w tym oknie zostaną zakończone." : "Sesje działają dalej w tmux i wrócą po ponownym uruchomieniu.";
+    if (!(await confirmBox(`Zainstalować desk ${u.version}? desk pobierze nową wersję, zamknie się i uruchomi ponownie. ${sessions}`, "Zainstaluj")))
+      return;
+    toast(`Pobieram desk ${u.version}…`);
+    try {
+      await api.updateInstall(u.version);
+    } catch (err) {
+      toast(`Aktualizacja: ${err}`);
+    }
   }
 
   // ---- coffee ------------------------------------------------------------
