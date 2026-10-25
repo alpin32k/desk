@@ -73,7 +73,7 @@ export class App {
       kill: (path, agent) => void this.killSession(keyOf({ path, agent, instance: 0 })),
       addFolder: () => void this.addFolder(),
       newProject: (agent) => void this.newProject(agent),
-      scratch: (agent) => void this.openScratch(agent),
+      chat: (agent) => void this.openChat(agent),
     });
     this.settings = new Settings({
       home: () => this.home,
@@ -219,9 +219,9 @@ export class App {
     void this.poll();
   }
 
-  /** A fresh Claude session in an empty folder, for questions outside any project. */
-  private async openScratch(agent = "claude"): Promise<void> {
-    const path = await api.scratchDir();
+  /** A plain conversation, not about any project: a new session each time. */
+  private async openChat(agent = "claude"): Promise<void> {
+    const path = await api.chatDir();
     const taken = [...(await api.listSessions()), ...this.tiles.values()];
     await this.openTile(keyOf({ path, agent, instance: nextInstance(taken, path, agent) }));
   }
@@ -655,8 +655,8 @@ export class App {
       case "lock":
         void this.lock();
         break;
-      case "scratch":
-        void this.openScratch();
+      case "chat":
+        void this.openChat();
         break;
       case "sub": {
         const t = this.tiles.get(this.active ?? "");

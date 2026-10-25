@@ -39,6 +39,7 @@ pub struct SessionInfo {
 #[derive(Clone)]
 pub struct Tmux {
     conf: PathBuf,
+    socket: String,
 }
 
 impl Tmux {
@@ -46,13 +47,20 @@ impl Tmux {
         std::fs::create_dir_all(support_dir)?;
         let conf = support_dir.join("tmux.conf");
         std::fs::write(&conf, CONF)?;
-        Ok(Self { conf })
+        Ok(Self {
+            conf,
+            socket: SOCKET.to_string(),
+        })
     }
 
     /// Base command: `tmux -u -L desk -f <conf>`.
     pub fn command(&self) -> Command {
         let mut c = Command::new("tmux");
-        c.arg("-u").arg("-L").arg(SOCKET).arg("-f").arg(&self.conf);
+        c.arg("-u")
+            .arg("-L")
+            .arg(&self.socket)
+            .arg("-f")
+            .arg(&self.conf);
         c
     }
 
@@ -116,16 +124,49 @@ impl Tmux {
         }
         args.extend([shell.as_str(), "-lc", script]);
         self.run(&args)?;
-        let target = format!("={slug}");
+        if let Err(e) = self.tag(slug, &cwd_s, agent, instance) {
+            // An untagged session would later be taken for another one.
+            let _ = self.kill_session(slug);
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// Record what the session was started for (`list_sessions` reads it back).
+    fn tag(&self, slug: &str, path: &str, agent: &str, instance: u32) -> Result<(), String> {
+        // `set-option -t` takes a pane target: `=name` alone is not a session there.
+        let target = format!("={slug}:");
         let instance = instance.to_string();
         for (k, v) in [
-            ("@desk_path", cwd_s.as_str()),
+            ("@desk_path", path),
             ("@desk_agent", agent),
             ("@desk_instance", instance.as_str()),
         ] {
             self.run(&["set-option", "-t", &target, k, v])?;
         }
         Ok(())
+    }
+
+    /// Tag sessions that lost their tags (desk 0.1 dev builds failed to set
+    /// them): the agent and sub-session number are recovered from the name,
+    /// older names without them are main Claude sessions.
+    pub fn retag_untagged(&self, agents: &[String]) {
+        let Ok(out) = self.run(&[
+            "list-sessions",
+            "-F",
+            "#{session_name}\t#{@desk_path}\t#{session_path}",
+        ]) else {
+            return;
+        };
+        for line in out.lines() {
+            let mut f = line.split('\t');
+            let (Some(slug), Some(""), Some(path)) = (f.next(), f.next(), f.next()) else {
+                continue;
+            };
+            let (agent, instance) =
+                origin_of(slug, Path::new(path), agents).unwrap_or(("claude", 0));
+            let _ = self.tag(slug, path, agent, instance);
+        }
     }
 
     pub fn kill_session(&self, slug: &str) -> Result<(), String> {
@@ -159,6 +200,15 @@ pub fn parse_sessions(out: &str) -> Vec<SessionInfo> {
             })
         })
         .collect()
+}
+
+/// Which agent and sub-session a session name was made for, if any.
+pub fn origin_of<'a>(slug: &str, path: &Path, agents: &'a [String]) -> Option<(&'a str, u32)> {
+    agents.iter().find_map(|a| {
+        (0..=64)
+            .find(|&n| session_slug(path, a, n) == slug)
+            .map(|n| (a.as_str(), n))
+    })
 }
 
 /// Stable tmux-safe session name: sanitized folder name + 8 hex chars of a
@@ -275,5 +325,55 @@ mod tests {
     #[test]
     fn quotes_for_shell() {
         assert_eq!(shell_quote("/a b/c'd"), r"'/a b/c'\''d'");
+    }
+
+    #[test]
+    fn recovers_agent_and_instance_from_the_name() {
+        let p = Path::new("/Users/x/projects/shop");
+        let agents = vec!["claude".to_string(), "codex".to_string()];
+        let codex = session_slug(p, "codex", 0);
+        let sub = session_slug(p, "claude", 2);
+        assert_eq!(origin_of(&codex, p, &agents), Some(("codex", 0)));
+        assert_eq!(origin_of(&sub, p, &agents), Some(("claude", 2)));
+        assert_eq!(origin_of("shop-08c5", p, &agents), None);
+    }
+
+    /// Real tmux on a throwaway socket: a new session must come back tagged
+    /// (tmux 3.6 rejects `set-option -t =name`, which left every session untagged).
+    #[test]
+    fn new_sessions_are_tagged_and_untagged_ones_repaired() {
+        if Command::new("tmux").arg("-V").output().is_err() {
+            eprintln!("tmux not installed; skipped");
+            return;
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let t = Tmux {
+            socket: format!("desk-test-{}", std::process::id()),
+            ..Tmux::new(tmp.path()).unwrap()
+        };
+        let dir = tmp.path().canonicalize().unwrap();
+        let slug = session_slug(&dir, "codex", 1);
+        t.new_session(&slug, &dir, "sleep 60", &[], "codex", 1)
+            .unwrap();
+        let want = SessionInfo {
+            slug: slug.clone(),
+            path: dir.display().to_string(),
+            agent: "codex".into(),
+            instance: 1,
+        };
+        assert_eq!(t.list_sessions(), vec![want.clone()]);
+
+        for k in ["@desk_path", "@desk_agent", "@desk_instance"] {
+            t.run(&["set-option", "-u", "-t", &format!("={slug}:"), k])
+                .unwrap();
+        }
+        assert_eq!(
+            t.list_sessions()[0].agent,
+            "claude",
+            "untagged reads as claude"
+        );
+        t.retag_untagged(&["claude".into(), "codex".into()]);
+        assert_eq!(t.list_sessions(), vec![want]);
+        let _ = t.run(&["kill-server"]);
     }
 }

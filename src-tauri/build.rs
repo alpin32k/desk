@@ -22,7 +22,7 @@ const COMMANDS: &[&str] = &[
     "is_locked",
     "open_preview",
     "open_external",
-    "scratch_dir",
+    "chat_dir",
     "usage",
     "list_agents",
     "create_project",

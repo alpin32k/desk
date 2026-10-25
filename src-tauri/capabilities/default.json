@@ -30,7 +30,7 @@
     "allow-is-locked",
     "allow-open-preview",
     "allow-open-external",
-    "allow-scratch-dir",
+    "allow-chat-dir",
     "allow-usage",
     "allow-list-agents",
     "allow-create-project"

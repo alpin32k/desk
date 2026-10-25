@@ -17,7 +17,7 @@ export interface PaletteContext {
   kill: (path: string, agent: string) => void;
   addFolder: () => void;
   newProject: (agent: string) => void;
-  scratch: (agent: string) => void;
+  chat: (agent: string) => void;
 }
 
 const MAX_ROWS = 200;
@@ -96,7 +96,7 @@ export class Palette {
     items.push(
       `<div class="row action ${this.selected === n ? "sel" : ""}" data-i="${n}">+ Nowy projekt…</div>`,
       `<div class="row action ${this.selected === n + 1 ? "sel" : ""}" data-i="${n + 1}">+ Dodaj istniejący folder…</div>`,
-      `<div class="row action ${this.selected === n + 2 ? "sel" : ""}" data-i="${n + 2}">+ Luźne pytanie, czysta sesja bez projektu (⌘L)</div>`,
+      `<div class="row action ${this.selected === n + 2 ? "sel" : ""}" data-i="${n + 2}">+ Rozmowa: zwykły czat o czymkolwiek, bez projektu (⌘R)</div>`,
     );
     const agents = this.ctx.agents().filter((a) => a.installed);
     if (!agents.some((a) => a.id === this.agent)) this.agent = agents[0]?.id ?? "claude";
@@ -160,6 +160,6 @@ export class Palette {
     if (row) this.ctx.open(row.project.path, this.agent);
     else if (action === 0) this.ctx.newProject(this.agent);
     else if (action === 1) this.ctx.addFolder();
-    else this.ctx.scratch(this.agent);
+    else this.ctx.chat(this.agent);
   }
 }

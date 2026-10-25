@@ -114,6 +114,6 @@ export const api = {
   isLocked: () => invoke<boolean>("is_locked"),
   openPreview: (url: string) => invoke<void>("open_preview", { url }),
   openExternal: (url: string) => invoke<void>("open_external", { url }),
-  scratchDir: () => invoke<string>("scratch_dir"),
+  chatDir: () => invoke<string>("chat_dir"),
   usage: (agents: string[]) => invoke<Usage[]>("usage", { agents }),
 };

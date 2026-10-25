@@ -23,7 +23,7 @@ describe("actionFor", () => {
     expect(actionFor(k("Escape"))).toEqual({ type: "exitFullscreen" });
     expect(actionFor(k("k"))).toEqual({ type: "coffee" });
     expect(actionFor(k("b"))).toEqual({ type: "lock" });
-    expect(actionFor(k("l"))).toEqual({ type: "scratch" });
+    expect(actionFor(k("r"))).toEqual({ type: "chat" });
     expect(actionFor(k("o"))).toEqual({ type: "settings" });
   });
 

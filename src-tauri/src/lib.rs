@@ -173,13 +173,25 @@ fn usage(app: State<App>, agents: Vec<String>) -> Vec<usage::Usage> {
     usage::usage(&agents, &app.hooks.state_dir, &env::home())
 }
 
-/// Empty folder for loose questions that belong to no project.
+/// Folder for plain conversations (⌘R) that belong to no project.
 #[tauri::command]
-fn scratch_dir() -> Result<String, String> {
-    let dir = env::support_dir().join("pytania");
+fn chat_dir() -> Result<String, String> {
+    let dir = env::support_dir().join("rozmowa");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    // Claude reads this as the folder's instructions; yours to edit, never overwritten.
+    let md = dir.join("CLAUDE.md");
+    if !md.exists() {
+        std::fs::write(&md, CHAT_MD).map_err(|e| e.to_string())?;
+    }
     Ok(dir.display().to_string())
 }
+
+const CHAT_MD: &str = "# Rozmowa
+
+To nie jest projekt, tylko zwykła rozmowa, jak w czacie. Rozmawiamy o czymkolwiek.
+Odpowiadaj wprost i zwięźle. Nie przeglądaj tego folderu, nie twórz plików i nie
+uruchamiaj poleceń, chyba że wyraźnie o to poproszę.
+";
 
 #[tauri::command]
 fn open_external(url: String) -> Result<(), String> {
@@ -316,6 +328,9 @@ pub fn run() {
         .setup(|app| {
             let support = env::support_dir();
             let tmux = tmux::Tmux::new(&support)?;
+            let custom = layout::load(&support.join("layout.json")).agents;
+            let ids: Vec<String> = agents::list(&custom).into_iter().map(|a| a.id).collect();
+            tmux.retag_untagged(&ids);
             let hooks = hooks::install(&support)?;
             let watcher = state_watch::watch(app.handle().clone(), &hooks.state_dir).ok();
             app.manage(lock::Lock::default());
@@ -351,7 +366,7 @@ pub fn run() {
             is_locked,
             open_preview,
             open_external,
-            scratch_dir,
+            chat_dir,
             usage,
             list_agents,
             create_project,
