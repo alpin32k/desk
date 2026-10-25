@@ -4,26 +4,40 @@
 //! - `pty_write` refuses input (enforced here, not only in the UI),
 //! - the window covers the screen and macOS kiosk options hide the Dock and
 //!   menu bar and disable app switching, Force Quit and log out,
-//! - quitting desk or closing its window is refused.
+//! - quitting desk or closing its window is refused, the menu shrinks to
+//!   Edit > Copy, and the window comes back to the front if it loses focus
+//!   or gets minimized.
 //!
-//! This guards desk's sessions, not the whole Mac: for that use the macOS lock screen.
+//! This guards desk's sessions, not the whole Mac: the tmux sessions on the
+//! `desk` socket are still reachable from any other program that runs as
+//! you. For the whole machine use the macOS lock screen.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::AppHandle;
 
 #[derive(Default)]
-pub struct Lock(AtomicBool);
+pub struct Lock {
+    locked: AtomicBool,
+    /// The Touch ID / password dialog is up and must keep the focus.
+    authenticating: AtomicBool,
+}
 
 impl Lock {
     pub fn is_locked(&self) -> bool {
-        self.0.load(Ordering::SeqCst)
+        self.locked.load(Ordering::SeqCst)
+    }
+
+    /// Locked and not showing the unlock dialog: desk keeps itself in front.
+    pub fn holds_focus(&self) -> bool {
+        self.is_locked() && !self.authenticating.load(Ordering::SeqCst)
     }
 
     pub fn lock(&self, app: &AppHandle) -> Result<(), String> {
         if !cfg!(target_os = "macos") {
             return Err("blokada wymaga macOS (Touch ID / hasło)".into());
         }
-        self.0.store(true, Ordering::SeqCst);
+        self.locked.store(true, Ordering::SeqCst);
+        let _ = crate::menu(app, true).and_then(|m| app.set_menu(m));
         kiosk(app, true);
         Ok(())
     }
@@ -33,9 +47,13 @@ impl Lock {
         if !self.is_locked() {
             return Ok(());
         }
-        authenticate("odblokować desk")?;
-        self.0.store(false, Ordering::SeqCst);
+        self.authenticating.store(true, Ordering::SeqCst);
+        let result = authenticate("odblokować desk");
+        self.authenticating.store(false, Ordering::SeqCst);
+        result?;
+        self.locked.store(false, Ordering::SeqCst);
         kiosk(app, false);
+        let _ = crate::menu(app, false).and_then(|m| app.set_menu(m));
         Ok(())
     }
 }

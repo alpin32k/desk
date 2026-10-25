@@ -243,7 +243,14 @@ async fn list_projects(extra: Vec<String>) -> Vec<discovery::Project> {
     .unwrap_or_default()
 }
 
-fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+/// While locked only Edit remains: no Hide, Minimize, Full Screen or Quit
+/// that could take the window off screen.
+pub(crate) fn menu(app: &AppHandle, locked: bool) -> tauri::Result<Menu<tauri::Wry>> {
+    if locked {
+        let edit =
+            Submenu::with_items(app, "Edit", true, &[&PredefinedMenuItem::copy(app, None)?])?;
+        return Menu::with_items(app, &[&edit]);
+    }
     // No "Close Window" (⌘W closes a tile) and no Select All / Undo, which
     // would act on the page instead of the focused terminal.
     let app_menu = Submenu::with_items(
@@ -287,7 +294,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
-        .menu(menu)
+        .menu(|app| menu(app, false))
         .setup(|app| {
             let support = env::support_dir();
             let tmux = tmux::Tmux::new(&support)?;
@@ -331,10 +338,22 @@ pub fn run() {
             create_project,
         ])
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event
-                && window.state::<lock::Lock>().is_locked()
-            {
-                api.prevent_close();
+            if !window.state::<lock::Lock>().is_locked() || window.label() != "main" {
+                return;
+            }
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => api.prevent_close(),
+                // Locked: keep the window up front, whatever tried to move it away
+                // (except the unlock dialog itself).
+                tauri::WindowEvent::Focused(false) | tauri::WindowEvent::Resized(_)
+                    if window.state::<lock::Lock>().holds_focus() =>
+                {
+                    if let Some(w) = window.app_handle().get_webview_window("main") {
+                        let _ = w.unminimize();
+                        let _ = w.set_focus();
+                    }
+                }
+                _ => {}
             }
         })
         .build(tauri::generate_context!())
