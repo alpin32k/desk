@@ -69,6 +69,16 @@ Zwykłe Esc trafia do terminala, więc dalej przerywa Claude.
 - **Podgląd lokalnych plików** widzi tylko folder podglądanego pliku. Okno podglądu nie ma
   dostępu do API desk.
 
+## Instalacja
+
+Gotowe paczki są w [Releases](https://github.com/knehrybecki/desk/releases): `.dmg` na macOS
+(aarch64 dla Apple Silicon, x64 dla Intela), `.deb` i `.AppImage` na Linux. Aplikacja nie jest
+podpisana, więc na macOS po skopiowaniu do Applications uruchom raz:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/desk.app
+```
+
 ## Rozwój
 
 ```bash
