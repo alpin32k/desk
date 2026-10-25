@@ -39,6 +39,8 @@
     "allow-preview-visible",
     "allow-preview-close",
     "allow-preview-nav",
+    "allow-read-text",
+    "allow-write-text",
     "allow-open-external",
     "allow-chat-dir",
     "allow-usage",

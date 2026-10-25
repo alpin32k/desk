@@ -31,6 +31,8 @@ const COMMANDS: &[&str] = &[
     "preview_visible",
     "preview_close",
     "preview_nav",
+    "read_text",
+    "write_text",
     "open_external",
     "chat_dir",
     "usage",

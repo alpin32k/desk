@@ -91,7 +91,12 @@ pub fn inside(root: &Path, rel: &str) -> Result<PathBuf, String> {
 /// when installed), else in the system's default text editor. Never in the
 /// file's default app, which for a script would run it.
 pub fn open_in_editor(root: &Path, rel: &str) -> Result<(), String> {
-    let file = inside(root, rel)?;
+    open_path_in_editor(&inside(root, rel)?)
+}
+
+/// `file` in a code editor or the system's text editor (never run).
+pub fn open_path_in_editor(file: &Path) -> Result<(), String> {
+    let file = file.to_path_buf();
     for editor in ["code", "cursor", "zed", "subl"] {
         if let Some(bin) = crate::agents::which(editor) {
             let mut cmd = std::process::Command::new(bin);

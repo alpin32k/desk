@@ -142,6 +142,9 @@ export const api = {
   previewVisible: (visible: boolean) => invoke<void>("preview_visible", { visible }),
   previewClose: () => invoke<void>("preview_close"),
   previewNav: (action: "back" | "forward" | "reload") => invoke<void>("preview_nav", { action }),
+  /** Text of a file shown in the side panel, to edit it there. */
+  readText: (path: string) => invoke<string>("read_text", { path }),
+  writeText: (path: string, text: string) => invoke<void>("write_text", { path, text }),
   openExternal: (url: string) => invoke<void>("open_external", { url }),
   chatDir: () => invoke<string>("chat_dir"),
   gitBranches: (path: string) => invoke<string[]>("git_branches", { path }),

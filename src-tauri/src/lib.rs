@@ -206,6 +206,16 @@ fn preview_close(handle: AppHandle) {
 }
 
 #[tauri::command]
+fn read_text(path: String) -> Result<String, String> {
+    preview::read_text(Path::new(&path))
+}
+
+#[tauri::command]
+fn write_text(path: String, text: String) -> Result<(), String> {
+    preview::write_text(Path::new(&path), &text)
+}
+
+#[tauri::command]
 fn preview_nav(handle: AppHandle, action: String) -> Result<(), String> {
     preview::navigate(&handle, &action)
 }
@@ -465,6 +475,8 @@ pub fn run() {
             preview_visible,
             preview_close,
             preview_nav,
+            read_text,
+            write_text,
             open_external,
             chat_dir,
             usage,

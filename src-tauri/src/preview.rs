@@ -378,6 +378,67 @@ pub fn display(url: &Url) -> String {
     file.map_or_else(|| url.to_string(), |f| f.display().to_string())
 }
 
+/// Text documents whose default app shows or edits them (never runs them).
+fn document_type(path: &Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|e| e.to_str())
+            .map(str::to_ascii_lowercase)
+            .as_deref(),
+        Some(
+            "md" | "markdown"
+                | "mdx"
+                | "mmd"
+                | "txt"
+                | "log"
+                | "json"
+                | "csv"
+                | "tsv"
+                | "yaml"
+                | "yml"
+                | "toml"
+                | "xml"
+                | "rtf"
+        )
+    )
+}
+
+/// A file shown in the panel that may be edited there: one desk opened, or
+/// Markdown inside a previewed folder.
+fn editable(path: &Path) -> Result<PathBuf, String> {
+    let path = path
+        .canonicalize()
+        .map_err(|_| format!("nie ma pliku {}", path.display()))?;
+    let opened = DOCS
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_some_and(|d| d.values().any(|p| *p == path));
+    let in_folder = matches!(Doc::of(&path), Some(Doc::Markdown | Doc::Mermaid))
+        && ROOTS
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_some_and(|r| r.values().any(|d| path.starts_with(d)));
+    if (opened || in_folder) && Doc::of(&path).is_some() {
+        Ok(path)
+    } else {
+        Err(format!("tego pliku nie edytuję w desk: {}", path.display()))
+    }
+}
+
+/// Text of a file shown in the panel, for the editor.
+pub fn read_text(path: &Path) -> Result<String, String> {
+    let path = editable(path)?;
+    std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Save the editor's text to a file shown in the panel.
+pub fn write_text(path: &Path, text: &str) -> Result<(), String> {
+    let path = editable(path)?;
+    std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))
+}
+
 /// Files desk renders as a page itself.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Doc {
@@ -576,15 +637,32 @@ fn allow_navigation(u: &Url) -> bool {
     }
 }
 
-/// Open in the system browser (or the default app for a local file).
+#[derive(Debug, PartialEq)]
+enum External {
+    /// A URL or a document for the system opener.
+    Open(String),
+    /// Anything a default app might run (a `.command` script): an editor.
+    Editor(PathBuf),
+}
+
+fn external(link: &str) -> Result<External, String> {
+    Ok(match parse(link)? {
+        Target::Web(u) => External::Open(u.to_string()),
+        // Documents only: the path is absolute and URLs start with http, so
+        // neither can be taken for an option.
+        Target::File(p) if mime(&p).is_some() || document_type(&p) => {
+            External::Open(p.display().to_string())
+        }
+        Target::File(p) => External::Editor(p),
+    })
+}
+
+/// Open in the system browser, a local file in its default app, or (for
+/// anything a default app might run, like a `.command` script) in an editor.
 pub fn open_external(link: &str) -> Result<(), String> {
-    let arg = match parse(link)? {
-        Target::Web(u) => u.to_string(),
-        // Only documents a browser shows: the default app for a `.command`
-        // or `.terminal` file would run it. The path is absolute and URLs
-        // start with http, so neither can be taken for an option.
-        Target::File(p) if mime(&p).is_some() => p.display().to_string(),
-        Target::File(p) => return Err(format!("nie otwieram tego typu pliku: {}", p.display())),
+    let arg = match external(link)? {
+        External::Open(arg) => arg,
+        External::Editor(p) => return crate::project::open_path_in_editor(&p),
     };
     let mut cmd = if cfg!(target_os = "macos") {
         std::process::Command::new("open")
@@ -753,8 +831,36 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let script = tmp.path().join("run.command");
         std::fs::write(&script, "echo hi").unwrap();
-        assert!(open_external(script.to_str().unwrap()).is_err());
+        // A script goes to an editor, never to its default app (Terminal would run it).
+        let script = script.canonicalize().unwrap();
+        assert_eq!(
+            external(script.to_str().unwrap()),
+            Ok(External::Editor(script))
+        );
+        let notes = tmp.path().join("notes.md");
+        std::fs::write(&notes, "# x").unwrap();
+        assert!(matches!(
+            external(notes.to_str().unwrap()),
+            Ok(External::Open(_))
+        ));
         assert!(open_external("javascript:alert(1)").is_err());
+    }
+
+    #[test]
+    fn edits_only_files_shown_in_the_panel() {
+        let tmp = tempfile::tempdir().unwrap();
+        let d = tmp.path().canonicalize().unwrap();
+        let shown = d.join("shown.md");
+        let other = d.join("other.json");
+        std::fs::write(&shown, "# a").unwrap();
+        std::fs::write(&other, "{}").unwrap();
+        assert!(read_text(&shown).is_err(), "not opened yet");
+        local_url(&shown).unwrap();
+        assert_eq!(read_text(&shown).unwrap(), "# a");
+        write_text(&shown, "# b").unwrap();
+        assert_eq!(std::fs::read_to_string(&shown).unwrap(), "# b");
+        assert!(write_text(&other, "x").is_err());
+        assert_eq!(std::fs::read_to_string(&other).unwrap(), "{}");
     }
 
     #[test]
