@@ -51,6 +51,8 @@ pub struct Coffee {
     level: Mutex<Level>,
     /// caffeinate (macOS) or systemd-inhibit (Linux), tied to desk's lifetime.
     keepawake: Mutex<Option<Child>>,
+    /// Lid mode's watchdog (macOS only).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     stop_file: PathBuf,
     stopped_because: Mutex<Option<String>>,
 }
