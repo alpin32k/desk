@@ -17,11 +17,27 @@ export interface Layout {
   extraFolders: string[];
   notifications: boolean;
   colors: Record<string, number>;
+  agents: CustomAgent[];
+  projectsDir: string | null;
+}
+
+export interface CustomAgent {
+  id: string;
+  command: string;
+}
+
+export interface AgentInfo {
+  id: string;
+  command: string;
+  installed: boolean;
+  builtin: boolean;
 }
 
 export interface SessionInfo {
   slug: string;
   path: string;
+  agent: string;
+  instance: number;
 }
 
 export type HookState = "working" | "waiting" | "idle" | "exited";
@@ -63,7 +79,11 @@ export const api = {
   bootstrap: () => invoke<Bootstrap>("bootstrap"),
   listProjects: (extra: string[]) => invoke<Project[]>("list_projects", { extra }),
   listSessions: () => invoke<SessionInfo[]>("list_sessions"),
-  openSession: (path: string) => invoke<string>("open_session", { path }),
+  openSession: (path: string, agent: string, instance: number) =>
+    invoke<string>("open_session", { path, agent, instance }),
+  listAgents: () => invoke<AgentInfo[]>("list_agents"),
+  createProject: (parent: string, name: string, git: boolean) =>
+    invoke<string>("create_project", { parent, name, git }),
   killSession: (slug: string) => invoke<void>("kill_session", { slug }),
   saveLayout: (layout: Layout) => invoke<void>("save_layout", { layout }),
   tileInfo: (paths: string[]) => invoke<TileInfo[]>("tile_info", { paths }),

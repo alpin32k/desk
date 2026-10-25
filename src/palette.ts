@@ -1,20 +1,22 @@
-// ⌘K project palette: search, Enter opens a tile, ⌘Enter toggles autostart,
-// ⌘⌫ kills a running session.
-import type { Project } from "./api";
+// ⌘K project palette: search, Tab picks the agent, Enter opens a tile,
+// ⌘Enter toggles autostart, ⌘⌫ kills a running session.
+import type { AgentInfo, Project } from "./api";
 import { ago, rows, shortPath, type Row } from "./projects";
 import { escapeHtml } from "./tile";
 
 export interface PaletteContext {
   home: () => string;
   projects: () => Promise<Project[]>;
-  isOpen: (path: string) => boolean;
-  isRunning: (path: string) => boolean;
-  isAutostart: (path: string) => boolean;
+  agents: () => AgentInfo[];
+  isOpen: (path: string, agent: string) => boolean;
+  isRunning: (path: string, agent: string) => boolean;
+  isAutostart: (path: string, agent: string) => boolean;
   color: (path: string) => string;
-  open: (path: string) => void;
-  toggleAutostart: (path: string) => void;
-  kill: (path: string) => void;
+  open: (path: string, agent: string) => void;
+  toggleAutostart: (path: string, agent: string) => void;
+  kill: (path: string, agent: string) => void;
   addFolder: () => void;
+  newProject: (agent: string) => void;
 }
 
 const MAX_ROWS = 200;
@@ -27,6 +29,7 @@ export class Palette {
   private shown: Row[] = [];
   private selected = 0;
   private mode: "all" | "new" = "all";
+  private agent = "claude";
 
   constructor(private ctx: PaletteContext) {}
 
@@ -48,7 +51,7 @@ export class Palette {
       <div class="dialog palette">
         <input type="text" spellcheck="false" autocomplete="off" />
         <div class="list"></div>
-        <footer><kbd>↵</kbd> otwórz <kbd>⌘↵</kbd> start z aplikacją <kbd>⌘⌫</kbd> zabij sesję <kbd>esc</kbd> zamknij</footer>
+        <footer><span class="agent-pick"></span><kbd>↵</kbd> otwórz <kbd>⌘↵</kbd> start z aplikacją <kbd>⌘⌫</kbd> zabij sesję <kbd>esc</kbd> zamknij</footer>
       </div>`;
     this.input = this.el.querySelector("input")!;
     this.list = this.el.querySelector(".list")!;
@@ -84,23 +87,31 @@ export class Palette {
     const q = this.input.value;
     this.input.placeholder = this.mode === "new" ? "Nowa sesja: wybierz projekt…" : "Projekt…";
     let r = rows(this.all, q);
-    if (this.mode === "new") r = r.filter((x) => !this.ctx.isOpen(x.project.path));
+    if (this.mode === "new") r = r.filter((x) => !this.ctx.isOpen(x.project.path, this.agent));
     this.shown = r.slice(0, MAX_ROWS);
-    this.selected = Math.min(this.selected, this.shown.length); // last index = "add folder"
+    this.selected = Math.min(this.selected, this.shown.length + 1); // two action rows at the end
     const items = this.shown.map((row, i) => this.rowHtml(row, i));
+    const n = this.shown.length;
     items.push(
-      `<div class="row action ${this.selected === this.shown.length ? "sel" : ""}" data-i="${this.shown.length}">+ Dodaj folder…</div>`,
+      `<div class="row action ${this.selected === n ? "sel" : ""}" data-i="${n}">+ Nowy projekt…</div>`,
+      `<div class="row action ${this.selected === n + 1 ? "sel" : ""}" data-i="${n + 1}">+ Dodaj istniejący folder…</div>`,
     );
+    const agents = this.ctx.agents().filter((a) => a.installed);
+    if (!agents.some((a) => a.id === this.agent)) this.agent = agents[0]?.id ?? "claude";
+    this.el.querySelector(".agent-pick")!.innerHTML = `<kbd>⇥</kbd> agent: ${agents
+      .map((a) => `<span class="${a.id === this.agent ? "on" : ""}">${escapeHtml(a.id)}</span>`)
+      .join(" ")}`;
     this.list.innerHTML = items.join("");
     this.list.querySelector(".sel")?.scrollIntoView({ block: "nearest" });
   }
 
   private rowHtml(row: Row, i: number): string {
     const p = row.project;
+    const open = this.ctx.isOpen(p.path, this.agent);
     const tags = [
-      this.ctx.isOpen(p.path) ? `<span class="tag open">otwarty</span>` : "",
-      !this.ctx.isOpen(p.path) && this.ctx.isRunning(p.path) ? `<span class="tag run">w tle</span>` : "",
-      this.ctx.isAutostart(p.path) ? `<span class="tag auto">★ start</span>` : "",
+      open ? `<span class="tag open">otwarty</span>` : "",
+      !open && this.ctx.isRunning(p.path, this.agent) ? `<span class="tag run">w tle</span>` : "",
+      this.ctx.isAutostart(p.path, this.agent) ? `<span class="tag auto">★ start</span>` : "",
     ].join("");
     const name = row.parent && !this.input.value.trim() ? `<span class="wt">↳</span> ${escapeHtml(p.name)}` : escapeHtml(p.name);
     const parent = row.parent ? `<span class="dim"> · worktree ${escapeHtml(row.parent.name)}</span>` : "";
@@ -112,17 +123,21 @@ export class Palette {
   }
 
   private onKey(e: KeyboardEvent): void {
-    const count = this.shown.length + 1;
-    if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) {
+    const count = this.shown.length + 2;
+    if (e.key === "Tab") {
+      const ids = this.ctx.agents().filter((a) => a.installed).map((a) => a.id);
+      const i = ids.indexOf(this.agent);
+      this.agent = ids[(i + (e.shiftKey ? ids.length - 1 : 1)) % ids.length] ?? "claude";
+    } else if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) {
       this.selected = (this.selected + 1) % count;
     } else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) {
       this.selected = (this.selected - 1 + count) % count;
     } else if (e.key === "Enter" && e.metaKey) {
       const row = this.shown[this.selected];
-      if (row) this.ctx.toggleAutostart(row.project.path);
+      if (row) this.ctx.toggleAutostart(row.project.path, this.agent);
     } else if (e.key === "Backspace" && e.metaKey) {
       const row = this.shown[this.selected];
-      if (row && this.ctx.isRunning(row.project.path)) this.ctx.kill(row.project.path);
+      if (row && this.ctx.isRunning(row.project.path, this.agent)) this.ctx.kill(row.project.path, this.agent);
     } else if (e.key === "Enter") {
       this.activate();
       return;
@@ -138,8 +153,10 @@ export class Palette {
 
   private activate(): void {
     const row = this.shown[this.selected];
+    const isNew = this.selected === this.shown.length;
     this.close();
-    if (row) this.ctx.open(row.project.path);
+    if (row) this.ctx.open(row.project.path, this.agent);
+    else if (isNew) this.ctx.newProject(this.agent);
     else this.ctx.addFolder();
   }
 }

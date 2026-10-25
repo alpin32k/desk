@@ -1,6 +1,6 @@
 // ⌘, options: lane count, notifications, which projects start with the app,
 // hand-added folders.
-import type { Layout, Project } from "./api";
+import type { AgentInfo, Layout, Project } from "./api";
 import { rows, shortPath } from "./projects";
 import { escapeHtml } from "./tile";
 
@@ -13,6 +13,9 @@ export interface SettingsContext {
   toggleAutostart: (path: string) => void;
   addFolder: () => Promise<void>;
   removeFolder: (path: string) => void;
+  agents: () => AgentInfo[];
+  addAgent: (id: string, command: string) => Promise<void>;
+  removeAgent: (id: string) => Promise<void>;
 }
 
 export class Settings {
@@ -79,6 +82,17 @@ export class Settings {
               .join("")
           : `<div class="dim">Szukam projektów…</div>`
       }</div>
+      <h3>Agenci <span class="dim">(Tab w palecie wybiera agenta)</span></h3>
+      <div class="agents">${this.ctx
+        .agents()
+        .map(
+          (a) => `<div class="agent-row"><b>${escapeHtml(a.id)}</b> <span class="dim">${escapeHtml(a.command || "login shell")}</span> ${
+            a.installed ? `<span class="tag open">jest</span>` : `<span class="tag">brak w PATH</span>`
+          }${a.builtin ? "" : ` <button data-rm-agent="${escapeHtml(a.id)}">usuń</button>`}</div>`,
+        )
+        .join("")}
+        <div class="line"><input type="text" data-k="agent-id" placeholder="nazwa, np. amp" spellcheck="false" /><input type="text" data-k="agent-cmd" placeholder="komenda, np. amp --dangerously-allow-all" spellcheck="false" /><button data-k="agent-add">+ Dodaj agenta</button></div>
+      </div>
       <h3>Dodane foldery</h3>
       <div class="folders">${layout.extraFolders
         .map(
@@ -112,6 +126,19 @@ export class Settings {
         void this.reload();
       }),
     );
+    box.querySelectorAll<HTMLButtonElement>("[data-rm-agent]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        await this.ctx.removeAgent(b.dataset.rmAgent!);
+        this.render();
+      }),
+    );
+    box.querySelector<HTMLButtonElement>('[data-k="agent-add"]')!.addEventListener("click", async () => {
+      const id = box.querySelector<HTMLInputElement>('[data-k="agent-id"]')!.value.trim().toLowerCase();
+      const cmd = box.querySelector<HTMLInputElement>('[data-k="agent-cmd"]')!.value.trim();
+      if (!/^[a-z0-9][a-z0-9_-]*$/.test(id) || !cmd) return;
+      await this.ctx.addAgent(id, cmd);
+      this.render();
+    });
     box.querySelector<HTMLButtonElement>('[data-k="add"]')!.addEventListener("click", async () => {
       await this.ctx.addFolder();
       await this.reload();

@@ -2,28 +2,39 @@
 import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-import { api, type CoffeeLevel, type CoffeeStatus, type Layout, type Project, type PtyExit, type SessionState } from "./api";
+import {
+  api,
+  type AgentInfo,
+  type CoffeeLevel,
+  type CoffeeStatus,
+  type Layout,
+  type Project,
+  type PtyExit,
+  type SessionState,
+} from "./api";
 import { actionFor, HINTS, type Action } from "./keys";
 import * as L from "./lanes";
 import { Palette } from "./palette";
 import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
+import { keyOf, nextInstance, parseKey } from "./sessions";
 import { Settings } from "./settings";
 import { displayState, escapeHtml, Tile, type TileAction } from "./tile";
-import { confirmBox, toast } from "./ui";
+import { confirmBox, newProjectBox, toast } from "./ui";
 
 const POLL_MS = 3000;
 
 export class App {
   private layout!: Layout;
   private home = "";
-  private tiles = new Map<string, Tile>(); // by project path
+  private tiles = new Map<string, Tile>(); // by session key (see sessions.ts)
   private hook = new Map<string, SessionState>(); // by tmux slug
-  private running = new Set<string>(); // project paths with a tmux session
+  private running = new Set<string>(); // session keys with a tmux session
+  private agents: AgentInfo[] = [];
   private projectCache: Promise<Project[]> | null = null;
   private active: string | null = null;
   private opening = new Map<string, Promise<void>>();
   private earlyExits = new Map<number, string>(); // pty-exit that arrived before attach returned
-  private missing: { path: string; lane: number }[] = [];
+  private missing: { key: string; lane: number }[] = [];
   private coffee: CoffeeStatus = { level: "off", sleepDisabled: false, stoppedBecause: null };
   private fullscreen: string | null = null;
 
@@ -45,14 +56,16 @@ export class App {
     this.palette = new Palette({
       home: () => this.home,
       projects: () => this.projects(),
-      isOpen: (p) => this.tiles.has(p),
-      isRunning: (p) => this.running.has(p),
-      isAutostart: (p) => this.layout.autostart.includes(p),
+      agents: () => this.agents,
+      isOpen: (path, agent) => this.tiles.has(keyOf({ path, agent, instance: 0 })),
+      isRunning: (path, agent) => this.running.has(keyOf({ path, agent, instance: 0 })),
+      isAutostart: (path, agent) => this.layout.autostart.includes(keyOf({ path, agent, instance: 0 })),
       color: (p) => projectColor(p, this.layout.colors),
-      open: (p) => void this.openTile(p),
-      toggleAutostart: (p) => this.toggleAutostart(p),
-      kill: (p) => void this.killSession(p),
+      open: (path, agent) => void this.openTile(keyOf({ path, agent, instance: 0 })),
+      toggleAutostart: (path, agent) => this.toggleAutostart(keyOf({ path, agent, instance: 0 })),
+      kill: (path, agent) => void this.killSession(keyOf({ path, agent, instance: 0 })),
       addFolder: () => void this.addFolder(),
+      newProject: (agent) => void this.newProject(agent),
     });
     this.settings = new Settings({
       home: () => this.home,
@@ -74,6 +87,15 @@ export class App {
         this.projectCache = null;
         this.save();
       },
+      agents: () => this.agents,
+      addAgent: async (id, command) => {
+        this.layout.agents = [...this.layout.agents.filter((a) => a.id !== id), { id, command }];
+        await this.saveNow();
+      },
+      removeAgent: async (id) => {
+        this.layout.agents = this.layout.agents.filter((a) => a.id !== id);
+        await this.saveNow();
+      },
     });
   }
 
@@ -89,23 +111,29 @@ export class App {
     });
     const boot = await api.bootstrap();
     this.coffee = await api.coffeeStatus();
+    this.agents = await api.listAgents();
     this.home = boot.home;
     for (const s of boot.states) this.hook.set(s.slug, s);
-    for (const s of boot.sessions) this.running.add(s.path);
+    for (const s of boot.sessions) this.running.add(keyOf(s));
 
-    this.layout = { ...boot.layout, colors: boot.layout.colors ?? {}, lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length) };
+    this.layout = {
+      ...boot.layout,
+      colors: boot.layout.colors ?? {},
+      agents: boot.layout.agents ?? [],
+      lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length),
+    };
 
     window.addEventListener("keydown", (e) => this.onKey(e), true);
     window.addEventListener("resize", () => this.fitAll());
 
     // Reattach every tile from the saved layout (starting sessions tmux lost) and the autostart ones.
-    const paths = L.flatten(this.layout.lanes);
-    const opened = await Promise.all(paths.map((p) => this.createTile(p)));
-    paths.forEach((p, i) => {
+    const keys = L.flatten(this.layout.lanes);
+    const opened = await Promise.all(keys.map((k) => this.createTile(k)));
+    keys.forEach((k, i) => {
       if (opened[i]) return;
       // Keep it in the saved layout (volume not mounted, tmux not ready...) for the next start.
-      this.missing.push({ path: p, lane: this.layout.lanes.findIndex((l) => l.includes(p)) });
-      this.layout.lanes = L.remove(this.layout.lanes, p);
+      this.missing.push({ key: k, lane: this.layout.lanes.findIndex((l) => l.includes(k)) });
+      this.layout.lanes = L.remove(this.layout.lanes, k);
     });
     this.render();
     await Promise.all([...this.tiles.values()].map((t) => t.start().catch((err) => toast(`${t.name}: ${err}`))));
@@ -119,83 +147,98 @@ export class App {
 
   // ---- tiles -------------------------------------------------------------
 
-  private async createTile(path: string): Promise<Tile | null> {
+  private async createTile(key: string): Promise<Tile | null> {
+    const spec = parseKey(key);
     try {
-      const slug = await api.openSession(path);
-      this.running.add(path);
-      if (this.tiles.has(path)) return null; // opened meanwhile (startup restore vs palette)
-      const tile = new Tile(path, slug, (t, a) => void this.onTileAction(t, a));
-      const taken = [...this.tiles.keys()].map((p) => this.layout.colors[p]).filter((i) => i !== undefined);
-      this.layout.colors[path] = pickColor(path, this.layout.colors, taken);
-      tile.setColor(projectColor(path, this.layout.colors));
-      this.tiles.set(path, tile);
+      const slug = await api.openSession(spec.path, spec.agent, spec.instance);
+      this.running.add(key);
+      if (this.tiles.has(key)) return null; // opened meanwhile (startup restore vs palette)
+      const tile = new Tile(spec, slug, (t, a) => void this.onTileAction(t, a));
+      // One color per project (shared by its agents and sub-sessions), distinct from other projects.
+      const taken = [...this.tiles.values()]
+        .filter((t) => t.path !== spec.path)
+        .map((t) => this.layout.colors[t.path])
+        .filter((i) => i !== undefined);
+      this.layout.colors[spec.path] = pickColor(spec.path, this.layout.colors, taken);
+      tile.setColor(projectColor(spec.path, this.layout.colors));
+      this.tiles.set(key, tile);
       return tile;
     } catch (err) {
-      toast(`Nie udało się otworzyć ${path}: ${err}`);
+      toast(`Nie udało się otworzyć ${spec.agent} w ${spec.path}: ${err}`);
       return null;
     }
   }
 
-  openTile(path: string): Promise<void> {
-    if (this.tiles.has(path)) {
-      this.setActive(path, true);
+  openTile(key: string): Promise<void> {
+    if (this.tiles.has(key)) {
+      this.setActive(key, true);
       return Promise.resolve();
     }
-    let pending = this.opening.get(path);
+    let pending = this.opening.get(key);
     if (!pending) {
-      pending = this.doOpenTile(path).finally(() => this.opening.delete(path));
-      this.opening.set(path, pending);
+      pending = this.doOpenTile(key).finally(() => this.opening.delete(key));
+      this.opening.set(key, pending);
     }
     return pending;
   }
 
-  private async doOpenTile(path: string): Promise<void> {
-    this.missing = this.missing.filter((m) => m.path !== path);
-    const tile = await this.createTile(path);
+  private async doOpenTile(key: string): Promise<void> {
+    this.missing = this.missing.filter((m) => m.key !== key);
+    const tile = await this.createTile(key);
     if (!tile) return;
-    this.layout.lanes = L.add(this.layout.lanes, path);
+    this.layout.lanes = L.add(this.layout.lanes, key);
     this.render();
     try {
       await tile.start();
     } catch (err) {
       toast(`${tile.name}: ${err}`);
     }
-    this.setActive(path, true);
+    this.setActive(key, true);
     this.save();
     void this.poll();
   }
 
+  /** Another session of the same agent in the same project, next to it. */
+  private async openSub(tile: Tile): Promise<void> {
+    const sessions = await api.listSessions();
+    const taken = [...sessions, ...[...this.tiles.values()]];
+    const key = keyOf({ path: tile.path, agent: tile.agent, instance: nextInstance(taken, tile.path, tile.agent) });
+    await this.openTile(key);
+  }
+
   /** Close the tile; the tmux session keeps running in the background. */
-  closeTile(path: string): void {
-    const tile = this.tiles.get(path);
+  closeTile(key: string): void {
+    const tile = this.tiles.get(key);
     if (!tile) return;
     const order = L.flatten(this.layout.lanes);
-    const at = order.indexOf(path);
+    const at = order.indexOf(key);
     tile.dispose();
-    this.tiles.delete(path);
-    this.layout.lanes = L.remove(this.layout.lanes, path);
-    if (this.fullscreen === path) this.fullscreen = null;
+    this.tiles.delete(key);
+    this.layout.lanes = L.remove(this.layout.lanes, key);
+    if (this.fullscreen === key) this.fullscreen = null;
     this.changed();
-    const next = order.filter((p) => p !== path)[Math.max(0, at - 1)];
+    const next = order.filter((k) => k !== key)[Math.max(0, at - 1)];
     if (next) this.setActive(next, true);
   }
 
-  async killSession(path: string): Promise<void> {
-    const name = path.split("/").pop();
-    if (!(await confirmBox(`Zabić sesję Claude w „${name}”? Bieżąca rozmowa zostanie przerwana.`, "Zabij"))) return;
-    const tile = this.tiles.get(path);
-    if (tile) this.closeTile(path);
-    const slug = tile?.slug ?? (await api.listSessions()).find((s) => s.path === path)?.slug;
+  async killSession(key: string): Promise<void> {
+    const spec = parseKey(key);
+    const name = spec.path.split("/").pop();
+    if (!(await confirmBox(`Zabić sesję ${spec.agent} w „${name}”? Bieżąca rozmowa zostanie przerwana.`, "Zabij"))) return;
+    const tile = this.tiles.get(key);
+    if (tile) this.closeTile(key);
+    const slug = tile?.slug ?? (await api.listSessions()).find((s) => keyOf(s) === key)?.slug;
     if (slug) await api.killSession(slug).catch((err) => toast(String(err)));
-    this.running.delete(path);
+    this.running.delete(key);
     this.palette.refresh();
   }
 
   private async onTileAction(tile: Tile, action: TileAction): Promise<void> {
-    if (action === "focus") return this.setActive(tile.path, false);
-    if (action === "close") return this.closeTile(tile.path);
-    if (action === "kill") return this.killSession(tile.path);
-    if (action === "fullscreen") return this.toggleFullscreen(tile.path);
+    if (action === "focus") return this.setActive(tile.key, false);
+    if (action === "close") return this.closeTile(tile.key);
+    if (action === "kill") return this.killSession(tile.key);
+    if (action === "fullscreen") return this.toggleFullscreen(tile.key);
+    if (action === "sub") return this.openSub(tile);
     if (action === "attached" && tile.ptyId !== null) {
       const slug = this.earlyExits.get(tile.ptyId);
       if (slug !== undefined) {
@@ -207,7 +250,7 @@ export class App {
     if (action === "color") {
       const next = ((this.layout.colors[tile.path] ?? 0) + 1) % PROJECT_COLORS.length;
       this.layout.colors[tile.path] = next;
-      tile.setColor(PROJECT_COLORS[next]);
+      for (const t of this.tiles.values()) if (t.path === tile.path) t.setColor(PROJECT_COLORS[next]);
       this.save();
     }
   }
@@ -220,36 +263,36 @@ export class App {
     }
     const alive = (await api.listSessions()).some((s) => s.slug === e.slug);
     // The tile may have been closed or replaced while we waited.
-    if (this.tiles.get(tile.path) !== tile || tile.ptyId !== e.id) return;
+    if (this.tiles.get(tile.key) !== tile || tile.ptyId !== e.id) return;
     if (alive) {
       await tile.attach(); // detached from outside (e.g. tmux detach-client): attach again
     } else {
-      this.running.delete(tile.path);
-      this.closeTile(tile.path);
+      this.running.delete(tile.key);
+      this.closeTile(tile.key);
       toast(`Sesja ${tile.name} zakończona`);
     }
   }
 
-  private setActive(path: string, focus: boolean): void {
-    if (this.active !== path) {
+  private setActive(key: string, focus: boolean): void {
+    if (this.active !== key) {
       this.tiles.get(this.active ?? "")?.setActive(false);
-      this.active = path;
-      this.tiles.get(path)?.setActive(true);
-      if (this.fullscreen && this.fullscreen !== path) this.toggleFullscreen(path);
+      this.active = key;
+      this.tiles.get(key)?.setActive(true);
+      if (this.fullscreen && this.fullscreen !== key) this.toggleFullscreen(key);
     }
-    if (focus) this.tiles.get(path)?.focus();
+    if (focus) this.tiles.get(key)?.focus();
   }
 
   private focusIndex(i: number): void {
-    const path = L.flatten(this.layout.lanes)[i];
-    if (path) this.setActive(path, true);
+    const key = L.flatten(this.layout.lanes)[i];
+    if (key) this.setActive(key, true);
   }
 
-  private toggleFullscreen(path?: string): void {
-    const target = path ?? this.active;
+  private toggleFullscreen(key?: string): void {
+    const target = key ?? this.active;
     this.fullscreen = !target || this.fullscreen === target ? null : target;
     this.grid.classList.toggle("has-full", this.fullscreen !== null);
-    for (const t of this.tiles.values()) t.el.classList.toggle("full", t.path === this.fullscreen);
+    for (const t of this.tiles.values()) t.el.classList.toggle("full", t.key === this.fullscreen);
     if (target) this.setActive(target, true);
     this.fitAll();
   }
@@ -288,7 +331,7 @@ export class App {
     lane.innerHTML = `<div class="lane-head"></div><div class="lane-body"><div class="hint">⌘K — otwórz projekt</div></div>`;
     const body = lane.querySelector<HTMLElement>(".lane-body")!;
     body.addEventListener("dragover", (e) => {
-      if (!e.dataTransfer?.types.includes("text/x-desk-path")) return;
+      if (!e.dataTransfer?.types.includes("text/x-desk-key")) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
       this.markDrop(body, dropIndex(body, e.clientY));
@@ -297,15 +340,15 @@ export class App {
       if (!body.contains(e.relatedTarget as Node)) this.markDrop(null, 0);
     });
     body.addEventListener("drop", (e) => {
-      const path = e.dataTransfer?.getData("text/x-desk-path");
+      const key = e.dataTransfer?.getData("text/x-desk-key");
       this.markDrop(null, 0);
-      if (!path) return;
+      if (!key) return;
       e.preventDefault();
       const laneIdx = Number(lane.dataset.lane);
       const index = dropIndex(body, e.clientY);
-      this.layout.lanes = L.move(this.layout.lanes, path, laneIdx, index);
+      this.layout.lanes = L.move(this.layout.lanes, key, laneIdx, index);
       this.changed();
-      this.setActive(path, true);
+      this.setActive(key, true);
     });
     return lane;
   }
@@ -326,22 +369,32 @@ export class App {
   private saveTimer: number | undefined;
   private save(): void {
     clearTimeout(this.saveTimer);
-    this.saveTimer = window.setTimeout(() => {
-      const lanes = L.clone(this.layout.lanes);
-      for (const m of this.missing) {
-        if (!L.contains(lanes, m.path)) lanes[Math.min(Math.max(m.lane, 0), lanes.length - 1)].push(m.path);
-      }
-      api.saveLayout({ ...this.layout, lanes }).catch((err) => toast(`Zapis układu: ${err}`));
-    }, 150);
+    this.saveTimer = window.setTimeout(() => void this.persist(), 150);
+  }
+
+  /** Write layout.json; tiles that failed to open at startup keep their place. */
+  private persist(): Promise<void> {
+    const lanes = L.clone(this.layout.lanes);
+    for (const m of this.missing) {
+      if (!L.contains(lanes, m.key)) lanes[Math.min(Math.max(m.lane, 0), lanes.length - 1)].push(m.key);
+    }
+    return api.saveLayout({ ...this.layout, lanes }).catch((err) => toast(`Zapis układu: ${err}`));
+  }
+
+  /** Save right away (Rust reads custom agents from the file) and refresh the agent list. */
+  private async saveNow(): Promise<void> {
+    clearTimeout(this.saveTimer);
+    await this.persist();
+    this.agents = await api.listAgents();
   }
 
   private fitAll(): void {
     for (const t of this.tiles.values()) t.queueFit();
   }
 
-  private toggleAutostart(path: string): void {
+  private toggleAutostart(key: string): void {
     const a = this.layout.autostart;
-    this.layout.autostart = a.includes(path) ? a.filter((p) => p !== path) : [...a, path];
+    this.layout.autostart = a.includes(key) ? a.filter((k) => k !== key) : [...a, key];
     this.save();
     this.palette.refresh();
     this.settings.render();
@@ -354,6 +407,26 @@ export class App {
     this.projectCache = null;
     this.save();
     if (!this.settings.isOpen) await this.openTile(picked);
+  }
+
+  private async newProject(agent: string): Promise<void> {
+    const parent = this.layout.projectsDir ?? `${this.home}/Documents/projects`;
+    const pick = async () => {
+      const p = await openDialog({ directory: true, multiple: false, defaultPath: parent });
+      return typeof p === "string" ? p : null;
+    };
+    const req = await newProjectBox(parent, pick, agent);
+    if (!req) return;
+    try {
+      const path = await api.createProject(req.parent, req.name, req.git);
+      this.layout.projectsDir = req.parent;
+      if (!this.layout.extraFolders.includes(path)) this.layout.extraFolders.push(path);
+      this.projectCache = null;
+      this.save();
+      await this.openTile(keyOf({ path, agent, instance: 0 }));
+    } catch (err) {
+      toast(`Nowy projekt: ${err}`);
+    }
   }
 
   private projects(): Promise<Project[]> {
@@ -375,12 +448,12 @@ export class App {
   // ---- state -------------------------------------------------------------
 
   private async poll(): Promise<void> {
-    const paths = [...this.tiles.keys()];
+    const paths = [...new Set([...this.tiles.values()].map((t) => t.path))];
     const [infos, sessions] = await Promise.all([api.tileInfo(paths), api.listSessions()]);
-    this.running = new Set(sessions.map((s) => s.path));
-    for (const info of infos) {
-      const tile = this.tiles.get(info.path);
-      tile?.update({ branch: info.branch, state: displayState(this.hook.get(tile.slug)?.state) });
+    this.running = new Set(sessions.map((s) => keyOf(s)));
+    const branch = new Map(infos.map((i) => [i.path, i.branch]));
+    for (const tile of this.tiles.values()) {
+      tile.update({ branch: branch.get(tile.path) ?? null, state: displayState(this.hook.get(tile.slug)?.state) });
     }
     this.renderChrome();
   }
@@ -490,6 +563,11 @@ export class App {
       case "kill":
         if (this.active) void this.killSession(this.active);
         break;
+      case "sub": {
+        const t = this.tiles.get(this.active ?? "");
+        if (t) void this.openSub(t);
+        break;
+      }
       case "focus":
         this.focusIndex(a.index);
         break;

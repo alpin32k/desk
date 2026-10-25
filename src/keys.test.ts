@@ -15,6 +15,7 @@ describe("actionFor", () => {
     expect(actionFor(k("k"))).toEqual({ type: "palette" });
     expect(actionFor(k("n"))).toEqual({ type: "new" });
     expect(actionFor(k("w"))).toEqual({ type: "close" });
+    expect(actionFor(k("t"))).toEqual({ type: "sub" });
     expect(actionFor(k("W", { shiftKey: true }))).toEqual({ type: "kill" });
     expect(actionFor(k("3"))).toEqual({ type: "focus", index: 2 });
     expect(actionFor(k("Enter"))).toEqual({ type: "fullscreen" });

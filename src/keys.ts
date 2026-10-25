@@ -5,6 +5,7 @@ export type Action =
   | { type: "new" }
   | { type: "close" }
   | { type: "kill" }
+  | { type: "sub" }
   | { type: "focus"; index: number }
   | { type: "fullscreen" }
   | { type: "exitFullscreen" }
@@ -30,6 +31,8 @@ export function actionFor(e: KeyLike): Action | null {
       return { type: "new" };
     case "w":
       return { type: "close" };
+    case "t":
+      return { type: "sub" };
     case "Enter":
       return { type: "fullscreen" };
     case "Escape":
@@ -44,6 +47,7 @@ export function actionFor(e: KeyLike): Action | null {
 export const HINTS: [string, string][] = [
   ["⌘K", "projekty"],
   ["⌘N", "nowa sesja"],
+  ["⌘T", "pod-sesja"],
   ["⌘W", "zamknij"],
   ["⌘⇧W", "zabij"],
   ["⌘1-9", "skok"],

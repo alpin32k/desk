@@ -268,6 +268,10 @@ button:hover {
   color: var(--line-hi);
 }
 
+.tile .agent {
+  color: var(--dim);
+}
+
 .tile .branch {
   color: var(--accent);
 }
@@ -492,6 +496,20 @@ button:hover {
   color: var(--dim);
 }
 
+.palette .agent-pick {
+  margin-right: auto;
+}
+
+.palette .agent-pick span {
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.palette .agent-pick span.on {
+  color: var(--bg);
+  background: var(--accent);
+}
+
 .palette footer {
   padding: 6px 12px;
   border-top: 1px solid var(--line);
@@ -569,6 +587,16 @@ button:hover {
   padding-left: 24px;
 }
 
+.settings .agents {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings .agents .line input {
+  flex: 1;
+}
+
 .settings .folders {
   display: flex;
   flex-direction: column;
@@ -584,6 +612,33 @@ button:hover {
 
 .settings .small {
   font-size: 10px;
+}
+
+.new-project {
+  width: 560px;
+  padding: 14px 16px;
+  gap: 10px;
+}
+
+.new-project h2 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.new-project .line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.new-project input[type="text"] {
+  flex: 1;
+}
+
+.new-project .buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .confirm {

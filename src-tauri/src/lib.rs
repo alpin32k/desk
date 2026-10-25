@@ -1,3 +1,4 @@
+pub mod agents;
 pub mod claude_projects;
 pub mod coffee;
 pub mod discovery;
@@ -5,6 +6,7 @@ pub mod env;
 pub mod git;
 pub mod hooks;
 pub mod layout;
+pub mod new_project;
 pub mod pty;
 pub mod state_watch;
 pub mod tmux;
@@ -57,32 +59,55 @@ fn list_sessions(app: State<App>) -> Vec<tmux::SessionInfo> {
     app.tmux.list_sessions()
 }
 
-/// Ensure the project's tmux session exists; returns its slug.
+/// Ensure the tmux session for project + agent + sub-session exists; returns its slug.
 #[tauri::command]
-fn open_session(app: State<App>, path: String) -> Result<String, String> {
+fn open_session(
+    app: State<App>,
+    path: String,
+    agent: String,
+    instance: u32,
+) -> Result<String, String> {
     let dir = Path::new(&path);
     if !dir.is_dir() {
         return Err(format!("folder does not exist: {path}"));
     }
-    // Find the session by the project path it was started for, so a slug
-    // collision or an older naming scheme never attaches to another project.
+    // Match by what the session was started for, so a slug collision or an
+    // older naming scheme never attaches to another project.
     if let Some(s) = app
         .tmux
         .list_sessions()
         .into_iter()
-        .find(|s| s.path == path)
+        .find(|s| s.path == path && s.agent == agent && s.instance == instance)
     {
         return Ok(s.slug);
     }
-    let slug = tmux::slug(dir);
+    let custom = layout::load(&app.layout_path).agents;
+    let command =
+        agents::command_for(&agent, &custom).ok_or_else(|| format!("unknown agent: {agent}"))?;
+    let slug = tmux::session_slug(dir, &agent, instance);
     if app.tmux.has_session(&slug) {
         return Err(format!(
             "tmux session {slug} already belongs to another folder"
         ));
     }
+    let script = agents::launch_script(&agent, &command, &app.hooks.settings);
+    let env = [
+        ("DESK_SLUG", slug.clone()),
+        ("DESK_STATE_DIR", app.hooks.state_dir.display().to_string()),
+    ];
     app.tmux
-        .new_session(&slug, dir, &app.hooks.settings, &app.hooks.state_dir)?;
+        .new_session(&slug, dir, &script, &env, &agent, instance)?;
     Ok(slug)
+}
+
+#[tauri::command]
+fn list_agents(app: State<App>) -> Vec<agents::AgentInfo> {
+    agents::list(&layout::load(&app.layout_path).agents)
+}
+
+#[tauri::command]
+fn create_project(parent: String, name: String, git: bool) -> Result<String, String> {
+    new_project::create(Path::new(&parent), &name, git).map(|p| p.display().to_string())
 }
 
 #[tauri::command]
@@ -245,6 +270,8 @@ pub fn run() {
             coffee_status,
             coffee_set,
             coffee_restore,
+            list_agents,
+            create_project,
         ])
         .build(tauri::generate_context!())
         .expect("error while building desk")

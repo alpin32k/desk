@@ -20,6 +20,10 @@ pub struct Layout {
     /// Color picked by hand per project path (index into the UI palette);
     /// projects not listed get a color derived from their path.
     pub colors: std::collections::BTreeMap<String, u32>,
+    /// Agents added by hand (built-ins are always available).
+    pub agents: Vec<crate::agents::CustomAgent>,
+    /// Where "new project" creates folders; None = ~/Documents/projects or ~.
+    pub projects_dir: Option<String>,
 }
 
 impl Default for Layout {
@@ -31,6 +35,8 @@ impl Default for Layout {
             extra_folders: Vec::new(),
             notifications: true,
             colors: Default::default(),
+            agents: Vec::new(),
+            projects_dir: None,
         }
     }
 }

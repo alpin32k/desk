@@ -30,6 +30,10 @@ set -g remain-on-exit off
 pub struct SessionInfo {
     pub slug: String,
     pub path: String,
+    /// Agent id (`claude`, `codex`, ...); sessions from before agents existed are `claude`.
+    pub agent: String,
+    /// 0 for the main session of a project+agent, 1.. for sub-sessions.
+    pub instance: u32,
 }
 
 #[derive(Clone)]
@@ -70,7 +74,7 @@ impl Tmux {
         self.run(&[
             "list-sessions",
             "-F",
-            "#{session_name}\t#{@desk_path}\t#{session_path}",
+            "#{session_name}\t#{@desk_path}\t#{session_path}\t#{@desk_agent}\t#{@desk_instance}",
         ])
         .map(|s| parse_sessions(&s))
         .unwrap_or_default()
@@ -81,26 +85,21 @@ impl Tmux {
             .is_ok()
     }
 
-    /// Start `claude --settings <hooks>` in a new detached session; when claude
-    /// exits the pane falls back to a login shell so the tile stays usable.
+    /// Start `script` (see `agents::launch_script`) in a new detached session
+    /// and tag it with the project path, agent and sub-session number.
     pub fn new_session(
         &self,
         slug: &str,
         cwd: &Path,
-        hooks_settings: &Path,
-        state_dir: &Path,
+        script: &str,
+        env: &[(&str, String)],
+        agent: &str,
+        instance: u32,
     ) -> Result<(), String> {
         let shell = crate::env::user_shell();
-        let script = format!(
-            "{} --settings {}; exec {} -l",
-            shell_quote(crate::env::claude_bin()),
-            shell_quote(&hooks_settings.display().to_string()),
-            shell_quote(&shell)
-        );
         let cwd_s = cwd.display().to_string();
-        let slug_env = format!("DESK_SLUG={slug}");
-        let state_env = format!("DESK_STATE_DIR={}", state_dir.display());
-        self.run(&[
+        let env: Vec<String> = env.iter().map(|(k, v)| format!("{k}={v}")).collect();
+        let mut args: Vec<&str> = vec![
             "new-session",
             "-d",
             "-s",
@@ -111,21 +110,21 @@ impl Tmux {
             "200",
             "-y",
             "50",
-            "-e",
-            &slug_env,
-            "-e",
-            &state_env,
-            &shell,
-            "-lc",
-            &script,
-        ])?;
-        self.run(&[
-            "set-option",
-            "-t",
-            &format!("={slug}"),
-            "@desk_path",
-            &cwd_s,
-        ])?;
+        ];
+        for e in &env {
+            args.extend(["-e", e]);
+        }
+        args.extend([shell.as_str(), "-lc", script]);
+        self.run(&args)?;
+        let target = format!("={slug}");
+        let instance = instance.to_string();
+        for (k, v) in [
+            ("@desk_path", cwd_s.as_str()),
+            ("@desk_agent", agent),
+            ("@desk_instance", instance.as_str()),
+        ] {
+            self.run(&["set-option", "-t", &target, k, v])?;
+        }
         Ok(())
     }
 
@@ -142,6 +141,8 @@ pub fn parse_sessions(out: &str) -> Vec<SessionInfo> {
             let slug = f.next()?.to_string();
             let desk_path = f.next().unwrap_or_default();
             let session_path = f.next().unwrap_or_default();
+            let agent = f.next().unwrap_or_default();
+            let instance = f.next().unwrap_or_default().parse().unwrap_or(0);
             if slug.is_empty() {
                 return None;
             }
@@ -153,6 +154,8 @@ pub fn parse_sessions(out: &str) -> Vec<SessionInfo> {
             Some(SessionInfo {
                 slug,
                 path: path.to_string(),
+                agent: if agent.is_empty() { "claude" } else { agent }.to_string(),
+                instance,
             })
         })
         .collect()
@@ -166,20 +169,42 @@ pub fn slug(path: &Path) -> String {
         .file_name()
         .map(|n| n.to_string_lossy().to_lowercase())
         .unwrap_or_default();
+    let clean = sanitize(&name);
+    let clean = if clean.is_empty() { "project" } else { &clean };
+    format!(
+        "{clean}-{:08x}",
+        fnv1a(path.display().to_string().as_bytes()) as u32
+    )
+}
+
+/// Session name for a project + agent + sub-session. The main Claude session
+/// keeps the plain `slug(path)` so sessions from earlier versions still match.
+pub fn session_slug(path: &Path, agent: &str, instance: u32) -> String {
+    if agent == "claude" && instance == 0 {
+        return slug(path);
+    }
+    let base = slug(path);
+    let name = base.rsplit_once('-').map_or(base.as_str(), |(n, _)| n);
+    let agent = sanitize(agent);
+    let n = if instance > 0 {
+        instance.to_string()
+    } else {
+        String::new()
+    };
+    let key = format!("{}\0{agent}\0{instance}", path.display());
+    format!("{name}-{agent}{n}-{:08x}", fnv1a(key.as_bytes()) as u32)
+}
+
+fn sanitize(s: &str) -> String {
     let mut clean = String::new();
-    for c in name.chars() {
+    for c in s.to_lowercase().chars() {
         if c.is_ascii_alphanumeric() {
             clean.push(c);
         } else if !clean.ends_with('-') {
             clean.push('-');
         }
     }
-    let clean = clean.trim_matches('-');
-    let clean = if clean.is_empty() { "project" } else { clean };
-    format!(
-        "{clean}-{:08x}",
-        fnv1a(path.display().to_string().as_bytes()) as u32
-    )
+    clean.trim_matches('-').to_string()
 }
 
 fn fnv1a(bytes: &[u8]) -> u64 {
@@ -216,18 +241,35 @@ mod tests {
     }
 
     #[test]
+    fn session_slugs_per_agent_and_instance() {
+        let p = Path::new("/Users/k/mm-crm");
+        assert_eq!(session_slug(p, "claude", 0), slug(p));
+        let codex = session_slug(p, "codex", 0);
+        let sub = session_slug(p, "claude", 1);
+        assert!(codex.starts_with("mm-crm-codex-"), "{codex}");
+        assert!(sub.starts_with("mm-crm-claude1-"), "{sub}");
+        assert_ne!(codex, sub);
+        assert_ne!(session_slug(p, "codex", 1), codex);
+        assert!(codex.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'));
+    }
+
+    #[test]
     fn slug_of_weird_name() {
         assert!(slug(Path::new("/x/...")).starts_with("project-"));
     }
 
     #[test]
     fn parses_list_sessions() {
-        let out = "mm-crm-1a2b\t/Users/k/mm-crm\t/Users/k/mm-crm\n\
+        let out = "mm-crm-1a2b\t/Users/k/mm-crm\t/Users/k/mm-crm\tcodex\t2\n\
                    old-0000\t\t/Users/k/old\n\n";
         let s = parse_sessions(out);
         assert_eq!(s.len(), 2);
         assert_eq!(s[0].path, "/Users/k/mm-crm");
+        assert_eq!(s[0].agent, "codex");
+        assert_eq!(s[0].instance, 2);
         assert_eq!(s[1].path, "/Users/k/old");
+        assert_eq!(s[1].agent, "claude");
+        assert_eq!(s[1].instance, 0);
     }
 
     #[test]

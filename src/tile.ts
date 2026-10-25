@@ -8,10 +8,11 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { api, type HookState } from "./api";
 import { actionFor } from "./keys";
+import { agentLabel, keyOf, type Spec } from "./sessions";
 
 export type TileState = Exclude<HookState, "exited"> | "shell" | "starting";
 
-export type TileAction = "close" | "kill" | "fullscreen" | "focus" | "color" | "attached";
+export type TileAction = "close" | "kill" | "fullscreen" | "focus" | "color" | "attached" | "sub";
 
 const THEME = {
   background: "#0b0d10",
@@ -55,7 +56,10 @@ let webglBudget = 12; // WebKit caps live WebGL contexts; the rest use the DOM r
 
 export class Tile {
   readonly el: HTMLElement;
+  readonly key: string;
   readonly path: string;
+  readonly agent: string;
+  readonly instance: number;
   readonly name: string;
   slug: string;
   ptyId: number | null = null;
@@ -74,23 +78,27 @@ export class Tile {
   private disposed = false;
 
   constructor(
-    path: string,
+    spec: Spec,
     slug: string,
     private onAction: (tile: Tile, action: TileAction) => void,
   ) {
-    this.path = path;
+    this.key = keyOf(spec);
+    this.path = spec.path;
+    this.agent = spec.agent;
+    this.instance = spec.instance;
     this.slug = slug;
-    this.name = path.split("/").filter(Boolean).pop() ?? path;
+    this.name = spec.path.split("/").filter(Boolean).pop() ?? spec.path;
 
     this.el = document.createElement("section");
     this.el.className = "tile state-starting";
-    this.el.dataset.path = path;
+    this.el.dataset.key = this.key;
     this.el.innerHTML = `
       <header draggable="true">
         <span class="dot" data-a="color" title="Kolor projektu (kliknij, aby zmienić)"></span>
         <span class="badge"></span>
         <span class="title"></span>
         <span class="actions">
+          <button data-a="sub" title="Pod-sesja w tym projekcie (⌘T)">+</button>
           <button data-a="fullscreen" title="Pełny ekran (⌘↵)">⤢</button>
           <button data-a="close" title="Zamknij kafelek, sesja zostaje (⌘W)">×</button>
           <button data-a="kill" title="Zabij sesję (⌘⇧W)">⏻</button>
@@ -103,7 +111,7 @@ export class Tile {
 
     const header = this.el.querySelector("header")!;
     header.addEventListener("dragstart", (e) => {
-      e.dataTransfer?.setData("text/x-desk-path", path);
+      e.dataTransfer?.setData("text/x-desk-key", this.key);
       e.dataTransfer!.effectAllowed = "move";
       this.el.classList.add("dragging");
     });
@@ -229,13 +237,14 @@ export class Tile {
     this.el.className = this.el.className.replace(/\bstate-\S+/, `state-${this.state}`);
     this.badge.textContent = this.index > 0 && this.index < 10 ? String(this.index) : "";
     const parts = [
-      `<span class="dim">claude</span>`,
+      `<span class="agent">${escapeHtml(agentLabel(this))}</span>`,
       `<b>${escapeHtml(this.name)}</b>`,
       this.branch ? `<span class="branch">${escapeHtml(this.branch)}</span>` : "",
-      `<span class="state">${STATE_LABEL[this.state]}</span>`,
+      // Only Claude Code reports working/waiting/idle through desk's hooks.
+      this.agent === "claude" ? `<span class="state">${STATE_LABEL[this.state]}</span>` : "",
     ].filter(Boolean);
     this.title.innerHTML = parts.join(`<span class="sep"> · </span>`);
-    this.title.title = this.path;
+    this.title.title = `${this.agent} · ${this.path}`;
   }
 
   /** Detach from tmux (the session keeps running) and free the terminal. */
