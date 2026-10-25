@@ -92,7 +92,8 @@ impl Tmux {
     ) -> Result<(), String> {
         let shell = crate::env::user_shell();
         let script = format!(
-            "claude --settings {}; exec {} -l",
+            "{} --settings {}; exec {} -l",
+            shell_quote(crate::env::claude_bin()),
             shell_quote(&hooks_settings.display().to_string()),
             shell_quote(&shell)
         );
