@@ -3,6 +3,7 @@
 import type { AgentInfo, Project } from "./api";
 import { ago, rows, shortPath, type Row } from "./projects";
 import { escapeHtml } from "./tile";
+import { PLATFORM, shortcut } from "./platform";
 
 export interface PaletteContext {
   home: () => string;
@@ -46,7 +47,7 @@ export class Palette {
       <div class="dialog palette">
         <input type="text" spellcheck="false" autocomplete="off" />
         <div class="list"></div>
-        <footer><span class="agent-pick"></span><kbd>↵</kbd> otwórz <kbd>⌘↵</kbd> start z aplikacją <kbd>⌘⌫</kbd> zabij sesję <kbd>esc</kbd> zamknij</footer>
+        <footer><span class="agent-pick"></span><kbd>↵</kbd> otwórz <kbd>${shortcut("⌘↵")}</kbd> start z aplikacją <kbd>${shortcut("⌘⌫")}</kbd> zabij sesję <kbd>esc</kbd> zamknij</footer>
       </div>`;
     this.input = this.el.querySelector("input")!;
     this.list = this.el.querySelector(".list")!;
@@ -89,7 +90,7 @@ export class Palette {
     items.push(
       `<div class="row action ${this.selected === n ? "sel" : ""}" data-i="${n}">+ Nowy projekt…</div>`,
       `<div class="row action ${this.selected === n + 1 ? "sel" : ""}" data-i="${n + 1}">+ Dodaj istniejący folder…</div>`,
-      `<div class="row action ${this.selected === n + 2 ? "sel" : ""}" data-i="${n + 2}">+ Rozmowa: zwykły czat o czymkolwiek, bez projektu (⌘R)</div>`,
+      `<div class="row action ${this.selected === n + 2 ? "sel" : ""}" data-i="${n + 2}">+ Rozmowa: zwykły czat o czymkolwiek, bez projektu (${shortcut("⌘R")})</div>`,
     );
     const agents = this.ctx.agents().filter((a) => a.installed);
     if (!agents.some((a) => a.id === this.agent)) this.agent = agents[0]?.id ?? "claude";
@@ -127,10 +128,10 @@ export class Palette {
       this.selected = (this.selected + 1) % count;
     } else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) {
       this.selected = (this.selected - 1 + count) % count;
-    } else if (e.key === "Enter" && e.metaKey) {
+    } else if (e.key === "Enter" && (PLATFORM === "mac" ? e.metaKey : e.ctrlKey)) {
       const row = this.shown[this.selected];
       if (row) this.ctx.toggleAutostart(row.project.path, this.agent);
-    } else if (e.key === "Backspace" && e.metaKey) {
+    } else if (e.key === "Backspace" && (PLATFORM === "mac" ? e.metaKey : e.ctrlKey)) {
       const row = this.shown[this.selected];
       if (row && this.ctx.isRunning(row.project.path, this.agent)) this.ctx.kill(row.project.path, this.agent);
     } else if (e.key === "Enter") {

@@ -27,9 +27,9 @@ pub struct PtyManager {
 
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-struct PtyExit {
-    id: u32,
-    slug: String,
+pub struct PtyExit {
+    pub id: u32,
+    pub slug: String,
 }
 
 fn size(cols: u16, rows: u16) -> PtySize {

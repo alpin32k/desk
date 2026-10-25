@@ -82,6 +82,46 @@ pub fn launch_script(id: &str, command: &str, hooks_settings: &Path) -> String {
     format!("{}; exec {shell} -l", resolve_command(command, which))
 }
 
+/// Program and arguments for a native (Windows) session: the agent runs in
+/// PowerShell, which stays open after the agent exits, like the tmux pane.
+/// Elsewhere (native sessions for testing) it is the login shell script.
+pub fn launch_argv(id: &str, command: &str, hooks_settings: &Path) -> Vec<String> {
+    let shell = crate::env::user_shell();
+    if !cfg!(windows) {
+        return vec![
+            shell,
+            "-lc".into(),
+            launch_script(id, command, hooks_settings),
+        ];
+    }
+    let run = if id == "claude" {
+        format!(
+            "& {} --settings {}",
+            ps_quote(crate::env::claude_bin()),
+            ps_quote(&hooks_settings.display().to_string())
+        )
+    } else if command.trim().is_empty() {
+        return vec![shell, "-NoLogo".into()];
+    } else {
+        let trimmed = command.trim();
+        let first = first_word(trimmed).unwrap_or(trimmed);
+        let program = which(first).map_or(first.to_string(), |p| p.display().to_string());
+        format!("& {}{}", ps_quote(&program), &trimmed[first.len()..])
+    };
+    vec![
+        shell,
+        "-NoLogo".into(),
+        "-NoExit".into(),
+        "-Command".into(),
+        run,
+    ]
+}
+
+/// PowerShell single-quoted string literal.
+pub fn ps_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "''"))
+}
+
 /// Replace the program name with its absolute path when found, so the same
 /// binary runs as in the user's interactive shell (the pane's login shell may
 /// order PATH differently). Arguments are kept as written.
@@ -105,21 +145,45 @@ fn first_word(command: &str) -> Option<&str> {
 }
 
 /// Look a program up in PATH (the interactive shell's PATH, set at startup).
+/// On Windows also tries the PATHEXT extensions (`claude` -> `claude.exe`,
+/// `pnpm` -> `pnpm.cmd`).
 pub fn which(program: &str) -> Option<PathBuf> {
-    if program.contains('/') {
-        let p = PathBuf::from(program);
-        return is_executable(&p).then_some(p);
+    let exts: Vec<String> = if cfg!(windows) && Path::new(program).extension().is_none() {
+        std::env::var("PATHEXT")
+            .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into())
+            .split(';')
+            .filter(|e| !e.is_empty())
+            .map(|e| e.to_ascii_lowercase())
+            .collect()
+    } else {
+        vec![String::new()]
+    };
+    let candidates = |dir: &Path| -> Vec<PathBuf> {
+        exts.iter()
+            .map(|e| dir.join(format!("{program}{e}")))
+            .collect()
+    };
+    if program.contains('/') || (cfg!(windows) && program.contains('\\')) {
+        return candidates(Path::new(""))
+            .into_iter()
+            .find(|p| is_executable(p));
     }
     std::env::var_os("PATH").and_then(|paths| {
         std::env::split_paths(&paths)
-            .map(|dir| dir.join(program))
+            .flat_map(|dir| candidates(&dir))
             .find(|p| is_executable(p))
     })
 }
 
+#[cfg(unix)]
 fn is_executable(p: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
     std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+}
+
+#[cfg(not(unix))]
+fn is_executable(p: &Path) -> bool {
+    p.is_file()
 }
 
 #[cfg(test)]
@@ -156,6 +220,36 @@ mod tests {
     }
 
     #[test]
+    fn quotes_for_powershell() {
+        assert_eq!(
+            ps_quote(r"C:\Users\O'Neil\claude.exe"),
+            r"'C:\Users\O''Neil\claude.exe'"
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn windows_sessions_run_in_powershell() {
+        let hooks = Path::new(r"C:\desk\claude-hooks.json");
+        let argv = launch_argv("claude", "claude", hooks);
+        assert_eq!(argv[1..4], ["-NoLogo", "-NoExit", "-Command"]);
+        assert!(argv[4].starts_with("& '"), "{argv:?}");
+        assert!(
+            argv[4].ends_with(r"--settings 'C:\desk\claude-hooks.json'"),
+            "{argv:?}"
+        );
+        assert_eq!(launch_argv("shell", "", hooks)[1..], ["-NoLogo"]);
+        let run = launch_argv("run", "nonexistent-tool-xyz dev", hooks);
+        assert_eq!(run[4], "& 'nonexistent-tool-xyz' dev");
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn which_uses_pathext() {
+        assert!(which("cmd").is_some_and(|p| p.extension().is_some()));
+    }
+
+    #[test]
     fn lists_builtins_then_custom_without_shadowing() {
         let custom = vec![
             CustomAgent {
@@ -178,6 +272,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn which_finds_executables_only() {
         let tmp = tempfile::tempdir().unwrap();
         let exe = tmp.path().join("tool");

@@ -1,6 +1,7 @@
 //! Claude Code hooks injected with `claude --settings <file>` (merged with the
-//! user's own hooks, see docs/hooks.md). Each hook runs `desk-hook.sh`, which
-//! writes the event payload to `state/<DESK_SLUG>.json`; desk watches that dir.
+//! user's own hooks, see docs/hooks.md). Each hook runs `desk-hook.sh` (on
+//! Windows `desk.exe --desk-hook`, see `record`), which writes the event
+//! payload to `state/<DESK_SLUG>.json`; desk watches that dir.
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -113,6 +114,16 @@ pub struct HookFiles {
 pub fn install(support_dir: &Path) -> std::io::Result<HookFiles> {
     let state_dir = support_dir.join("state");
     std::fs::create_dir_all(&state_dir)?;
+    let settings = support_dir.join("claude-hooks.json");
+    if cfg!(windows) {
+        // No sh: hooks run desk.exe itself (exec form, no shell involved).
+        let exe = std::env::current_exe()?;
+        std::fs::write(&settings, settings_json_exe(&exe, git_bash()).to_string())?;
+        return Ok(HookFiles {
+            settings,
+            state_dir,
+        });
+    }
     let script = support_dir.join("desk-hook.sh");
     let statusline = support_dir.join("desk-statusline.sh");
     for (path, text) in [
@@ -126,7 +137,6 @@ pub fn install(support_dir: &Path) -> std::io::Result<HookFiles> {
             std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))?;
         }
     }
-    let settings = support_dir.join("claude-hooks.json");
     std::fs::write(&settings, settings_json(&script, &statusline).to_string())?;
     Ok(HookFiles {
         settings,
@@ -157,9 +167,105 @@ pub fn settings_json(script: &Path, statusline: &Path) -> serde_json::Value {
     })
 }
 
+/// Hooks and status line that run desk's own executable (Windows). Hooks use
+/// the exec form (`command` + `args`), so no shell parses the path. The status
+/// line has no exec form: Claude Code runs it with Git Bash when installed,
+/// else PowerShell, so the command is written for the one it will use.
+pub fn settings_json_exe(exe: &Path, git_bash: bool) -> serde_json::Value {
+    let exe_s = exe.display().to_string();
+    let hooks: serde_json::Map<String, serde_json::Value> = EVENTS
+        .iter()
+        .map(|e| {
+            let entry = serde_json::json!([{
+                "hooks": [{ "type": "command", "command": exe_s, "args": ["--desk-hook", e], "timeout": 5 }]
+            }]);
+            (e.to_string(), entry)
+        })
+        .collect();
+    let slashed = exe_s.replace('\\', "/");
+    let statusline = if git_bash {
+        format!("{} --desk-statusline", crate::tmux::shell_quote(&slashed))
+    } else {
+        format!("& {} --desk-statusline", crate::agents::ps_quote(&slashed))
+    };
+    serde_json::json!({
+        "hooks": hooks,
+        "statusLine": { "type": "command", "command": statusline, "refreshInterval": 10 }
+    })
+}
+
+/// Whether Claude Code will find Git Bash (it then runs status lines with it).
+pub fn git_bash() -> bool {
+    crate::usage::git_bash_exe().is_some()
+}
+
+/// `desk --desk-hook <event>`: what desk-hook.sh does, for Windows. Reads the
+/// hook payload from stdin; does nothing for sessions not started by desk.
+pub fn run_hook(event: &str) {
+    use std::io::Read;
+    let mut payload = String::new();
+    let _ = std::io::stdin().read_to_string(&mut payload);
+    if let (Ok(slug), Ok(dir)) = (std::env::var("DESK_SLUG"), std::env::var("DESK_STATE_DIR"))
+        && !slug.is_empty()
+    {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        let _ = record(Path::new(&dir), &slug, event, &payload, now);
+    }
+}
+
+/// Write `{"event","ts","payload"}` to `<dir>/<slug>.json` atomically.
+pub fn record(dir: &Path, slug: &str, event: &str, payload: &str, ts: u64) -> std::io::Result<()> {
+    let payload: serde_json::Value =
+        serde_json::from_str(payload.trim()).unwrap_or(serde_json::Value::Null);
+    let text = serde_json::json!({ "event": event, "ts": ts, "payload": payload }).to_string();
+    std::fs::create_dir_all(dir)?;
+    let tmp = dir.join(format!(".{slug}.{}", std::process::id()));
+    std::fs::write(&tmp, text + "\n")?;
+    std::fs::rename(&tmp, dir.join(format!("{slug}.json")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn records_events_like_the_shell_hook() {
+        let tmp = tempfile::tempdir().unwrap();
+        record(
+            tmp.path(),
+            "p-1",
+            "Notification",
+            r#"{"notification_type":"permission_prompt"}"#,
+            7,
+        )
+        .unwrap();
+        let text = std::fs::read_to_string(tmp.path().join("p-1.json")).unwrap();
+        let s = parse_state("p-1", &text).unwrap();
+        assert_eq!(s.state, State::Waiting);
+        record(tmp.path(), "p-1", "Stop", "", 8).unwrap();
+        let text = std::fs::read_to_string(tmp.path().join("p-1.json")).unwrap();
+        assert_eq!(parse_state("p-1", &text).unwrap().state, State::Idle);
+    }
+
+    #[test]
+    fn windows_settings_run_desk_exe() {
+        let exe = Path::new(r"C:\Users\Jan Kowalski\AppData\Local\desk\desk.exe");
+        let v = settings_json_exe(exe, true);
+        let stop = &v["hooks"]["Stop"][0]["hooks"][0];
+        assert_eq!(stop["command"], exe.display().to_string());
+        assert_eq!(stop["args"], serde_json::json!(["--desk-hook", "Stop"]));
+        assert_eq!(
+            v["statusLine"]["command"],
+            "'C:/Users/Jan Kowalski/AppData/Local/desk/desk.exe' --desk-statusline"
+        );
+        let v = settings_json_exe(exe, false);
+        assert_eq!(
+            v["statusLine"]["command"],
+            "& 'C:/Users/Jan Kowalski/AppData/Local/desk/desk.exe' --desk-statusline"
+        );
+    }
 
     #[test]
     fn maps_events_to_states() {

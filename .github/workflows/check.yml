@@ -1,7 +1,7 @@
 name: check
 
-# Tests, lint and typecheck on Linux for every push (macOS is checked locally
-# and by the release build).
+# Tests, lint and typecheck on Linux and Windows for every push (macOS is
+# checked locally and by the release build).
 on:
   push:
     branches: [main]
@@ -9,10 +9,15 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - run: |
+      - if: runner.os == 'Linux'
+        run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf tmux
       - uses: pnpm/action-setup@v4

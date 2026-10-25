@@ -71,9 +71,13 @@ button:hover {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding-left: 80px;
+  padding-left: 10px;
   border-bottom: 1px solid var(--line);
   letter-spacing: 0.02em;
+}
+
+:root[data-platform="mac"] .top {
+  padding-left: 80px; /* traffic lights over the overlay title bar */
 }
 
 .brand {

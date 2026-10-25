@@ -9,6 +9,10 @@ use std::time::Duration;
 
 /// Directory holding layout.json, state/, the hook script and tmux.conf.
 pub fn support_dir() -> PathBuf {
+    // A separate data folder (layout, state) for a second desk, e.g. to test.
+    if let Some(dir) = std::env::var_os("DESK_SUPPORT_DIR").filter(|d| !d.is_empty()) {
+        return PathBuf::from(dir);
+    }
     dirs::data_dir()
         .unwrap_or_else(|| home().join("Library/Application Support"))
         .join("desk")
@@ -19,6 +23,12 @@ pub fn home() -> PathBuf {
 }
 
 pub fn user_shell() -> String {
+    if cfg!(windows) {
+        // PowerShell 7 when installed, else the one that ships with Windows.
+        return crate::agents::which("pwsh")
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "powershell.exe".into());
+    }
     std::env::var("SHELL")
         .ok()
         .filter(|s| !s.is_empty())
@@ -37,6 +47,13 @@ pub fn claude_bin() -> &'static str {
 /// Adopt the interactive login shell's PATH and `claude`, and make sure a
 /// UTF-8 locale is set.
 pub fn init() {
+    if cfg!(windows) {
+        // Apps on Windows get the user's PATH from the environment already.
+        if let Some(c) = crate::agents::which("claude") {
+            let _ = CLAUDE.set(c.display().to_string());
+        }
+        return;
+    }
     let fallback = {
         let h = home();
         let mut parts: Vec<String> = vec![

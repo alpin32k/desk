@@ -1,4 +1,7 @@
-// App shortcuts, named after the Polish actions (⌘P projekty, ⌘Z zamknij, ...).
+import { PLATFORM, shortcut, type Platform } from "./platform";
+
+// App shortcuts, named after the Polish actions (⌘P projekty, ⌘Z zamknij, ...);
+// Ctrl+Shift instead of ⌘ on Windows and Linux (see platform.ts).
 // Anything not listed here goes to the focused terminal, so plain Esc still
 // reaches Claude (it interrupts a turn there).
 export type Action =
@@ -20,17 +23,29 @@ export type Action =
 
 export interface KeyLike {
   key: string;
+  /** Physical key ("KeyP", "Digit1"); used off macOS, where Shift changes `key`. */
+  code?: string;
   metaKey: boolean;
   shiftKey: boolean;
   altKey: boolean;
   ctrlKey: boolean;
 }
 
-export function actionFor(e: KeyLike): Action | null {
-  if (!e.metaKey || e.ctrlKey || e.altKey) return null;
-  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-  if (e.shiftKey) return key === "z" ? { type: "kill" } : null;
-  if (key >= "1" && key <= "9") return { type: "focus", index: Number(key) - 1 };
+export function actionFor(e: KeyLike, platform: Platform = PLATFORM): Action | null {
+  let key: string;
+  if (platform === "mac") {
+    if (!e.metaKey || e.ctrlKey || e.altKey) return null;
+    key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (e.shiftKey) return key === "z" ? { type: "kill" } : null;
+  } else {
+    // Ctrl+Shift+letter; Ctrl+Shift+Backspace kills. Alt stays free for AltGr (ą, ż...).
+    if (!e.ctrlKey || !e.shiftKey || e.metaKey || e.altKey) return null;
+    const code = e.code ?? "";
+    key = code.startsWith("Key") ? code.slice(3).toLowerCase() : code.startsWith("Digit") ? code.slice(5) : e.key;
+    if (key === "Backspace") return { type: "kill" };
+    if (key === "Escape") return null; // Ctrl+Shift+Esc is the Task Manager
+  }
+  if (key >= "1" && key <= "9" && key.length === 1) return { type: "focus", index: Number(key) - 1 };
   switch (key) {
     case "p": // projekty
       return { type: "palette" };
@@ -64,6 +79,7 @@ export function actionFor(e: KeyLike): Action | null {
   }
 }
 
+/** Footer hints as written for macOS; `hints()` gives them for the user's platform. */
 export const HINTS: [string, string][] = [
   ["⌘P", "projekty"],
   ["⌘N", "nowy projekt"],
@@ -80,3 +96,7 @@ export const HINTS: [string, string][] = [
   ["⌘B", "blokada"],
   ["⌘O", "opcje"],
 ];
+
+export function hints(platform: Platform = PLATFORM): [string, string][] {
+  return HINTS.map(([k, label]) => [shortcut(k, platform), label]);
+}

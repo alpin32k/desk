@@ -13,7 +13,8 @@ import {
   type SessionState,
   type Usage,
 } from "./api";
-import { actionFor, HINTS, type Action } from "./keys";
+import { actionFor, hints, type Action } from "./keys";
+import { PLATFORM, shortcut, shortcuts } from "./platform";
 import * as L from "./lanes";
 import { Palette } from "./palette";
 import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
@@ -59,6 +60,7 @@ export class App {
   private settings: Settings;
 
   constructor(root: HTMLElement) {
+    document.documentElement.dataset.platform = PLATFORM; // CSS: room for the macOS traffic lights
     root.innerHTML = `
       <div class="top" data-tauri-drag-region></div>
       <main class="grid"></main>
@@ -329,7 +331,7 @@ export class App {
 
   async killSession(key: string): Promise<void> {
     const spec = parseKey(key);
-    const name = spec.path.split("/").pop();
+    const name = spec.path.split(/[\\/]/).pop();
     if (!(await confirmBox(`Zabić sesję ${spec.agent} w „${name}”? Bieżąca rozmowa zostanie przerwana.`, "Zabij"))) return;
     const tile = this.tiles.get(key);
     if (tile) this.closeTile(key);
@@ -458,12 +460,12 @@ export class App {
     if (card) return card;
     card = document.createElement("div");
     card.className = "card";
-    card.innerHTML = `
+    card.innerHTML = shortcuts(`
       <header class="card-head" draggable="true">
         <span class="dot"></span><span class="card-title"></span>
         <span class="actions"><button data-a="sub" title="Kolejna sesja w tym projekcie (⌘D)">+</button><button data-a="terminal" title="Terminal w tym projekcie (⌘T)">›_</button><button data-a="run" title="Uruchom w tym projekcie, np. dev serwer (⌘U)">▶</button></span>
       </header>
-      <div class="card-body"></div>`;
+      <div class="card-body"></div>`);
     const head = card.querySelector<HTMLElement>(".card-head")!;
     const first = () => {
       const tiles = [...this.tiles.values()].filter((t) => this.projectOf(t.key) === project);
@@ -513,7 +515,7 @@ export class App {
   private laneEl(): HTMLElement {
     const lane = document.createElement("div");
     lane.className = "lane";
-    lane.innerHTML = `<div class="lane-head"></div><div class="lane-body"><div class="hint">⌘P — otwórz projekt</div></div>`;
+    lane.innerHTML = `<div class="lane-head"></div><div class="lane-body"><div class="hint">${shortcut("⌘P")} — otwórz projekt</div></div>`;
     const body = lane.querySelector<HTMLElement>(".lane-body")!;
     body.addEventListener("dragover", (e) => {
       if (!e.dataTransfer?.types.includes("text/x-desk-key")) return;
@@ -683,14 +685,16 @@ export class App {
       waiting ? `<span class="waiting-pill" data-tauri-drag-region>${waiting} czeka</span>` : ""
     }<span class="spacer" data-tauri-drag-region></span>${usageHtml(this.usage, Date.now())}${this.coffeeHtml()}`;
     this.footer.innerHTML =
-      HINTS.map(([k, label]) => `<span><kbd>${k}</kbd> ${escapeHtml(label)}</span>`).join("") +
+      hints().map(([k, label]) => `<span><kbd>${k}</kbd> ${escapeHtml(label)}</span>`).join("") +
       `<span class="spacer"></span><span class="counts"><b>${this.tiles.size}</b> sessions · <span class="c-working">${count("working")} working</span> · <span class="c-waiting">${waiting} waiting</span> · ${count("idle")} idle</span>`;
   }
 
   // ---- coffee ------------------------------------------------------------
 
   private async cycleCoffee(): Promise<void> {
-    const next: Record<CoffeeLevel, CoffeeLevel> = { off: "awake", awake: "lid", lid: "off" };
+    // No lid mode on Windows (set it in the power options there).
+    const lid: CoffeeLevel = PLATFORM === "windows" ? "off" : "lid";
+    const next: Record<CoffeeLevel, CoffeeLevel> = { off: "awake", awake: lid, lid: "off" };
     try {
       this.coffee = await api.coffeeSet(next[this.coffee.level]);
     } catch (err) {
@@ -733,7 +737,7 @@ export class App {
       c.sleepDisabled && c.level !== "lid"
         ? `<button class="coffee warn" data-coffee="restore" title="Usypianie jest wyłączone w systemie (pmset disablesleep 1), np. po restarcie w trakcie kawy. Kliknij, aby przywrócić.">sen wyłączony · przywróć</button>`
         : "";
-    return `${stray}<button class="coffee ${c.level}" data-coffee="cycle" title="${title}">${label}</button>`;
+    return `${stray}<button class="coffee ${c.level}" data-coffee="cycle" title="${shortcuts(title)}">${label}</button>`;
   }
 
   // ---- lock --------------------------------------------------------------

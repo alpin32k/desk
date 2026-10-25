@@ -40,4 +40,10 @@ describe("session keys", () => {
       "1 sesja", "2 sesje", "4 sesje", "5 sesji", "12 sesji", "22 sesje", "25 sesji",
     ]);
   });
+
+  it("parses keys with Windows paths", () => {
+    expect(parseKey("C:\\Users\\jan\\shop")).toEqual({ path: "C:\\Users\\jan\\shop", agent: "claude", instance: 0 });
+    expect(parseKey("codex#1:C:\\Users\\jan\\shop")).toEqual({ path: "C:\\Users\\jan\\shop", agent: "codex", instance: 1 });
+    expect(keyOf({ path: "C:\\x", agent: "run", instance: 0 })).toBe("run#0:C:\\x");
+  });
 });

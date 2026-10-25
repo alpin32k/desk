@@ -43,7 +43,7 @@ pub enum Target {
 
 /// Only web pages and existing local files; nothing that runs a program.
 pub fn parse(link: &str) -> Result<Target, String> {
-    let url = if link.starts_with('/') {
+    let url = if link.starts_with('/') || (cfg!(windows) && Path::new(link).is_absolute()) {
         Url::from_file_path(link).map_err(|_| format!("zła ścieżka: {link}"))?
     } else {
         Url::parse(link).map_err(|e| format!("{link}: {e}"))?
@@ -68,7 +68,8 @@ pub fn parse(link: &str) -> Result<Target, String> {
 /// `deskpreview://localhost/<token>/<file>`, registering the file's folder.
 fn file_url(path: &Path) -> Result<Url, String> {
     let dir = path.parent().ok_or("brak folderu")?.to_path_buf();
-    if crate::env::home().starts_with(&dir) {
+    let home = crate::env::home();
+    if home.canonicalize().unwrap_or(home).starts_with(&dir) {
         return Err(format!(
             "podgląd pliku z {} odsłoniłby cały folder; przenieś go do podfolderu",
             dir.display()
@@ -226,16 +227,17 @@ pub fn open_external(link: &str) -> Result<(), String> {
         Target::File(p) if mime(&p).is_some() => p.display().to_string(),
         Target::File(p) => return Err(format!("nie otwieram tego typu pliku: {}", p.display())),
     };
-    let opener = if cfg!(target_os = "macos") {
-        "open"
+    let mut cmd = if cfg!(target_os = "macos") {
+        std::process::Command::new("open")
+    } else if cfg!(windows) {
+        // The shell's own opener; no cmd.exe parsing of the URL.
+        let mut c = std::process::Command::new("rundll32.exe");
+        c.arg("url.dll,FileProtocolHandler");
+        c
     } else {
-        "xdg-open"
+        std::process::Command::new("xdg-open")
     };
-    std::process::Command::new(opener)
-        .arg(arg)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    cmd.arg(arg).spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -277,7 +279,17 @@ mod tests {
         assert!(resolve_in(&root, "index.html").is_some());
         assert!(resolve_in(&root, "img/a.png").is_some());
         assert!(resolve_in(&root, "../secret.txt").is_none());
-        assert!(resolve_in(&root, "/etc/hosts").is_none());
+        assert!(
+            resolve_in(
+                &root,
+                if cfg!(windows) {
+                    r"C:\Windows\win.ini"
+                } else {
+                    "/etc/hosts"
+                }
+            )
+            .is_none()
+        );
         assert!(resolve_in(&root, "img").is_none());
         assert!(resolve_in(&root, ".env").is_none());
         assert!(resolve_in(&root, ".git/config.html").is_none());
@@ -308,6 +320,7 @@ mod tests {
     fn never_exposes_the_home_folder() {
         let home = crate::env::home();
         assert!(file_url(&home.join("mock.html")).is_err());
+        #[cfg(unix)]
         assert!(file_url(Path::new("/mock.html")).is_err());
     }
 

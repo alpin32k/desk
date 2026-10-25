@@ -65,7 +65,9 @@ export function rows(projects: Project[], query: string): Row[] {
 }
 
 export function shortPath(path: string, home: string): string {
-  return home && (path === home || path.startsWith(home + "/")) ? "~" + path.slice(home.length) : path;
+  return home && (path === home || path.startsWith(home + "/") || path.startsWith(home + "\\"))
+    ? "~" + path.slice(home.length)
+    : path;
 }
 
 export function ago(ms: number, now = Date.now()): string {

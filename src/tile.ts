@@ -9,6 +9,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { api, type HookState } from "./api";
 import { stripProbeReplies } from "./input";
+import { PLATFORM, shortcuts } from "./platform";
 import { actionFor } from "./keys";
 import { fileLinks } from "./links";
 import { agentLabel, keyOf, type Spec } from "./sessions";
@@ -96,12 +97,12 @@ export class Tile {
     this.agent = spec.agent;
     this.instance = spec.instance;
     this.slug = slug;
-    this.name = spec.path.split("/").filter(Boolean).pop() ?? spec.path;
+    this.name = spec.path.split(/[\\/]/).filter(Boolean).pop() ?? spec.path;
 
     this.el = document.createElement("section");
     this.el.className = "tile state-starting";
     this.el.dataset.key = this.key;
-    this.el.innerHTML = `
+    this.el.innerHTML = shortcuts(`
       <header draggable="true">
         <span class="dot" data-a="color" title="Kolor projektu (kliknij, aby zmienić)"></span>
         <span class="badge"></span>
@@ -115,7 +116,7 @@ export class Tile {
           <button data-a="kill" title="Zabij sesję (⌘⇧Z)">⏻</button>
         </span>
       </header>
-      <div class="term"></div>`;
+      <div class="term"></div>`);
     this.badge = this.el.querySelector(".badge")!;
     this.title = this.el.querySelector(".title")!;
     this.body = this.el.querySelector(".term")!;
@@ -167,6 +168,18 @@ export class Tile {
     });
     this.term.attachCustomKeyEventHandler((e) => {
       if (actionFor(e)) return false; // app shortcut, handled by the window listener
+      if (PLATFORM !== "mac" && e.type === "keydown" && e.ctrlKey && e.shiftKey && !e.altKey) {
+        // Ctrl+Shift+C / V: copy and paste (plain Ctrl+C goes to the program).
+        if (e.code === "KeyC") {
+          const text = this.term.getSelection();
+          if (text) void navigator.clipboard.writeText(text);
+          return false;
+        }
+        if (e.code === "KeyV") {
+          void navigator.clipboard.readText().then((t) => t && this.term.paste(t));
+          return false;
+        }
+      }
       if (e.type === "keydown" && e.key === "Enter" && e.shiftKey && !e.metaKey && !e.ctrlKey) {
         // Shift+Enter = newline in Claude Code (sent as Meta+Enter).
         if (this.ptyId !== null) void api.ptyWrite(this.ptyId, "\x1b\r");

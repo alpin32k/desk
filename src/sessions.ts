@@ -12,7 +12,8 @@ export function keyOf(s: Spec): string {
 }
 
 export function parseKey(key: string): Spec {
-  const m = /^([a-z0-9][a-z0-9_-]*)#(\d+):(\/.*)$/i.exec(key);
+  // The path is absolute: "/Users/..." or, on Windows, "C:\\..." / "\\\\server\\...".
+  const m = /^([a-z0-9][a-z0-9_-]*)#(\d+):(\/.*|[a-z]:[\\/].*|\\\\.*)$/i.exec(key);
   return m ? { agent: m[1], instance: Number(m[2]), path: m[3] } : { path: key, agent: "claude", instance: 0 };
 }
 

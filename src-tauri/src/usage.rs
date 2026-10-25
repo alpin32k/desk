@@ -24,6 +24,60 @@ fi
 exit 0
 "#;
 
+/// `desk --desk-statusline`: what STATUSLINE_SCRIPT does, for Windows. Saves
+/// the input, then runs the user's status line with the shell Claude Code
+/// would use (Git Bash when installed, else PowerShell) and passes its output on.
+pub fn run_statusline() {
+    use std::io::{Read, Write};
+    use std::process::{Command, Stdio};
+    let mut input = String::new();
+    let _ = std::io::stdin().read_to_string(&mut input);
+    if let (Ok(slug), Ok(dir)) = (std::env::var("DESK_SLUG"), std::env::var("DESK_STATE_DIR"))
+        && !slug.is_empty()
+    {
+        let dir = Path::new(&dir);
+        let tmp = dir.join(format!(".{slug}.status.{}", std::process::id()));
+        if std::fs::write(&tmp, &input).is_ok() {
+            let _ = std::fs::rename(&tmp, dir.join(format!("{slug}.status")));
+        }
+    }
+    let user = std::env::var("DESK_STATUSLINE").unwrap_or_default();
+    if user.trim().is_empty() {
+        return;
+    }
+    let mut cmd = if !cfg!(windows) {
+        let mut c = Command::new("sh");
+        c.args(["-c", &user]);
+        c
+    } else if let Some(bash) = git_bash_exe() {
+        let mut c = Command::new(bash);
+        c.args(["-c", &user]);
+        c
+    } else {
+        let mut c = Command::new("powershell.exe");
+        c.args(["-NoProfile", "-Command", &user]);
+        c
+    };
+    if let Ok(mut child) = cmd.stdin(Stdio::piped()).stdout(Stdio::inherit()).spawn() {
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(input.as_bytes());
+        }
+        let _ = child.wait();
+    }
+}
+
+pub fn git_bash_exe() -> Option<PathBuf> {
+    if let Some(p) = std::env::var_os("CLAUDE_CODE_GIT_BASH_PATH") {
+        return Some(PathBuf::from(p));
+    }
+    let program_files =
+        std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".into());
+    let bash = Path::new(&program_files).join(r"Git\bin\bash.exe");
+    bash.is_file()
+        .then_some(bash)
+        .or_else(|| crate::agents::which("bash"))
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Window {

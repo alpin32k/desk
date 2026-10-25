@@ -85,6 +85,9 @@ impl Coffee {
         if level == current {
             return Ok(self.status());
         }
+        if level == Level::Lid && cfg!(windows) {
+            return Err("na Windowsie zamknięcie klapki ustawisz w Opcjach zasilania (Działanie po zamknięciu pokrywy)".into());
+        }
         if level != Level::Off
             && let Some(reason) = guard_reason(thermal_hot(), battery())
         {
@@ -187,6 +190,25 @@ pub fn guard_reason(hot: bool, battery: Option<Battery>) -> Option<String> {
 
 fn keepawake_command(level: Level) -> Command {
     let pid = std::process::id().to_string();
+    if cfg!(windows) {
+        // SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED |
+        // ES_DISPLAY_REQUIRED) held by a PowerShell that lives as long as desk.
+        let script = format!(
+            "Add-Type -Namespace Desk -Name Power -MemberDefinition '[DllImport(\"kernel32.dll\")] public static extern uint SetThreadExecutionState(uint f);'; \
+             [Desk.Power]::SetThreadExecutionState([uint32]2147483651) | Out-Null; \
+             Wait-Process -Id {pid}"
+        );
+        let mut c = Command::new("powershell.exe");
+        c.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            &script,
+        ]);
+        return c;
+    }
     if cfg!(target_os = "macos") {
         let mut c = Command::new("/usr/bin/caffeinate");
         c.args(["-dims", "-w", &pid]);

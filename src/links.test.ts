@@ -13,4 +13,9 @@ describe("fileLinks", () => {
     expect(fileLinks("~/x/y.pdf")).toEqual([]);
     expect(fileLinks("relative/mock.html src/app.ts https://x.dev/a.html")).toEqual([]);
   });
+
+  it("finds Windows paths", () => {
+    const line = "Zapisałem C:\\Users\\jan\\mock.html i C:/tmp/a.png";
+    expect(fileLinks(line).map((l) => l.path)).toEqual(["C:\\Users\\jan\\mock.html", "C:/tmp/a.png"]);
+  });
 });

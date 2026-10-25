@@ -1,7 +1,7 @@
 name: release
 
-# Push a tag like v0.1.0: builds desk for macOS (Apple Silicon, Intel) and
-# Linux and attaches the bundles to the GitHub release for that tag.
+# Push a tag like v0.1.0: builds desk for macOS (Apple Silicon, Intel),
+# Linux and Windows and attaches the bundles to the GitHub release for that tag.
 on:
   push:
     tags: ["v*"]
@@ -25,6 +25,9 @@ jobs:
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             args: --bundles deb,appimage
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: --bundles nsis
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -60,6 +63,7 @@ jobs:
             The app is not signed: after copying it to Applications run
             `xattr -dr com.apple.quarantine /Applications/desk.app` once.
             Linux: `.deb` or `.AppImage`. Requires tmux.
+            Windows: `desk_*_x64-setup.exe`. Sessions run without tmux and end when desk closes.
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

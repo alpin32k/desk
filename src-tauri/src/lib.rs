@@ -1,4 +1,5 @@
 pub mod agents;
+pub mod backend;
 pub mod claude_projects;
 pub mod coffee;
 pub mod discovery;
@@ -7,6 +8,7 @@ pub mod git;
 pub mod hooks;
 pub mod layout;
 pub mod lock;
+pub mod native;
 pub mod new_project;
 pub mod preview;
 pub mod project;
@@ -25,10 +27,9 @@ use tauri::{AppHandle, Manager, RunEvent, State};
 pub struct AppCoffee(pub coffee::Coffee);
 
 struct App {
-    tmux: tmux::Tmux,
+    sessions: backend::Backend,
     hooks: hooks::HookFiles,
     layout_path: PathBuf,
-    ptys: pty::PtyManager,
     _watcher: Mutex<Option<notify::RecommendedWatcher>>,
 }
 
@@ -39,6 +40,8 @@ struct Bootstrap {
     sessions: Vec<tmux::SessionInfo>,
     states: Vec<hooks::SessionState>,
     home: String,
+    /// Sessions outlive desk (tmux); false on Windows, where they end with it.
+    persistent: bool,
 }
 
 #[derive(serde::Serialize)]
@@ -52,7 +55,8 @@ struct TileInfo {
 fn bootstrap(app: State<App>) -> Bootstrap {
     Bootstrap {
         layout: layout::load(&app.layout_path),
-        sessions: app.tmux.list_sessions(),
+        sessions: app.sessions.list(),
+        persistent: app.sessions.persistent(),
         states: state_watch::read_all(&app.hooks.state_dir),
         home: env::home().display().to_string(),
     }
@@ -60,7 +64,7 @@ fn bootstrap(app: State<App>) -> Bootstrap {
 
 #[tauri::command]
 fn list_sessions(app: State<App>) -> Vec<tmux::SessionInfo> {
-    app.tmux.list_sessions()
+    app.sessions.list()
 }
 
 /// Ensure the tmux session for project + agent + sub-session exists; returns its slug.
@@ -79,8 +83,8 @@ fn open_session(
     // Match by what the session was started for, so a slug collision or an
     // older naming scheme never attaches to another project.
     if let Some(s) = app
-        .tmux
-        .list_sessions()
+        .sessions
+        .list()
         .into_iter()
         .find(|s| s.path == path && s.agent == agent && s.instance == instance)
     {
@@ -101,12 +105,11 @@ fn open_session(
         agents::command_for(&agent, &custom).ok_or_else(|| format!("unknown agent: {agent}"))?
     };
     let slug = tmux::session_slug(dir, &agent, instance);
-    if app.tmux.has_session(&slug) {
+    if app.sessions.has(&slug) {
         return Err(format!(
             "tmux session {slug} already belongs to another folder"
         ));
     }
-    let script = agents::launch_script(&agent, &command, &app.hooks.settings);
     let env = [
         ("DESK_SLUG", slug.clone()),
         ("DESK_STATE_DIR", app.hooks.state_dir.display().to_string()),
@@ -116,8 +119,15 @@ fn open_session(
             usage::user_statusline(&env::home()).unwrap_or_default(),
         ),
     ];
-    app.tmux
-        .new_session(&slug, dir, &script, &env, &agent, instance)?;
+    app.sessions.start(
+        &slug,
+        dir,
+        &agent,
+        &command,
+        &app.hooks.settings,
+        &env,
+        instance,
+    )?;
     Ok(slug)
 }
 
@@ -133,7 +143,7 @@ fn create_project(parent: String, name: String, git: bool) -> Result<String, Str
 
 #[tauri::command]
 fn kill_session(app: State<App>, slug: String) -> Result<(), String> {
-    app.tmux.kill_session(&slug)?;
+    app.sessions.kill(&slug)?;
     let _ = std::fs::remove_file(app.hooks.state_dir.join(format!("{slug}.json")));
     Ok(())
 }
@@ -147,8 +157,7 @@ fn pty_attach(
     rows: u16,
     on_data: Channel<Response>,
 ) -> Result<u32, String> {
-    app.ptys
-        .attach(handle, &app.tmux, &slug, cols, rows, on_data)
+    app.sessions.attach(handle, &slug, cols, rows, on_data)
 }
 
 #[tauri::command(async)]
@@ -161,7 +170,7 @@ fn pty_write(
     if lock.is_locked() {
         return Err("desk jest zablokowany".into());
     }
-    app.ptys.write(id, data.as_bytes())
+    app.sessions.write(id, data.as_bytes())
 }
 
 #[tauri::command]
@@ -218,12 +227,12 @@ fn is_locked(lock: State<lock::Lock>) -> bool {
 
 #[tauri::command]
 fn pty_resize(app: State<App>, id: u32, cols: u16, rows: u16) -> Result<(), String> {
-    app.ptys.resize(id, cols, rows)
+    app.sessions.resize(id, cols, rows)
 }
 
 #[tauri::command]
 fn pty_close(app: State<App>, id: u32) {
-    app.ptys.close(id);
+    app.sessions.close(id);
 }
 
 #[tauri::command]
@@ -369,27 +378,33 @@ fn context<R: tauri::Runtime>() -> tauri::Context<R> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env::init();
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
-        .register_uri_scheme_protocol(preview::SCHEME, |_ctx, req| preview::serve(&req))
-        .menu(|app| menu(app, false))
+        .register_uri_scheme_protocol(preview::SCHEME, |_ctx, req| preview::serve(&req));
+    // A menu only on macOS: on Windows and Linux it is a bar in the window whose
+    // Edit > Copy (Ctrl+C) would take Ctrl+C away from the terminals.
+    let builder = if cfg!(target_os = "macos") {
+        builder.menu(|app| menu(app, false))
+    } else {
+        builder
+    };
+    builder
         .setup(|app| {
             let support = env::support_dir();
-            let tmux = tmux::Tmux::new(&support)?;
+            let sessions = backend::Backend::new(app.handle(), &support)?;
             let custom = layout::load(&support.join("layout.json")).agents;
             let ids: Vec<String> = agents::list(&custom).into_iter().map(|a| a.id).collect();
-            tmux.retag_untagged(&ids);
+            sessions.retag_untagged(&ids);
             let hooks = hooks::install(&support)?;
             let watcher = state_watch::watch(app.handle().clone(), &hooks.state_dir).ok();
             app.manage(lock::Lock::default());
             app.manage(AppCoffee(coffee::Coffee::new(&support)));
             coffee::spawn_guard(app.handle().clone());
             app.manage(App {
-                tmux,
+                sessions,
                 hooks,
                 layout_path: support.join("layout.json"),
-                ptys: pty::PtyManager::default(),
                 _watcher: Mutex::new(watcher),
             });
             Ok(())
@@ -454,8 +469,8 @@ pub fn run() {
                 api.prevent_exit();
             }
             if let RunEvent::Exit = event {
-                // Detach every tile; the tmux sessions keep running.
-                handle.state::<App>().ptys.close_all();
+                // Detach every tile; tmux sessions keep running, native ones end.
+                handle.state::<App>().sessions.shutdown();
                 // Sleep goes back to normal (the lid watchdog also notices desk is gone).
                 handle.state::<AppCoffee>().0.shutdown(None);
             }
@@ -499,7 +514,13 @@ mod acl_tests {
     /// (pty_write would type into a terminal) may be reachable from it.
     #[test]
     fn only_the_main_window_can_call_desk_commands() {
-        assert!(call("main", "tauri://localhost").is_ok());
+        // The app's own origin: tauri://localhost, http://tauri.localhost on Windows.
+        let local = if cfg!(windows) {
+            "http://tauri.localhost"
+        } else {
+            "tauri://localhost"
+        };
+        assert!(call("main", local).is_ok());
         for url in [
             "deskpreview://localhost/t/mock.html",
             "https://example.com/",
