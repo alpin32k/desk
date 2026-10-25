@@ -88,25 +88,32 @@ pub fn init() {
     }
 }
 
-/// Variables desk inherits when it is started from inside a Claude Code
-/// session (e.g. a terminal in the Claude app). Passed on, they would make
-/// every agent in desk a child of that session: no transcript saved, the
-/// host app's API endpoint and tokens. Your shell profile sets your own again.
-fn inherited_session_vars(names: impl Iterator<Item = String>) -> Vec<String> {
+/// Variables desk inherits from whatever started it, which must not reach
+/// the sessions (your shell profile sets your own again):
+/// - from inside a Claude Code session (a terminal in the Claude app): every
+///   agent would be that session's child, with no transcript saved, the host
+///   app's API endpoint and tokens;
+/// - from a package script (`pnpm tauri dev`): `COREPACK_ROOT` makes pnpm in
+///   every session think corepack runs it and refuse the project's version,
+///   and `npm_*` / `NODE_PATH` point at desk's own scripts.
+pub fn inherited_session_vars(names: impl Iterator<Item = String>) -> Vec<String> {
     let names: Vec<String> = names.collect();
-    if !names
+    let claude = names
         .iter()
-        .any(|k| k == "CLAUDECODE" || k == "CLAUDE_CODE_CHILD_SESSION")
-    {
-        return Vec::new();
-    }
+        .any(|k| k == "CLAUDECODE" || k == "CLAUDE_CODE_CHILD_SESSION");
+    let script = names
+        .iter()
+        .any(|k| k == "npm_lifecycle_event" || k == "npm_command" || k == "PNPM_SCRIPT_SRC_DIR");
     names
         .into_iter()
         .filter(|k| {
-            (k.starts_with("CLAUDE") && k != "CLAUDE_CONFIG_DIR")
+            let from_claude = (k.starts_with("CLAUDE") && k != "CLAUDE_CONFIG_DIR")
                 || k.starts_with("ANTHROPIC_")
                 || k.starts_with("MCP_")
-                || k == "AI_AGENT"
+                || k == "AI_AGENT";
+            let from_script = k.starts_with("npm_")
+                || matches!(k.as_str(), "PNPM_SCRIPT_SRC_DIR" | "NODE_PATH" | "INIT_CWD");
+            (claude && from_claude) || (script && from_script) || k == "COREPACK_ROOT"
         })
         .collect()
 }
@@ -179,8 +186,33 @@ mod tests {
             ])
         );
         // Started normally: your own ANTHROPIC_* settings stay.
-        let outside = names(&["PATH", "ANTHROPIC_API_KEY", "CLAUDE_CONFIG_DIR"]);
+        let outside = names(&[
+            "PATH",
+            "ANTHROPIC_API_KEY",
+            "CLAUDE_CONFIG_DIR",
+            "NODE_PATH",
+        ]);
         assert!(inherited_session_vars(outside.into_iter()).is_empty());
+        // Started by `pnpm tauri dev`: the script's variables go, yours stay.
+        let script = names(&[
+            "PATH",
+            "PNPM_HOME",
+            "npm_lifecycle_event",
+            "npm_config_globalconfig",
+            "PNPM_SCRIPT_SRC_DIR",
+            "COREPACK_ROOT",
+            "NODE_PATH",
+        ]);
+        assert_eq!(
+            inherited_session_vars(script.into_iter()),
+            names(&[
+                "npm_lifecycle_event",
+                "npm_config_globalconfig",
+                "PNPM_SCRIPT_SRC_DIR",
+                "COREPACK_ROOT",
+                "NODE_PATH",
+            ])
+        );
     }
 
     #[test]

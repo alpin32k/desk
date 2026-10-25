@@ -82,6 +82,13 @@ impl Backend {
         }
     }
 
+    /// See `Tmux::clean_global_env`; native sessions use desk's own environment.
+    pub fn clean_env(&self) {
+        if let Backend::Tmux { tmux, .. } = self {
+            tmux.clean_global_env();
+        }
+    }
+
     /// See `Tmux::retag_untagged`; native sessions are always tagged.
     pub fn retag_untagged(&self, agents: &[String]) {
         if let Self::Tmux { tmux, .. } = self {

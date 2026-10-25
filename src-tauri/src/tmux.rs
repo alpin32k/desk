@@ -88,6 +88,23 @@ impl Tmux {
         .unwrap_or_default()
     }
 
+    /// Drop variables a server started by an older desk took from whatever
+    /// started it (see `env::inherited_session_vars`): new sessions get the
+    /// server's global environment.
+    pub fn clean_global_env(&self) {
+        let Ok(out) = self.run(&["show-environment", "-g"]) else {
+            return; // no server yet: it starts from desk's cleaned environment
+        };
+        let names = out
+            .lines()
+            .filter_map(|l| l.split('=').next())
+            .filter(|n| !n.starts_with('-'))
+            .map(str::to_string);
+        for name in crate::env::inherited_session_vars(names) {
+            let _ = self.run(&["set-environment", "-g", "-u", &name]);
+        }
+    }
+
     pub fn has_session(&self, slug: &str) -> bool {
         self.run(&["has-session", "-t", &format!("={slug}")])
             .is_ok()
@@ -374,6 +391,22 @@ mod tests {
         );
         t.retag_untagged(&["claude".into(), "codex".into()]);
         assert_eq!(t.list_sessions(), vec![want]);
+
+        // A server started by `pnpm tauri dev` keeps the script's variables.
+        for (k, v) in [
+            ("npm_command", "run-script"),
+            ("COREPACK_ROOT", "/x"),
+            ("KEEP_ME", "1"),
+        ] {
+            t.run(&["set-environment", "-g", k, v]).unwrap();
+        }
+        t.clean_global_env();
+        let env = t.run(&["show-environment", "-g"]).unwrap();
+        assert!(
+            !env.contains("COREPACK_ROOT=") && !env.contains("npm_command="),
+            "{env}"
+        );
+        assert!(env.contains("KEEP_ME=1"));
         let _ = t.run(&["kill-server"]);
     }
 }

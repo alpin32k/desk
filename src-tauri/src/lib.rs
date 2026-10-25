@@ -439,6 +439,7 @@ pub fn run() {
             let custom = layout::load(&support.join("layout.json")).agents;
             let ids: Vec<String> = agents::list(&custom).into_iter().map(|a| a.id).collect();
             sessions.retag_untagged(&ids);
+            sessions.clean_env();
             let hooks = hooks::install(&support)?;
             let watcher = state_watch::watch(app.handle().clone(), &hooks.state_dir).ok();
             app.manage(lock::Lock::default());
