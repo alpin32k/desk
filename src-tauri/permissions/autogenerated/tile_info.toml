@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tile-info"
+description = "Enables the tile_info command without any pre-configured scope."
+commands.allow = ["tile_info"]
+
+[[permission]]
+identifier = "deny-tile-info"
+description = "Denies the tile_info command without any pre-configured scope."
+commands.deny = ["tile_info"]

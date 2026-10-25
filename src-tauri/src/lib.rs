@@ -100,7 +100,7 @@ fn open_session(
         // desk's --settings replaces the status line; the wrapper runs this one.
         (
             "DESK_STATUSLINE",
-            usage::user_statusline(dir, &env::home()).unwrap_or_default(),
+            usage::user_statusline(&env::home()).unwrap_or_default(),
         ),
     ];
     app.tmux
@@ -300,6 +300,11 @@ pub(crate) fn menu(app: &AppHandle, locked: bool) -> tauri::Result<Menu<tauri::W
     Menu::with_items(app, &[&app_menu, &edit, &window])
 }
 
+/// One expansion only: it embeds Info.plist, which may be defined once.
+fn context<R: tauri::Runtime>() -> tauri::Context<R> {
+    tauri::generate_context!()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env::init();
@@ -370,7 +375,7 @@ pub fn run() {
                 _ => {}
             }
         })
-        .build(tauri::generate_context!())
+        .build(context())
         .expect("error while building desk")
         .run(|handle, event| {
             if let RunEvent::ExitRequested { api, .. } = &event
@@ -385,4 +390,52 @@ pub fn run() {
                 handle.state::<AppCoffee>().0.shutdown(None);
             }
         });
+}
+
+#[cfg(test)]
+mod acl_tests {
+    use tauri::ipc::{CallbackFn, InvokeBody};
+    use tauri::test::{INVOKE_KEY, get_ipc_response, mock_builder};
+    use tauri::webview::InvokeRequest;
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
+
+    fn call(label: &str, url: &str) -> Result<String, String> {
+        let app = mock_builder()
+            .manage(super::lock::Lock::default())
+            .invoke_handler(tauri::generate_handler![super::is_locked])
+            .build(super::context())
+            .unwrap();
+        let url: url::Url = url.parse().unwrap();
+        let w = WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url.clone()))
+            .build()
+            .unwrap();
+        get_ipc_response(
+            &w,
+            InvokeRequest {
+                cmd: "is_locked".into(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url,
+                body: InvokeBody::default(),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        )
+        .map(|b| format!("{:?}", b.deserialize::<serde_json::Value>().ok()))
+        .map_err(|e| e.to_string())
+    }
+
+    /// The preview window loads untrusted pages: none of desk's commands
+    /// (pty_write would type into a terminal) may be reachable from it.
+    #[test]
+    fn only_the_main_window_can_call_desk_commands() {
+        assert!(call("main", "tauri://localhost").is_ok());
+        for url in [
+            "deskpreview://localhost/t/mock.html",
+            "https://example.com/",
+        ] {
+            let denied = call("preview", url);
+            assert!(denied.is_err(), "{url}: {denied:?}");
+        }
+    }
 }

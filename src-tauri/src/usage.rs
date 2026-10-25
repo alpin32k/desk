@@ -170,22 +170,16 @@ fn window(label: &str, used: f64, resets_at: &Value, now: u64) -> Option<Window>
     })
 }
 
-/// The user's own status line command for a project, by Claude Code's
-/// precedence (local project, project, user). desk's `--settings` replaces it,
-/// so the wrapper runs it.
-pub fn user_statusline(cwd: &Path, home: &Path) -> Option<String> {
-    [
-        cwd.join(".claude/settings.local.json"),
-        cwd.join(".claude/settings.json"),
-        home.join(".claude/settings.json"),
-    ]
-    .iter()
-    .find_map(|p| {
-        let v: Value = serde_json::from_str(&std::fs::read_to_string(p).ok()?).ok()?;
-        let sl = v.get("statusLine")?;
-        (sl.get("type")?.as_str()? == "command")
-            .then(|| sl.get("command")?.as_str().map(str::to_string))?
-    })
+/// The user's own status line command from ~/.claude/settings.json. desk's
+/// `--settings` replaces it, so the wrapper runs it. A project's
+/// `.claude/settings*.json` is not followed: desk would run a command chosen
+/// by whoever wrote that repository.
+pub fn user_statusline(home: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(home.join(".claude/settings.json")).ok()?;
+    let v: Value = serde_json::from_str(&text).ok()?;
+    let sl = v.get("statusLine")?;
+    (sl.get("type")?.as_str()? == "command")
+        .then(|| sl.get("command")?.as_str().map(str::to_string))?
 }
 
 #[cfg(test)]
@@ -258,30 +252,19 @@ mod tests {
     }
 
     #[test]
-    fn finds_user_statusline_by_precedence() {
+    fn follows_only_the_user_statusline() {
         let tmp = tempfile::tempdir().unwrap();
         let home = tmp.path().join("home");
-        let proj = tmp.path().join("proj");
         std::fs::create_dir_all(home.join(".claude")).unwrap();
-        std::fs::create_dir_all(proj.join(".claude")).unwrap();
+        assert_eq!(user_statusline(&home), None);
         std::fs::write(
             home.join(".claude/settings.json"),
             r#"{"statusLine":{"type":"command","command":"~/.claude/statusline.sh"}}"#,
         )
         .unwrap();
         assert_eq!(
-            user_statusline(&proj, &home).as_deref(),
+            user_statusline(&home).as_deref(),
             Some("~/.claude/statusline.sh")
-        );
-        std::fs::write(
-            proj.join(".claude/settings.json"),
-            r#"{"statusLine":{"type":"command","command":"proj-sl"}}"#,
-        )
-        .unwrap();
-        assert_eq!(user_statusline(&proj, &home).as_deref(), Some("proj-sl"));
-        assert_eq!(
-            user_statusline(&tmp.path().join("x"), &tmp.path().join("y")),
-            None
         );
     }
 }

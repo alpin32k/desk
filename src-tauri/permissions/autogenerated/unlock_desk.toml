@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-unlock-desk"
+description = "Enables the unlock_desk command without any pre-configured scope."
+commands.allow = ["unlock_desk"]
+
+[[permission]]
+identifier = "deny-unlock-desk"
+description = "Denies the unlock_desk command without any pre-configured scope."
+commands.deny = ["unlock_desk"]

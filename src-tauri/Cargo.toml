@@ -46,4 +46,5 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 objc2-local-authentication = { version = "0.3", default-features = false, features = ["std", "LAContext", "LAError", "block2"] }
 
 [dev-dependencies]
+tauri = { version = "2", features = ["test"] }
 tempfile = "3.27.0"

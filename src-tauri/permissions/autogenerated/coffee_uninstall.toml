@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-coffee-uninstall"
+description = "Enables the coffee_uninstall command without any pre-configured scope."
+commands.allow = ["coffee_uninstall"]
+
+[[permission]]
+identifier = "deny-coffee-uninstall"
+description = "Denies the coffee_uninstall command without any pre-configured scope."
+commands.deny = ["coffee_uninstall"]

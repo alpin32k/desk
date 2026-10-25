@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-coffee-restore"
+description = "Enables the coffee_restore command without any pre-configured scope."
+commands.allow = ["coffee_restore"]
+
+[[permission]]
+identifier = "deny-coffee-restore"
+description = "Denies the coffee_restore command without any pre-configured scope."
+commands.deny = ["coffee_restore"]

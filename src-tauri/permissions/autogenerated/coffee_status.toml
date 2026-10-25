@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-coffee-status"
+description = "Enables the coffee_status command without any pre-configured scope."
+commands.allow = ["coffee_status"]
+
+[[permission]]
+identifier = "deny-coffee-status"
+description = "Denies the coffee_status command without any pre-configured scope."
+commands.deny = ["coffee_status"]
