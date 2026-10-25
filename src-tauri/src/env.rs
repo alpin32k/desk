@@ -47,6 +47,13 @@ pub fn claude_bin() -> &'static str {
 /// Adopt the interactive login shell's PATH and `claude`, and make sure a
 /// UTF-8 locale is set.
 pub fn init() {
+    let inherited = inherited_session_vars(std::env::vars().map(|(k, _)| k));
+    // SAFETY: called once at startup before any other thread is spawned.
+    unsafe {
+        for k in inherited {
+            std::env::remove_var(k);
+        }
+    }
     if cfg!(windows) {
         // Apps on Windows get the user's PATH from the environment already.
         if let Some(c) = crate::agents::which("claude") {
@@ -79,6 +86,29 @@ pub fn init() {
             std::env::set_var("LANG", "en_US.UTF-8");
         }
     }
+}
+
+/// Variables desk inherits when it is started from inside a Claude Code
+/// session (e.g. a terminal in the Claude app). Passed on, they would make
+/// every agent in desk a child of that session: no transcript saved, the
+/// host app's API endpoint and tokens. Your shell profile sets your own again.
+fn inherited_session_vars(names: impl Iterator<Item = String>) -> Vec<String> {
+    let names: Vec<String> = names.collect();
+    if !names
+        .iter()
+        .any(|k| k == "CLAUDECODE" || k == "CLAUDE_CODE_CHILD_SESSION")
+    {
+        return Vec::new();
+    }
+    names
+        .into_iter()
+        .filter(|k| {
+            (k.starts_with("CLAUDE") && k != "CLAUDE_CONFIG_DIR")
+                || k.starts_with("ANTHROPIC_")
+                || k.starts_with("MCP_")
+                || k == "AI_AGENT"
+        })
+        .collect()
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -122,6 +152,36 @@ fn parse_probe(stdout: &str) -> Option<Probe> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drops_a_parent_claude_sessions_variables() {
+        let names = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let inside = names(&[
+            "PATH",
+            "CLAUDECODE",
+            "CLAUDE_CODE_CHILD_SESSION",
+            "CLAUDE_CODE_SESSION_ID",
+            "CLAUDE_CONFIG_DIR",
+            "ANTHROPIC_BASE_URL",
+            "MCP_CONNECTION_NONBLOCKING",
+            "AI_AGENT",
+            "HOME",
+        ]);
+        assert_eq!(
+            inherited_session_vars(inside.into_iter()),
+            names(&[
+                "CLAUDECODE",
+                "CLAUDE_CODE_CHILD_SESSION",
+                "CLAUDE_CODE_SESSION_ID",
+                "ANTHROPIC_BASE_URL",
+                "MCP_CONNECTION_NONBLOCKING",
+                "AI_AGENT",
+            ])
+        );
+        // Started normally: your own ANTHROPIC_* settings stay.
+        let outside = names(&["PATH", "ANTHROPIC_API_KEY", "CLAUDE_CONFIG_DIR"]);
+        assert!(inherited_session_vars(outside.into_iter()).is_empty());
+    }
 
     #[test]
     fn probe_ignores_profile_noise() {
