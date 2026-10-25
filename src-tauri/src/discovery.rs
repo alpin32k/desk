@@ -109,6 +109,12 @@ fn scan_git(path: &Path, remaining: usize, found: &mut Vec<PathBuf>) {
     }
 }
 
+fn in_temp_dir(path: &Path) -> bool {
+    let temp = std::env::temp_dir();
+    let canonical = temp.canonicalize().unwrap_or_else(|_| temp.clone());
+    path.starts_with(&temp) || path.starts_with(&canonical)
+}
+
 fn excluded_claude(path: &Path, home: &Path) -> bool {
     path == home
         || [
@@ -119,6 +125,8 @@ fn excluded_claude(path: &Path, home: &Path) -> bool {
         ]
         .iter()
         .any(|prefix| path.starts_with(prefix))
+        // The OS temp folder wherever it is (%TEMP% on Windows, $TMPDIR).
+        || in_temp_dir(path)
         || path
             .components()
             .any(|part| part.as_os_str() == "scratch-workspaces")
