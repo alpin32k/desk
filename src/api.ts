@@ -100,4 +100,7 @@ export const api = {
   lockDesk: () => invoke<void>("lock_desk"),
   unlockDesk: () => invoke<void>("unlock_desk"),
   isLocked: () => invoke<boolean>("is_locked"),
+  openPreview: (url: string) => invoke<void>("open_preview", { url }),
+  openExternal: (url: string) => invoke<void>("open_external", { url }),
+  scratchDir: () => invoke<string>("scratch_dir"),
 };

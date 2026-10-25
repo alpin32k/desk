@@ -3,11 +3,13 @@
 import { Channel } from "@tauri-apps/api/core";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
+import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { api, type HookState } from "./api";
 import { actionFor } from "./keys";
+import { fileLinks } from "./links";
 import { agentLabel, keyOf, type Spec } from "./sessions";
 
 export type TileState = Exclude<HookState, "exited"> | "shell" | "starting";
@@ -136,6 +138,24 @@ export class Tile {
     });
     this.term.loadAddon(this.fit);
     this.term.loadAddon(new ClipboardAddon());
+    // Click a link: preview inside desk; Option-click: system browser.
+    const openLink = (e: MouseEvent, uri: string) => {
+      const p = e.altKey ? api.openExternal(uri) : api.openPreview(uri);
+      p.catch((err) => this.term.write(`\r\n\x1b[33m${err}\x1b[0m\r\n`));
+    };
+    this.term.loadAddon(new WebLinksAddon(openLink));
+    this.term.registerLinkProvider({
+      provideLinks: (y, callback) => {
+        const line = this.term.buffer.active.getLine(y - 1)?.translateToString(true) ?? "";
+        callback(
+          fileLinks(line).map((l) => ({
+            range: { start: { x: l.start + 1, y }, end: { x: l.end, y } },
+            text: l.path,
+            activate: (e: MouseEvent, text: string) => openLink(e, text),
+          })),
+        );
+      },
+    });
     this.term.attachCustomKeyEventHandler((e) => {
       if (actionFor(e)) return false; // app shortcut, handled by the window listener
       if (e.type === "keydown" && e.key === "Enter" && e.shiftKey && !e.metaKey && !e.ctrlKey) {

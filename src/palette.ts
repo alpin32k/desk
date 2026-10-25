@@ -17,6 +17,7 @@ export interface PaletteContext {
   kill: (path: string, agent: string) => void;
   addFolder: () => void;
   newProject: (agent: string) => void;
+  scratch: (agent: string) => void;
 }
 
 const MAX_ROWS = 200;
@@ -89,12 +90,13 @@ export class Palette {
     let r = rows(this.all, q);
     if (this.mode === "new") r = r.filter((x) => !this.ctx.isOpen(x.project.path, this.agent));
     this.shown = r.slice(0, MAX_ROWS);
-    this.selected = Math.min(this.selected, this.shown.length + 1); // two action rows at the end
+    this.selected = Math.min(this.selected, this.shown.length + 2); // three action rows at the end
     const items = this.shown.map((row, i) => this.rowHtml(row, i));
     const n = this.shown.length;
     items.push(
       `<div class="row action ${this.selected === n ? "sel" : ""}" data-i="${n}">+ Nowy projekt…</div>`,
       `<div class="row action ${this.selected === n + 1 ? "sel" : ""}" data-i="${n + 1}">+ Dodaj istniejący folder…</div>`,
+      `<div class="row action ${this.selected === n + 2 ? "sel" : ""}" data-i="${n + 2}">+ Luźne pytanie, czysta sesja bez projektu (⌘L)</div>`,
     );
     const agents = this.ctx.agents().filter((a) => a.installed);
     if (!agents.some((a) => a.id === this.agent)) this.agent = agents[0]?.id ?? "claude";
@@ -123,7 +125,7 @@ export class Palette {
   }
 
   private onKey(e: KeyboardEvent): void {
-    const count = this.shown.length + 2;
+    const count = this.shown.length + 3;
     if (e.key === "Tab") {
       const ids = this.ctx.agents().filter((a) => a.installed).map((a) => a.id);
       const i = ids.indexOf(this.agent);
@@ -153,10 +155,11 @@ export class Palette {
 
   private activate(): void {
     const row = this.shown[this.selected];
-    const isNew = this.selected === this.shown.length;
+    const action = this.selected - this.shown.length; // 0 new project, 1 add folder, 2 loose question
     this.close();
     if (row) this.ctx.open(row.project.path, this.agent);
-    else if (isNew) this.ctx.newProject(this.agent);
-    else this.ctx.addFolder();
+    else if (action === 0) this.ctx.newProject(this.agent);
+    else if (action === 1) this.ctx.addFolder();
+    else this.ctx.scratch(this.agent);
   }
 }

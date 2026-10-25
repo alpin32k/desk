@@ -8,6 +8,7 @@ pub mod hooks;
 pub mod layout;
 pub mod lock;
 pub mod new_project;
+pub mod preview;
 pub mod pty;
 pub mod state_watch;
 pub mod tmux;
@@ -153,6 +154,24 @@ fn lock_desk(handle: AppHandle, lock: State<lock::Lock>) -> Result<(), String> {
 #[tauri::command(async)]
 fn unlock_desk(handle: AppHandle, lock: State<lock::Lock>) -> Result<(), String> {
     lock.unlock(&handle)
+}
+
+#[tauri::command]
+fn open_preview(handle: AppHandle, url: String) -> Result<(), String> {
+    preview::open(&handle, &url)
+}
+
+/// Empty folder for loose questions that belong to no project.
+#[tauri::command]
+fn scratch_dir() -> Result<String, String> {
+    let dir = env::support_dir().join("pytania");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.display().to_string())
+}
+
+#[tauri::command]
+fn open_external(url: String) -> Result<(), String> {
+    preview::open_external(&url)
 }
 
 #[tauri::command]
@@ -305,6 +324,9 @@ pub fn run() {
             lock_desk,
             unlock_desk,
             is_locked,
+            open_preview,
+            open_external,
+            scratch_dir,
             list_agents,
             create_project,
         ])
