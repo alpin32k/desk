@@ -17,7 +17,7 @@ po jednej sesji Claude Code (albo Codex, opencode, Gemini, aider, shell) na proj
 | | |
 |---|---|
 | Projekty | Sam znajduje repo git i projekty z `~/.claude/projects`. Worktree są pokazane pod repo głównym, a ręcznie można dodać dowolny folder. |
-| Nowy projekt | Tworzy folder (opcjonalnie `git init`) i od razu otwiera w nim sesję. |
+| Nowy projekt | ⌘N: tworzy folder (opcjonalnie `git init`) i od razu otwiera w nim sesję. |
 | Autostart | W opcjach wybierasz, które projekty startują z desk. Domyślnie żaden. |
 | Agenci | Claude Code, Codex, opencode, Gemini, aider, shell, a w opcjach także własne komendy. Tab w palecie przełącza agenta. |
 | Druga sesja | Kilka sesji w jednym projekcie (⌘D). |
@@ -33,7 +33,7 @@ po jednej sesji Claude Code (albo Codex, opencode, Gemini, aider, shell) na proj
 | Skrót | Akcja |
 |---|---|
 | ⌘P | projekty (paleta) |
-| ⌘N | nowa sesja |
+| ⌘N | nowy projekt (folder + opcjonalnie git init) |
 | ⌘D | druga sesja w tym projekcie |
 | ⌘R | rozmowa (czat bez projektu) |
 | ⌘Z | zamknij kafelek (sesja w tmux zostaje) |

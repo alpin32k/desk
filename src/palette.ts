@@ -29,7 +29,6 @@ export class Palette {
   private all: Project[] = [];
   private shown: Row[] = [];
   private selected = 0;
-  private mode: "all" | "new" = "all";
   private agent = "claude";
 
   constructor(private ctx: PaletteContext) {}
@@ -38,14 +37,9 @@ export class Palette {
     return this.el !== null;
   }
 
-  async show(mode: "all" | "new"): Promise<void> {
-    if (this.el) {
-      if (this.mode === mode) return this.close();
-      this.mode = mode;
-      this.refresh();
-      return;
-    }
-    this.mode = mode;
+  /** Toggles: a second ⌘P closes the palette. */
+  async show(): Promise<void> {
+    if (this.el) return this.close();
     this.el = document.createElement("div");
     this.el.className = "overlay";
     this.el.innerHTML = `
@@ -86,9 +80,8 @@ export class Palette {
   refresh(): void {
     if (!this.el) return;
     const q = this.input.value;
-    this.input.placeholder = this.mode === "new" ? "Nowa sesja: wybierz projekt…" : "Projekt…";
-    let r = rows(this.all, q);
-    if (this.mode === "new") r = r.filter((x) => !this.ctx.isOpen(x.project.path, this.agent));
+    this.input.placeholder = "Projekt…";
+    const r = rows(this.all, q);
     this.shown = r.slice(0, MAX_ROWS);
     this.selected = Math.min(this.selected, this.shown.length + 2); // three action rows at the end
     const items = this.shown.map((row, i) => this.rowHtml(row, i));

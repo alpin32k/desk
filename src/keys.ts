@@ -31,7 +31,7 @@ export function actionFor(e: KeyLike): Action | null {
   switch (key) {
     case "p": // projekty
       return { type: "palette" };
-    case "n": // nowa sesja
+    case "n": // nowy projekt
       return { type: "new" };
     case "d": // druga sesja w tym projekcie
       return { type: "sub" };
@@ -57,7 +57,7 @@ export function actionFor(e: KeyLike): Action | null {
 
 export const HINTS: [string, string][] = [
   ["⌘P", "projekty"],
-  ["⌘N", "nowa"],
+  ["⌘N", "nowy projekt"],
   ["⌘D", "druga sesja"],
   ["⌘R", "rozmowa"],
   ["⌘Z", "zamknij"],

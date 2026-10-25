@@ -38,6 +38,7 @@ export class App {
   private opening = new Map<string, Promise<void>>();
   private earlyExits = new Map<number, string>(); // pty-exit that arrived before attach returned
   private missing: { key: string; lane: number }[] = [];
+  private creatingProject = false;
   private usage: Usage[] = [];
   private usageAt = 0;
   private coffee: CoffeeStatus = { level: "off", helperInstalled: false, sleepDisabled: false, stoppedBecause: null };
@@ -162,7 +163,7 @@ export class App {
     void this.poll();
     setInterval(() => void this.poll(), POLL_MS);
     if (this.layout.notifications) void ensureNotificationPermission();
-    if (!this.tiles.size) void this.palette.show("all");
+    if (!this.tiles.size) void this.palette.show();
   }
 
   // ---- tiles -------------------------------------------------------------
@@ -438,6 +439,16 @@ export class App {
   }
 
   private async newProject(agent: string): Promise<void> {
+    if (this.creatingProject) return; // ⌘N again while the dialog is up
+    this.creatingProject = true;
+    try {
+      await this.createProject(agent);
+    } finally {
+      this.creatingProject = false;
+    }
+  }
+
+  private async createProject(agent: string): Promise<void> {
     const parent = this.layout.projectsDir ?? `${this.home}/Documents/projects`;
     const pick = async () => {
       const p = await openDialog({ directory: true, multiple: false, defaultPath: parent });
@@ -631,11 +642,12 @@ export class App {
     switch (a.type) {
       case "palette":
         this.settings.close();
-        void this.palette.show("all");
+        void this.palette.show();
         break;
       case "new":
         this.settings.close();
-        void this.palette.show("new");
+        this.palette.close();
+        void this.newProject("claude");
         break;
       case "settings":
         this.palette.close();
