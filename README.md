@@ -23,10 +23,11 @@ po jednej sesji Claude Code (albo Codex, opencode, Gemini, aider, shell) na proj
 | Druga sesja | Kilka sesji w jednym projekcie (⌘D), w jednej ramce projektu. ⌘T dokłada do niej zwykły terminal. |
 | Rozmowa | Zwykły czat o czymkolwiek, niezwiązany z żadnym projektem (⌘R). Każde ⌘R otwiera nową rozmowę w ramce aktywnego projektu, jak ⌘D, ale działa ona w swoim czystym folderze. Jej zachowanie ustawiasz w `rozmowa/CLAUDE.md` w danych desk. |
 | Limity | W górnym pasku zużycie planu (5h / 7d) dla otwartych agentów: Claude z wejścia status line, Codex z `~/.codex/sessions`. Obok każdego okna czas do resetu (↻2h13m). Kolor bursztynowy od 70%, czerwony od 90%. |
+| Układ | Kolumny dobierają się same do liczby projektów, sesji i rozmiaru okna (1 projekt na całe okno, 2 obok siebie, więcej w kilku kolumnach). W Opcjach można to wyłączyć i ustawić liczbę kolumn ręcznie. |
 | Kafelek | Projekt (każdy ma swój stonowany kolor), branch git (kliknij, aby przełączyć: `git switch`, który przy niezapisanych zmianach odmawia), stan. Powiadomienie, gdy sesja czeka, a okno nie ma fokusu. |
 | Pliki | ⌘F: wyszukiwarka plików projektu (z `git ls-files`, bez `node_modules`). ↵ otwiera w edytorze (VS Code, Cursor, Zed albo Sublime, a bez nich w domyślnym edytorze tekstu), ⌥↵ w podglądzie desk. |
 | Uruchom | ⌘U albo ▶: skrypty z `package.json` (z pnpm/yarn/npm/bun według lockfile), `cargo run`/`test`, cele z `Makefile`, `docker compose up`, Django. Uruchamia się w ramce projektu, a link `localhost` z wyjścia kliknięciem otwiera podgląd. |
-| Podgląd | Kliknięcie linku (http, lokalny html/svg/png/pdf) otwiera szybki podgląd w oknie desk, a ⌥-klik otwiera go w przeglądarce. |
+| Podgląd | Panel obok terminali (⌘W): kliknięty link (strona, `localhost`, plik) otwiera się w nim, a ⌥-klik w przeglądarce. Pokazuje strony i obrazki, PDF, Markdown z diagramami mermaid, pliki `.mmd`, JSON, CSV jako tabelę oraz kod i tekst. Pasek adresu działa jak przeglądarka (wstecz, odśwież, wpisany adres). Gdy panel jest otwarty, w środku zostaje aktywna sesja, a pozostałe są po lewej jako mini karty (stan i ostatnie linie). Kliknięcie albo ⌘1–9 przenosi sesję do środka. |
 | Kawa | ⌘K: komputer nie zaśnie. Drugie ⌘K: także przy zamkniętej klapce. Wyłącza się sama przy przegrzaniu lub baterii ≤15%. |
 | Blokada | ⌘B: ekran zostaje włączony, terminale widać, ale nic nie da się wpisać, dopóki nie odblokujesz Touch ID albo hasłem (macOS). |
 
@@ -41,6 +42,7 @@ po jednej sesji Claude Code (albo Codex, opencode, Gemini, aider, shell) na proj
 | ⌘F | pliki projektu |
 | ⌘U | uruchom (dev serwer, testy...) |
 | ⌘R | rozmowa (czat bez projektu) |
+| ⌘W | podgląd obok (pliki, Markdown, diagramy, strony) |
 | ⌘Z | zamknij kafelek (sesja w tmux zostaje) |
 | ⌘⇧Z | zabij sesję |
 | ⌘1–9 | skok do kafelka |
@@ -86,8 +88,9 @@ Zwykłe Esc trafia do terminala, więc dalej przerywa Claude.
 - **Limity Claude** pojawiają się po pierwszej odpowiedzi w sesji uruchomionej przez desk, bo
   Claude Code przekazuje je do status line dopiero wtedy. Twoja własna status line działa dalej:
   desk ją wywołuje.
-- **Podgląd lokalnych plików** widzi tylko folder podglądanego pliku. Okno podglądu nie ma
-  dostępu do API desk.
+- **Podgląd lokalnych plików** widzi tylko folder podglądanego pliku. Panel podglądu nie ma
+  dostępu do API desk. Markdown i inne dokumenty desk renderuje sam: ich własne skrypty się nie
+  uruchamiają (mermaid jest wbudowany, działa bez internetu).
 
 ## Instalacja
 

@@ -9,6 +9,7 @@ export interface SettingsContext {
   layout: () => Layout;
   projects: () => Promise<Project[]>;
   setLaneCount: (n: number) => void;
+  setAutoLayout: (on: boolean) => void;
   setNotifications: (on: boolean) => void;
   toggleAutostart: (path: string) => void;
   addFolder: () => Promise<void>;
@@ -69,7 +70,8 @@ export class Settings {
 
     box.innerHTML = `
       <h2>Opcje</h2>
-      <label class="line">Kolumny <input type="number" min="1" max="8" value="${layout.lanes.length}" data-k="lanes" /></label>
+      <label class="line"><input type="checkbox" data-k="auto-layout" ${layout.autoLayout ? "checked" : ""}/> Układ automatyczny <span class="dim">(kolumny według otwartych projektów, sesji i rozmiaru okna)</span></label>
+      <label class="line">Kolumny <input type="number" min="1" max="8" value="${layout.lanes.length}" data-k="lanes" ${layout.autoLayout ? "disabled" : ""}/></label>
       <label class="line"><input type="checkbox" data-k="notify" ${layout.notifications ? "checked" : ""}/> Powiadomienie macOS, gdy sesja czeka na ciebie</label>
       <h3>Start z aplikacją <span class="dim">(${auto.size})</span></h3>
       <input type="text" class="filter" placeholder="Filtruj projekty…" value="${escapeHtml(this.filter)}" data-k="filter" spellcheck="false" />
@@ -120,6 +122,10 @@ export class Settings {
     });
     box.querySelector<HTMLInputElement>('[data-k="lanes"]')!.addEventListener("change", (e) => {
       this.ctx.setLaneCount(Number((e.target as HTMLInputElement).value));
+      this.render();
+    });
+    box.querySelector<HTMLInputElement>('[data-k="auto-layout"]')!.addEventListener("change", (e) => {
+      this.ctx.setAutoLayout((e.target as HTMLInputElement).checked);
       this.render();
     });
     box.querySelector<HTMLInputElement>('[data-k="notify"]')!.addEventListener("change", (e) => {

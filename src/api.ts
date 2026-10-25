@@ -23,6 +23,16 @@ export interface Layout {
   runs: Record<string, string>;
   /** Card of a session opened inside another project's card (⌘R conversations), by key. */
   cards: Record<string, string>;
+  /** Columns follow what is open and the window size. */
+  autoLayout: boolean;
+}
+
+/** Where the side panel's page sits in the window (CSS pixels). */
+export interface PreviewBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface RunTarget {
@@ -105,7 +115,8 @@ export const api = {
     invoke<string>("open_session", { path, agent, instance, command: command ?? null }),
   projectFiles: (path: string) => invoke<string[]>("project_files", { path }),
   openFile: (path: string, file: string) => invoke<void>("open_file", { path, file }),
-  previewFile: (path: string, file: string) => invoke<void>("preview_file", { path, file }),
+  previewFile: (path: string, file: string, bounds: PreviewBounds) =>
+    invoke<string>("preview_file", { path, file, bounds }),
   runTargets: (path: string) => invoke<RunTarget[]>("run_targets", { path }),
   listAgents: () => invoke<AgentInfo[]>("list_agents"),
   createProject: (parent: string, name: string, git: boolean) =>
@@ -125,7 +136,12 @@ export const api = {
   lockDesk: () => invoke<void>("lock_desk"),
   unlockDesk: () => invoke<void>("unlock_desk"),
   isLocked: () => invoke<boolean>("is_locked"),
-  openPreview: (url: string) => invoke<void>("open_preview", { url }),
+  /** Show a link in the side panel at `bounds`; resolves to what its address bar shows. */
+  openPreview: (url: string, bounds: PreviewBounds) => invoke<string>("open_preview", { url, bounds }),
+  previewBounds: (bounds: PreviewBounds) => invoke<void>("preview_bounds", { bounds }),
+  previewVisible: (visible: boolean) => invoke<void>("preview_visible", { visible }),
+  previewClose: () => invoke<void>("preview_close"),
+  previewNav: (action: "back" | "forward" | "reload") => invoke<void>("preview_nav", { action }),
   openExternal: (url: string) => invoke<void>("open_external", { url }),
   chatDir: () => invoke<string>("chat_dir"),
   gitBranches: (path: string) => invoke<string[]>("git_branches", { path }),

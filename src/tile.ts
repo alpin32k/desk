@@ -7,6 +7,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { preview } from "./side";
 import { api, type HookState } from "./api";
 import { stripProbeReplies } from "./input";
 import { PLATFORM, shortcuts } from "./platform";
@@ -150,7 +151,7 @@ export class Tile {
     this.term.loadAddon(new ClipboardAddon());
     // Click a link: preview inside desk; Option-click: system browser.
     const openLink = (e: MouseEvent, uri: string) => {
-      const p = e.altKey ? api.openExternal(uri) : api.openPreview(uri);
+      const p = e.altKey ? api.openExternal(uri) : preview(uri);
       p.catch((err) => this.term.write(`\r\n\x1b[33m${err}\x1b[0m\r\n`));
     };
     this.term.loadAddon(new WebLinksAddon(openLink));
@@ -236,6 +237,27 @@ export class Tile {
 
   focus(): void {
     this.term.focus();
+  }
+
+  /** What the mini card in the side rail shows: the last lines with text. */
+  snapshot(n = 3): string[] {
+    const b = this.term.buffer.active;
+    const out: string[] = [];
+    for (let y = b.baseY + b.cursorY; y >= 0 && out.length < n; y--) {
+      const line = b.getLine(y)?.translateToString(true).trim() ?? "";
+      // Skip empty lines and box borders (Claude Code's input frame).
+      if (line.replace(/[\s─━│┃╭╮╰╯┌┐└┘]/g, "").length > 1) out.unshift(line);
+    }
+    return out;
+  }
+
+  /** Header text for the mini card: label, project, state. */
+  summary(): { label: string; name: string; state: string } {
+    return {
+      label: this.label(),
+      name: this.name,
+      state: this.agent === "claude" ? STATE_LABEL[this.state] : "",
+    };
   }
 
   /** Project color: left edge, name and dot in the header. */

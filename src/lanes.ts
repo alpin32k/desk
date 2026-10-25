@@ -110,3 +110,87 @@ export function restore(saved: Lanes, autostart: string[], laneCount: number): L
   for (const path of autostart) lanes = add(lanes, path);
   return lanes;
 }
+
+// ---- automatic layout ------------------------------------------------------
+
+export interface AutoOptions {
+  /** Tile width / height that reads best: terminals want lines, so about square. */
+  aspect: number;
+  /** Narrowest column worth having (CSS px, ~60 terminal columns). */
+  minWidth: number;
+  maxColumns: number;
+}
+
+export const AUTO: AutoOptions = { aspect: 1, minWidth: 480, maxColumns: 6 };
+
+/**
+ * Split cards (their session counts, in order) into `columns` contiguous
+ * groups so the busiest column holds as few sessions as possible.
+ * Returns how many cards go into each column.
+ */
+export function distribute(sizes: number[], columns: number): number[] {
+  const n = sizes.length;
+  const c = Math.max(1, Math.min(columns, n));
+  const prefix = [0];
+  for (const s of sizes) prefix.push(prefix[prefix.length - 1] + s);
+  // best[k][i]: smallest possible tallest column for the first i cards in k columns.
+  const best = Array.from({ length: c + 1 }, () => Array<number>(n + 1).fill(Infinity));
+  const cut = Array.from({ length: c + 1 }, () => Array<number>(n + 1).fill(0));
+  best[0][0] = 0;
+  for (let k = 1; k <= c; k++) {
+    for (let i = k; i <= n; i++) {
+      for (let j = k - 1; j < i; j++) {
+        const v = Math.max(best[k - 1][j], prefix[i] - prefix[j]);
+        if (v < best[k][i]) {
+          best[k][i] = v;
+          cut[k][i] = j;
+        }
+      }
+    }
+  }
+  const counts: number[] = [];
+  for (let k = c, i = n; k > 0; k--) {
+    const j = cut[k][i];
+    counts.unshift(i - j);
+    i = j;
+  }
+  return counts;
+}
+
+/** How many columns suit these cards in a `width`×`height` grid. */
+export function autoColumns(sizes: number[], width: number, height: number, o: AutoOptions = AUTO): number {
+  let bestColumns = 1;
+  let bestScore = Infinity;
+  for (let c = 1; c <= Math.min(sizes.length, o.maxColumns); c++) {
+    const w = width / c;
+    if (c > 1 && w < o.minWidth) break;
+    const counts = distribute(sizes, c);
+    let at = 0;
+    let tallest = 0;
+    for (const k of counts) {
+      tallest = Math.max(tallest, sizes.slice(at, at + k).reduce((a, b) => a + b, 0));
+      at += k;
+    }
+    const score = Math.abs(Math.log(w / (height / Math.max(1, tallest)) / o.aspect));
+    if (score < bestScore - 1e-9) {
+      bestScore = score;
+      bestColumns = c;
+    }
+  }
+  return bestColumns;
+}
+
+/** Lanes laid out automatically: same card order, columns from the window size. */
+export function autoLanes(lanes: Lanes, of: ProjectOf, width: number, height: number, o: AutoOptions = AUTO): Lanes {
+  const cards = groups(flatten(lanes), of);
+  if (!cards.length) return [[]];
+  const sizes = cards.map((c) => c.length);
+  const counts = distribute(sizes, autoColumns(sizes, width, height, o));
+  const out: Lanes = [];
+  let at = 0;
+  for (const k of counts) {
+    out.push(cards.slice(at, at + k).flat());
+    at += k;
+  }
+  return out;
+}

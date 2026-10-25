@@ -28,6 +28,8 @@ pub struct Layout {
     pub cards: std::collections::BTreeMap<String, String>,
     /// Where "new project" creates folders; None = ~/Documents/projects or ~.
     pub projects_dir: Option<String>,
+    /// Columns follow what is open and the window size; off = `lanes` as set by hand.
+    pub auto_layout: bool,
 }
 
 impl Default for Layout {
@@ -43,6 +45,7 @@ impl Default for Layout {
             runs: Default::default(),
             cards: Default::default(),
             projects_dir: None,
+            auto_layout: true,
         }
     }
 }

@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": [
+  "webviews": [
     "main"
   ],
   "permissions": [
@@ -35,6 +35,10 @@
     "allow-unlock-desk",
     "allow-is-locked",
     "allow-open-preview",
+    "allow-preview-bounds",
+    "allow-preview-visible",
+    "allow-preview-close",
+    "allow-preview-nav",
     "allow-open-external",
     "allow-chat-dir",
     "allow-usage",

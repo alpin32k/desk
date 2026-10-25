@@ -15,6 +15,7 @@ import {
 } from "./api";
 import { actionFor, hints, type Action } from "./keys";
 import { PLATFORM, shortcut, shortcuts } from "./platform";
+import { Side, previewFile } from "./side";
 import * as L from "./lanes";
 import { Palette } from "./palette";
 import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
@@ -54,6 +55,9 @@ export class App {
   private lockEl: HTMLElement | null = null;
 
   private grid: HTMLElement;
+  private side: Side;
+  /** With the side panel open: the other sessions as mini cards, left of the active one. */
+  private rail: HTMLElement;
   private top: HTMLElement;
   private footer: HTMLElement;
   private palette: Palette;
@@ -63,10 +67,18 @@ export class App {
     document.documentElement.dataset.platform = PLATFORM; // CSS: room for the macOS traffic lights
     root.innerHTML = `
       <div class="top" data-tauri-drag-region></div>
-      <main class="grid"></main>
+      <div class="middle"><aside class="rail" hidden></aside><main class="grid"></main></div>
       <footer class="bottom"></footer>`;
     this.top = root.querySelector(".top")!;
     this.grid = root.querySelector(".grid")!;
+    // Opening, closing or resizing the panel changes the grid's width: lay out again.
+    this.rail = root.querySelector(".rail")!;
+    this.rail.addEventListener("click", (e) => {
+      const key = (e.target as HTMLElement).closest<HTMLElement>("[data-key]")?.dataset.key;
+      if (key) this.setActive(key, true);
+    });
+    this.side = new Side(() => this.layout && this.render());
+    root.querySelector(".middle")!.appendChild(this.side.el);
     this.footer = root.querySelector(".bottom")!;
 
     this.palette = new Palette({
@@ -90,6 +102,10 @@ export class App {
       projects: () => this.projects(),
       setLaneCount: (n) => {
         this.layout.lanes = L.setLaneCount(this.layout.lanes, n);
+        this.changed();
+      },
+      setAutoLayout: (on) => {
+        this.layout.autoLayout = on;
         this.changed();
       },
       setNotifications: (on) => {
@@ -148,6 +164,7 @@ export class App {
       agents: boot.layout.agents ?? [],
       runs: boot.layout.runs ?? {},
       cards: boot.layout.cards ?? {},
+      autoLayout: boot.layout.autoLayout ?? true,
       lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length),
     };
 
@@ -156,7 +173,13 @@ export class App {
       window.addEventListener(type, (e) => this.locked && (e.preventDefault(), e.stopPropagation()), true);
     }
     if (await api.isLocked()) this.showLock();
-    window.addEventListener("resize", () => this.fitAll());
+    let resizeTimer: number | undefined;
+    window.addEventListener("resize", () => {
+      this.fitAll();
+      // Columns follow the window: re-lay out once resizing settles.
+      clearTimeout(resizeTimer);
+      if (this.layout.autoLayout) resizeTimer = window.setTimeout(() => this.render(), 120);
+    });
 
     // Reattach every tile from the saved layout (starting sessions tmux lost) and the autostart ones.
     const keys = L.flatten(this.layout.lanes);
@@ -279,7 +302,7 @@ export class App {
     const picked = await pickBox(`Plik · ${name}`, files, { altHint: "podgląd w desk" });
     if (!picked) return;
     try {
-      if (picked.alt) await api.previewFile(path, picked.value);
+      if (picked.alt) await previewFile(path, picked.value);
       else await api.openFile(path, picked.value);
     } catch (err) {
       toast(`${picked.value}: ${err}`);
@@ -396,6 +419,7 @@ export class App {
       this.active = key;
       this.tiles.get(key)?.setActive(true);
       if (this.fullscreen && this.fullscreen !== key) this.toggleFullscreen(key);
+      if (this.focusMode()) this.render(); // the newly active session moves to the middle
     }
     if (focus) this.tiles.get(key)?.focus();
   }
@@ -416,9 +440,20 @@ export class App {
 
   // ---- layout ------------------------------------------------------------
 
+  /** Side panel open with several sessions: one in the middle, the rest in the rail. */
+  private focusMode(): boolean {
+    return this.side.isOpen && this.tiles.size > 1;
+  }
+
   private render(): void {
-    this.layout.lanes = L.group(this.layout.lanes, this.projectOf);
-    const lanes = this.layout.lanes;
+    const focus = this.focusMode();
+    this.layout.lanes =
+      this.layout.autoLayout && !focus
+        ? L.autoLanes(this.layout.lanes, this.projectOf, this.grid.clientWidth || window.innerWidth, this.grid.clientHeight || window.innerHeight)
+        : L.group(this.layout.lanes, this.projectOf);
+    const shown = focus ? this.active ?? L.flatten(this.layout.lanes).find((k) => this.tiles.has(k)) : undefined;
+    const lanes = shown ? [[shown]] : this.layout.lanes;
+    if (shown) for (const t of this.tiles.values()) if (t.key !== shown) t.el.remove();
     while (this.grid.children.length > lanes.length) this.grid.lastElementChild!.remove();
     while (this.grid.children.length < lanes.length) this.grid.appendChild(this.laneEl());
     lanes.forEach((paths, i) => {
@@ -449,11 +484,36 @@ export class App {
         this.cards.delete(project);
       }
     }
-    L.flatten(lanes).forEach((p, i) => this.tiles.get(p)?.update({ index: i + 1 }));
+    L.flatten(this.layout.lanes).forEach((p, i) => this.tiles.get(p)?.update({ index: i + 1 }));
+    this.renderRail(shown);
     this.renderCards();
     this.renderChrome();
     this.fitAll();
   }
+
+  /** Mini cards of the sessions not in the middle (side panel open). */
+  private renderRail(shown?: string): void {
+    this.rail.hidden = !shown;
+    clearInterval(this.railTimer);
+    if (!shown) return this.rail.replaceChildren();
+    const cards = L.flatten(this.layout.lanes)
+      .filter((k) => k !== shown)
+      .map((k) => this.tiles.get(k))
+      .filter((t): t is Tile => t !== undefined)
+      .map((t) => {
+        const s = t.summary();
+        const lines = t.snapshot().map((l) => `<div class="mini-line">${escapeHtml(l)}</div>`).join("");
+        return `<div class="mini state-${t.state}" data-key="${escapeHtml(t.key)}" style="--proj: ${projectColor(this.projectOf(t.key), this.layout.colors)}">
+          <div class="mini-head"><span class="dot"></span><b>${escapeHtml(s.name)}</b> <span class="dim">${escapeHtml(s.label)}</span>${
+            s.state ? ` <span class="mini-state">${escapeHtml(s.state)}</span>` : ""
+          }${t.index > 0 && t.index < 10 ? `<span class="mini-idx">${shortcut(`⌘${t.index}`)}</span>` : ""}</div>${lines}</div>`;
+      });
+    this.rail.innerHTML = cards.join("");
+    // Their terminals keep running out of sight: refresh what the cards show.
+    this.railTimer = window.setInterval(() => this.renderRail(this.focusMode() ? shown : undefined), 1500);
+  }
+
+  private railTimer: number | undefined;
 
   private card(project: string): HTMLElement {
     let card = this.cards.get(project);
@@ -814,6 +874,9 @@ export class App {
       case "settings":
         this.palette.close();
         void this.settings.toggle();
+        break;
+      case "preview":
+        this.side.toggle();
         break;
       case "close":
         if (this.palette.isOpen) this.palette.close();

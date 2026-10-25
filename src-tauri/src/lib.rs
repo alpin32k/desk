@@ -184,9 +184,30 @@ fn unlock_desk(handle: AppHandle, lock: State<lock::Lock>) -> Result<(), String>
     lock.unlock(&handle)
 }
 
+/// Show a link in the side panel at `bounds`; returns what the address bar shows.
 #[tauri::command]
-fn open_preview(handle: AppHandle, url: String) -> Result<(), String> {
-    preview::open(&handle, &url)
+fn open_preview(handle: AppHandle, url: String, bounds: preview::Bounds) -> Result<String, String> {
+    preview::open(&handle, &url, bounds)
+}
+
+#[tauri::command]
+fn preview_bounds(handle: AppHandle, bounds: preview::Bounds) {
+    preview::set_bounds(&handle, bounds);
+}
+
+#[tauri::command]
+fn preview_visible(handle: AppHandle, visible: bool) {
+    preview::set_visible(&handle, visible);
+}
+
+#[tauri::command]
+fn preview_close(handle: AppHandle) {
+    preview::close(&handle);
+}
+
+#[tauri::command]
+fn preview_nav(handle: AppHandle, action: String) -> Result<(), String> {
+    preview::navigate(&handle, &action)
 }
 
 /// Plan limits for the given agents, from local files only.
@@ -256,9 +277,14 @@ fn open_file(path: String, file: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn preview_file(handle: AppHandle, path: String, file: String) -> Result<(), String> {
+fn preview_file(
+    handle: AppHandle,
+    path: String,
+    file: String,
+    bounds: preview::Bounds,
+) -> Result<String, String> {
     let full = project::inside(Path::new(&path), &file)?;
-    preview::open(&handle, &full.display().to_string())
+    preview::open(&handle, &full.display().to_string(), bounds)
 }
 
 #[tauri::command]
@@ -435,6 +461,10 @@ pub fn run() {
             unlock_desk,
             is_locked,
             open_preview,
+            preview_bounds,
+            preview_visible,
+            preview_close,
+            preview_nav,
             open_external,
             chat_dir,
             usage,
@@ -494,8 +524,49 @@ mod acl_tests {
         let w = WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url.clone()))
             .build()
             .unwrap();
+        invoke(&w, url)
+    }
+
+    /// The side panel: a second webview inside the main window.
+    fn call_panel(url: &str) -> Result<String, String> {
+        let app = mock_builder()
+            .manage(super::lock::Lock::default())
+            .invoke_handler(tauri::generate_handler![super::is_locked])
+            .build(super::context())
+            .unwrap();
+        let main: url::Url = "tauri://localhost".parse().unwrap();
+        let w = WebviewWindowBuilder::new(&app, "main", WebviewUrl::External(main))
+            .build()
+            .unwrap();
+        let url: url::Url = url.parse().unwrap();
+        let panel = w
+            .as_ref()
+            .window()
+            .add_child(
+                tauri::webview::WebviewBuilder::new(
+                    crate::preview::LABEL,
+                    WebviewUrl::External(url.clone()),
+                ),
+                tauri::LogicalPosition::new(0.0, 0.0),
+                tauri::LogicalSize::new(100.0, 100.0),
+            )
+            .unwrap();
+        invoke(&Panel(panel), url)
+    }
+
+    struct Panel(tauri::Webview<tauri::test::MockRuntime>);
+    impl AsRef<tauri::Webview<tauri::test::MockRuntime>> for Panel {
+        fn as_ref(&self) -> &tauri::Webview<tauri::test::MockRuntime> {
+            &self.0
+        }
+    }
+
+    fn invoke<W: AsRef<tauri::Webview<tauri::test::MockRuntime>>>(
+        w: &W,
+        url: url::Url,
+    ) -> Result<String, String> {
         get_ipc_response(
-            &w,
+            w,
             InvokeRequest {
                 cmd: "is_locked".into(),
                 callback: CallbackFn(0),
@@ -521,12 +592,16 @@ mod acl_tests {
             "tauri://localhost"
         };
         assert!(call("main", local).is_ok());
+        // Granted by webview, not window: the panel shares the main window.
+        assert!(call_panel(local).is_err());
         for url in [
             "deskpreview://localhost/t/mock.html",
             "https://example.com/",
         ] {
             let denied = call("preview", url);
             assert!(denied.is_err(), "{url}: {denied:?}");
+            let denied = call_panel(url);
+            assert!(denied.is_err(), "panel {url}: {denied:?}");
         }
     }
 }

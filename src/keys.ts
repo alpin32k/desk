@@ -19,7 +19,8 @@ export type Action =
   | { type: "focus"; index: number }
   | { type: "fullscreen" }
   | { type: "exitFullscreen" }
-  | { type: "settings" };
+  | { type: "settings" }
+  | { type: "preview" };
 
 export interface KeyLike {
   key: string;
@@ -74,6 +75,8 @@ export function actionFor(e: KeyLike, platform: Platform = PLATFORM): Action | n
       return { type: "chat" };
     case "o": // opcje
       return { type: "settings" };
+    case "w": // widok obok: podgląd i przeglądarka
+      return { type: "preview" };
     default:
       return null;
   }
@@ -88,6 +91,7 @@ export const HINTS: [string, string][] = [
   ["⌘F", "pliki"],
   ["⌘U", "uruchom"],
   ["⌘R", "rozmowa"],
+  ["⌘W", "podgląd"],
   ["⌘Z", "zamknij"],
   ["⌘⇧Z", "zabij"],
   ["⌘1-9", "skok"],

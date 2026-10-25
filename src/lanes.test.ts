@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { add, flatten, group, groups, move, moveGroup, remove, restore, setLaneCount, shortestLane } from "./lanes";
+import {
+  add,
+  autoColumns,
+  autoLanes,
+  distribute,
+  flatten,
+  group,
+  groups,
+  move,
+  moveGroup,
+  remove,
+  restore,
+  setLaneCount,
+  shortestLane,
+} from "./lanes";
 
 // Session keys as in sessions.ts: "/a" is the main session, "codex#0:/a" another one of /a.
 const of = (k: string) => k.slice(k.indexOf(":") + 1);
@@ -68,5 +82,30 @@ describe("lanes", () => {
     expect(moveGroup(l, "/a", of, 1, 1)).toEqual([["/b"], ["/c", "/a", "claude#1:/a"]]);
     expect(moveGroup(l, "/a", of, 0, 1)).toEqual([["/b", "/a", "claude#1:/a"], ["/c"]]);
     expect(moveGroup(l, "/x", of, 0, 0)).toBe(l);
+  });
+
+  it("balances sessions across columns in order", () => {
+    expect(distribute([1, 1, 1, 1], 2)).toEqual([2, 2]);
+    expect(distribute([3, 1, 1, 1], 2)).toEqual([1, 3]);
+    expect(distribute([1, 1], 5)).toEqual([1, 1]);
+    expect(distribute([2, 1, 1], 3)).toEqual([1, 1, 1]);
+  });
+
+  it("picks columns from what is open and the window size", () => {
+    const W = 2000;
+    const H = 1100;
+    expect(autoColumns([1], W, H)).toBe(1);
+    expect(autoColumns([1, 1], W, H)).toBe(2);
+    expect(autoColumns([1, 1, 1], W, H)).toBe(3);
+    expect(autoColumns([2, 1], W, H)).toBe(2); // a project with two sessions stays one card
+    expect(autoColumns([1, 1, 1, 1, 1, 1], W, H)).toBe(4);
+    expect(autoColumns([1, 1, 1], 900, H)).toBe(1); // narrow window: no 300px columns
+    expect(autoColumns(Array(20).fill(1), W, H)).toBeLessThanOrEqual(4); // never below the minimum width
+  });
+
+  it("lays out lanes automatically, keeping the card order", () => {
+    const lanes = [["/a", "claude#1:/a", "/b"], ["/c"], [], []];
+    expect(autoLanes(lanes, of, 2000, 1100)).toEqual([["/a", "claude#1:/a"], ["/b"], ["/c"]]);
+    expect(autoLanes([[], []], of, 2000, 1100)).toEqual([[]]);
   });
 });

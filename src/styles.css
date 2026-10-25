@@ -827,3 +827,172 @@ button.danger {
   border-radius: 6px;
   cursor: default;
 }
+
+/* ---- side panel: preview and browser next to the terminals ---- */
+.middle {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+
+.middle > .grid {
+  flex: 1 1 0;
+}
+
+.side {
+  position: relative;
+  flex: none;
+  width: 42%;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line-hi);
+  background: var(--panel);
+}
+
+.side[hidden] {
+  display: none;
+}
+
+.side .splitter {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+  z-index: 2;
+}
+
+.side-head {
+  height: 26px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.side-head button {
+  padding: 0 6px;
+  line-height: 18px;
+  background: none;
+  border: none;
+  color: var(--dim);
+}
+
+.side-head button:hover {
+  color: var(--fg);
+}
+
+.side-address {
+  flex: 1;
+  min-width: 0;
+  height: 18px;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0 6px;
+  user-select: text;
+}
+
+.side-address:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.side-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  text-align: center;
+}
+
+/* ---- rail: the other sessions while the side panel is open ---- */
+.rail {
+  flex: none;
+  width: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border-right: 1px solid var(--line-hi);
+  background: var(--bg);
+}
+
+.rail[hidden] {
+  display: none;
+}
+
+.mini {
+  flex: none;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--proj, var(--line-hi));
+  border-radius: 4px;
+  background: var(--panel);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.mini:hover {
+  border-color: var(--line-hi);
+  border-left-color: var(--proj, var(--line-hi));
+}
+
+.mini-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.mini-head b {
+  color: var(--proj, var(--fg));
+}
+
+.mini .dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--idle);
+}
+
+.mini.state-working .dot {
+  background: var(--working);
+}
+
+.mini.state-waiting {
+  border-color: var(--waiting);
+}
+
+.mini.state-waiting .dot {
+  background: var(--waiting);
+}
+
+.mini-state {
+  color: var(--dim);
+}
+
+.mini-idx {
+  margin-left: auto;
+  color: var(--dim);
+}
+
+.mini-line {
+  color: var(--dim);
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

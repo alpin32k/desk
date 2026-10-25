@@ -30,6 +30,7 @@ describe("actionFor", () => {
     expect(mac(k("f"))).toEqual({ type: "files" });
     expect(mac(k("u"))).toEqual({ type: "run" });
     expect(mac(k("o"))).toEqual({ type: "settings" });
+    expect(mac(k("w"))).toEqual({ type: "preview" });
   });
 
   it("leaves terminal keys alone", () => {
