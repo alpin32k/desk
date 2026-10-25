@@ -10,6 +10,7 @@ export interface PaletteContext {
   isOpen: (path: string) => boolean;
   isRunning: (path: string) => boolean;
   isAutostart: (path: string) => boolean;
+  color: (path: string) => string;
   open: (path: string) => void;
   toggleAutostart: (path: string) => void;
   kill: (path: string) => void;
@@ -104,6 +105,7 @@ export class Palette {
     const name = row.parent && !this.input.value.trim() ? `<span class="wt">↳</span> ${escapeHtml(p.name)}` : escapeHtml(p.name);
     const parent = row.parent ? `<span class="dim"> · worktree ${escapeHtml(row.parent.name)}</span>` : "";
     return `<div class="row ${i === this.selected ? "sel" : ""} ${row.parent ? "child" : ""}" data-i="${i}">
+      <span class="dot" style="background:${this.ctx.color(p.path)}"></span>
       <span class="name">${name}${parent}</span>
       <span class="path">${escapeHtml(shortPath(p.path, this.ctx.home()))}</span>
       ${tags}<span class="age">${ago(p.lastActiveMs)}</span></div>`;

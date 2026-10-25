@@ -76,3 +76,46 @@ export function ago(ms: number, now = Date.now()): string {
   if (s < 86400) return `${Math.floor(s / 3600)}h`;
   return `${Math.floor(s / 86400)}d`;
 }
+
+/** Distinct hues for telling projects apart at a glance (dark background). */
+export const PROJECT_COLORS = [
+  "#79c0ff", // blue
+  "#ff9b6a", // orange
+  "#7ee787", // green
+  "#d2a8ff", // purple
+  "#f778ba", // pink
+  "#56d4dd", // cyan
+  "#e3b341", // yellow
+  "#ff7b72", // red
+  "#b5e853", // lime
+  "#c4a07a", // tan
+];
+
+/** Stable palette index for a path (FNV-1a), so a project keeps its color everywhere. */
+export function colorIndex(path: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < path.length; i++) {
+    h ^= path.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h % PROJECT_COLORS.length;
+}
+
+/**
+ * Color for a project opening next to `taken` (indices used by open tiles):
+ * its saved color if any, else the first free one starting from its hash.
+ */
+export function pickColor(path: string, saved: Record<string, number>, taken: number[]): number {
+  if (saved[path] !== undefined) return saved[path];
+  const start = colorIndex(path);
+  for (let k = 0; k < PROJECT_COLORS.length; k++) {
+    const i = (start + k) % PROJECT_COLORS.length;
+    if (!taken.includes(i)) return i;
+  }
+  return start;
+}
+
+export function projectColor(path: string, overrides: Record<string, number> = {}): string {
+  const i = overrides[path] ?? colorIndex(path);
+  return PROJECT_COLORS[((i % PROJECT_COLORS.length) + PROJECT_COLORS.length) % PROJECT_COLORS.length];
+}

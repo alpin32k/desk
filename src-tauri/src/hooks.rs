@@ -35,6 +35,8 @@ pub enum State {
     Working,
     Waiting,
     Idle,
+    /// Claude exited; the pane is back at the shell.
+    Exited,
 }
 
 pub fn state_for(event: &str, notification_type: Option<&str>) -> Option<State> {
@@ -43,7 +45,8 @@ pub fn state_for(event: &str, notification_type: Option<&str>) -> Option<State> 
         "PermissionRequest" => State::Waiting,
         "Notification" if notification_type == Some("idle_prompt") => State::Idle,
         "Notification" => State::Waiting,
-        "SessionStart" | "Stop" | "SessionEnd" => State::Idle,
+        "SessionStart" | "Stop" => State::Idle,
+        "SessionEnd" => State::Exited,
         _ => return None,
     })
 }
@@ -149,6 +152,7 @@ mod tests {
         assert_eq!(state_for("PostToolUse", None), Some(State::Working));
         assert_eq!(state_for("Stop", None), Some(State::Idle));
         assert_eq!(state_for("SessionStart", None), Some(State::Idle));
+        assert_eq!(state_for("SessionEnd", None), Some(State::Exited));
         assert_eq!(state_for("PermissionRequest", None), Some(State::Waiting));
         assert_eq!(
             state_for("Notification", Some("permission_prompt")),

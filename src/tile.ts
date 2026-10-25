@@ -9,9 +9,9 @@ import "@xterm/xterm/css/xterm.css";
 import { api, type HookState } from "./api";
 import { actionFor } from "./keys";
 
-export type TileState = HookState | "shell" | "starting";
+export type TileState = Exclude<HookState, "exited"> | "shell" | "starting";
 
-export type TileAction = "close" | "kill" | "fullscreen" | "focus";
+export type TileAction = "close" | "kill" | "fullscreen" | "focus" | "color";
 
 const THEME = {
   background: "#0b0d10",
@@ -37,11 +37,9 @@ const THEME = {
   brightWhite: "#f0f6fc",
 };
 
-const SHELLS = new Set(["zsh", "bash", "fish", "sh", "-zsh", "-bash", "login"]);
-
 /** State shown on the tile: the hook state while claude runs, "shell" after it exits. */
-export function displayState(hook: HookState | undefined, command: string | null | undefined): TileState {
-  if (command && SHELLS.has(command)) return "shell";
+export function displayState(hook: HookState | undefined): TileState {
+  if (hook === "exited") return "shell";
   return hook ?? "starting";
 }
 
@@ -89,6 +87,7 @@ export class Tile {
     this.el.dataset.path = path;
     this.el.innerHTML = `
       <header draggable="true">
+        <span class="dot" data-a="color" title="Kolor projektu (kliknij, aby zmienić)"></span>
         <span class="badge"></span>
         <span class="title"></span>
         <span class="actions">
@@ -111,7 +110,7 @@ export class Tile {
     header.addEventListener("dragend", () => this.el.classList.remove("dragging"));
     header.addEventListener("dblclick", () => this.onAction(this, "fullscreen"));
     header.addEventListener("click", (e) => {
-      const a = (e.target as HTMLElement).closest("button")?.dataset.a as TileAction | undefined;
+      const a = (e.target as HTMLElement).closest<HTMLElement>("[data-a]")?.dataset.a as TileAction | undefined;
       this.onAction(this, a ?? "focus");
     });
 
@@ -178,6 +177,11 @@ export class Tile {
 
   focus(): void {
     this.term.focus();
+  }
+
+  /** Project color: left edge, name and dot in the header. */
+  setColor(color: string): void {
+    this.el.style.setProperty("--proj", color);
   }
 
   setActive(active: boolean): void {

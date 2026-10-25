@@ -16,15 +16,15 @@ export interface Layout {
   autostart: string[];
   extraFolders: string[];
   notifications: boolean;
+  colors: Record<string, number>;
 }
 
 export interface SessionInfo {
   slug: string;
   path: string;
-  command: string;
 }
 
-export type HookState = "working" | "waiting" | "idle";
+export type HookState = "working" | "waiting" | "idle" | "exited";
 
 export interface SessionState {
   slug: string;
@@ -44,7 +44,6 @@ export interface Bootstrap {
 export interface TileInfo {
   path: string;
   branch: string | null;
-  command: string | null;
 }
 
 export interface PtyExit {

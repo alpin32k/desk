@@ -155,8 +155,29 @@ button:hover {
   outline-offset: -1px;
 }
 
+.tile {
+  --proj: var(--dim);
+  border-left: 3px solid var(--proj);
+}
+
 .tile.active {
   outline-color: var(--line-hi);
+}
+
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--proj);
+}
+
+.tile header .dot {
+  cursor: pointer;
+}
+
+.tile header .dot:hover {
+  box-shadow: 0 0 0 2px var(--line-hi);
 }
 
 .tile.drop-before {
@@ -197,7 +218,11 @@ button:hover {
 }
 
 .tile .title b {
-  color: var(--fg);
+  color: var(--proj);
+}
+
+.tile.active header {
+  box-shadow: inset 0 -1px 0 var(--proj);
 }
 
 .tile .sep {

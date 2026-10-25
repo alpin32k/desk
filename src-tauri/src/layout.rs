@@ -17,6 +17,9 @@ pub struct Layout {
     /// Folders added by hand, listed even when discovery does not find them.
     pub extra_folders: Vec<String>,
     pub notifications: bool,
+    /// Color picked by hand per project path (index into the UI palette);
+    /// projects not listed get a color derived from their path.
+    pub colors: std::collections::BTreeMap<String, u32>,
 }
 
 impl Default for Layout {
@@ -27,6 +30,7 @@ impl Default for Layout {
             autostart: Vec::new(),
             extra_folders: Vec::new(),
             notifications: true,
+            colors: Default::default(),
         }
     }
 }
@@ -96,6 +100,7 @@ mod tests {
             autostart: vec!["/a".into()],
             extra_folders: vec!["/x".into()],
             notifications: false,
+            colors: [("/a".to_string(), 3)].into(),
             ..Layout::default()
         };
         save(&p, &l).unwrap();

@@ -30,8 +30,6 @@ set -g remain-on-exit off
 pub struct SessionInfo {
     pub slug: String,
     pub path: String,
-    /// Foreground command of the session's active pane (e.g. `claude`, `zsh`).
-    pub command: String,
 }
 
 #[derive(Clone)]
@@ -72,7 +70,7 @@ impl Tmux {
         self.run(&[
             "list-sessions",
             "-F",
-            "#{session_name}\t#{@desk_path}\t#{session_path}\t#{pane_current_command}",
+            "#{session_name}\t#{@desk_path}\t#{session_path}",
         ])
         .map(|s| parse_sessions(&s))
         .unwrap_or_default()
@@ -143,7 +141,6 @@ pub fn parse_sessions(out: &str) -> Vec<SessionInfo> {
             let slug = f.next()?.to_string();
             let desk_path = f.next().unwrap_or_default();
             let session_path = f.next().unwrap_or_default();
-            let command = f.next().unwrap_or_default().to_string();
             if slug.is_empty() {
                 return None;
             }
@@ -155,7 +152,6 @@ pub fn parse_sessions(out: &str) -> Vec<SessionInfo> {
             Some(SessionInfo {
                 slug,
                 path: path.to_string(),
-                command,
             })
         })
         .collect()
@@ -219,12 +215,11 @@ mod tests {
 
     #[test]
     fn parses_list_sessions() {
-        let out = "mm-crm-1a2b\t/Users/k/mm-crm\t/Users/k/mm-crm\tclaude\n\
-                   old-0000\t\t/Users/k/old\tzsh\n\n";
+        let out = "mm-crm-1a2b\t/Users/k/mm-crm\t/Users/k/mm-crm\n\
+                   old-0000\t\t/Users/k/old\n\n";
         let s = parse_sessions(out);
         assert_eq!(s.len(), 2);
         assert_eq!(s[0].path, "/Users/k/mm-crm");
-        assert_eq!(s[0].command, "claude");
         assert_eq!(s[1].path, "/Users/k/old");
     }
 

@@ -36,9 +36,6 @@ struct Bootstrap {
 struct TileInfo {
     path: String,
     branch: Option<String>,
-    /// Foreground command in the session (`claude`, `zsh`, ...); None when
-    /// the tmux session no longer exists.
-    command: Option<String>,
 }
 
 #[tauri::command]
@@ -112,21 +109,12 @@ fn save_layout(app: State<App>, layout: layout::Layout) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn tile_info(app: State<App>, paths: Vec<String>) -> Vec<TileInfo> {
-    let sessions = app.tmux.list_sessions();
+fn tile_info(paths: Vec<String>) -> Vec<TileInfo> {
     paths
         .into_iter()
-        .map(|path| {
-            let slug = tmux::slug(Path::new(&path));
-            let command = sessions
-                .iter()
-                .find(|s| s.slug == slug)
-                .map(|s| s.command.clone());
-            TileInfo {
-                branch: git::branch(Path::new(&path)),
-                path,
-                command,
-            }
+        .map(|path| TileInfo {
+            branch: git::branch(Path::new(&path)),
+            path,
         })
         .collect()
 }

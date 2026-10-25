@@ -6,6 +6,7 @@ import { api, type Layout, type Project, type PtyExit, type SessionState } from 
 import { actionFor, HINTS, type Action } from "./keys";
 import * as L from "./lanes";
 import { Palette } from "./palette";
+import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
 import { Settings } from "./settings";
 import { displayState, escapeHtml, Tile, type TileAction } from "./tile";
 import { confirmBox, toast } from "./ui";
@@ -17,7 +18,6 @@ export class App {
   private home = "";
   private tiles = new Map<string, Tile>(); // by project path
   private hook = new Map<string, SessionState>(); // by tmux slug
-  private commands = new Map<string, string | null>(); // by project path
   private running = new Set<string>(); // project paths with a tmux session
   private projectCache: Promise<Project[]> | null = null;
   private active: string | null = null;
@@ -44,6 +44,7 @@ export class App {
       isOpen: (p) => this.tiles.has(p),
       isRunning: (p) => this.running.has(p),
       isAutostart: (p) => this.layout.autostart.includes(p),
+      color: (p) => projectColor(p, this.layout.colors),
       open: (p) => void this.openTile(p),
       toggleAutostart: (p) => this.toggleAutostart(p),
       kill: (p) => void this.killSession(p),
@@ -78,7 +79,7 @@ export class App {
     for (const s of boot.states) this.hook.set(s.slug, s);
     for (const s of boot.sessions) this.running.add(s.path);
 
-    this.layout = { ...boot.layout, lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length) };
+    this.layout = { ...boot.layout, colors: boot.layout.colors ?? {}, lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length) };
 
     window.addEventListener("keydown", (e) => this.onKey(e), true);
     window.addEventListener("resize", () => this.fitAll());
@@ -108,6 +109,9 @@ export class App {
       const slug = await api.openSession(path);
       this.running.add(path);
       const tile = new Tile(path, slug, (t, a) => void this.onTileAction(t, a));
+      const taken = [...this.tiles.keys()].map((p) => this.layout.colors[p]).filter((i) => i !== undefined);
+      this.layout.colors[path] = pickColor(path, this.layout.colors, taken);
+      tile.setColor(projectColor(path, this.layout.colors));
       this.tiles.set(path, tile);
       return tile;
     } catch (err) {
@@ -164,6 +168,12 @@ export class App {
     if (action === "close") return this.closeTile(tile.path);
     if (action === "kill") return this.killSession(tile.path);
     if (action === "fullscreen") return this.toggleFullscreen(tile.path);
+    if (action === "color") {
+      const next = ((this.layout.colors[tile.path] ?? 0) + 1) % PROJECT_COLORS.length;
+      this.layout.colors[tile.path] = next;
+      tile.setColor(PROJECT_COLORS[next]);
+      this.save();
+    }
   }
 
   private async onPtyExit(e: PtyExit): Promise<void> {
@@ -324,9 +334,8 @@ export class App {
     const [infos, sessions] = await Promise.all([api.tileInfo(paths), api.listSessions()]);
     this.running = new Set(sessions.map((s) => s.path));
     for (const info of infos) {
-      this.commands.set(info.path, info.command);
       const tile = this.tiles.get(info.path);
-      tile?.update({ branch: info.branch, state: displayState(this.hook.get(tile.slug)?.state, info.command) });
+      tile?.update({ branch: info.branch, state: displayState(this.hook.get(tile.slug)?.state) });
     }
     this.renderChrome();
   }
@@ -336,7 +345,7 @@ export class App {
     this.hook.set(s.slug, s);
     const tile = [...this.tiles.values()].find((t) => t.slug === s.slug);
     if (!tile) return;
-    tile.update({ state: displayState(s.state, this.commands.get(tile.path)) });
+    tile.update({ state: displayState(s.state) });
     this.renderChrome();
     if (s.state === "waiting" && before !== "waiting" && this.layout.notifications && !document.hasFocus()) {
       sendNotification({ title: `${tile.name} czeka na ciebie`, body: s.message ?? "Claude potrzebuje odpowiedzi" });
