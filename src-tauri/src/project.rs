@@ -112,7 +112,19 @@ pub fn open_in_editor(root: &Path, rel: &str) -> Result<(), String> {
     } else if cfg!(windows) {
         std::process::Command::new("notepad")
     } else {
-        std::process::Command::new("xdg-open")
+        // Not xdg-open: for a script that may mean running it.
+        let editor = [
+            "gnome-text-editor",
+            "gedit",
+            "kate",
+            "mousepad",
+            "xed",
+            "pluma",
+        ]
+        .into_iter()
+        .find_map(crate::agents::which)
+        .ok_or("nie znalazłem edytora tekstu (np. VS Code, gedit, kate)")?;
+        std::process::Command::new(editor)
     };
     cmd.arg(&file)
         .spawn()
@@ -145,6 +157,9 @@ pub fn run_targets(root: &Path) -> Vec<RunTarget> {
         let mut names: Vec<&String> = scripts.keys().collect();
         names.sort_by_key(|n| (script_rank(n), n.to_string()));
         for n in names {
+            // A script name is data: quoted unless plainly safe, so
+            // `"dev; rm -rf ~"` stays one (odd) script name for the shell.
+            let n = script_arg(n);
             let command = match pm {
                 "npm" => format!("npm run {n}"),
                 _ => format!("{pm} {n}"),
@@ -176,6 +191,19 @@ pub fn run_targets(root: &Path) -> Vec<RunTarget> {
         }
     }
     out
+}
+
+fn script_arg(name: &str) -> String {
+    let plain = !name.is_empty()
+        && !name.starts_with('-')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || ":_.-/@".contains(c));
+    if plain {
+        name.to_string()
+    } else {
+        crate::tmux::shell_quote(name)
+    }
 }
 
 fn read_json(path: &Path) -> Option<Value> {
@@ -254,6 +282,18 @@ mod tests {
         );
         std::fs::remove_file(d.join("pnpm-lock.yaml")).unwrap();
         assert_eq!(run_targets(d)[0].command, "npm run dev");
+
+        std::fs::write(
+            d.join("package.json"),
+            r#"{"scripts":{"dev; touch pwned":"x","test:e2e":"y"}}"#,
+        )
+        .unwrap();
+        let cmds: Vec<String> = run_targets(d).into_iter().map(|t| t.command).collect();
+        assert!(
+            cmds.contains(&"npm run 'dev; touch pwned'".to_string()),
+            "{cmds:?}"
+        );
+        assert!(cmds.contains(&"npm run test:e2e".to_string()));
     }
 
     #[test]

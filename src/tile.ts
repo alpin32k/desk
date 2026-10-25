@@ -8,6 +8,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { api, type HookState } from "./api";
+import { stripProbeReplies } from "./input";
 import { actionFor } from "./keys";
 import { fileLinks } from "./links";
 import { agentLabel, keyOf, type Spec } from "./sessions";
@@ -171,8 +172,9 @@ export class Tile {
       }
       return true;
     });
-    this.term.onData((d) => {
-      if (this.ptyId !== null) void api.ptyWrite(this.ptyId, d);
+    this.term.onData((raw) => {
+      const d = stripProbeReplies(raw);
+      if (d && this.ptyId !== null) void api.ptyWrite(this.ptyId, d);
     });
 
     this.resizeObs = new ResizeObserver(() => this.queueFit());
