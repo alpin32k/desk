@@ -78,9 +78,9 @@ export class Tile {
 
   private term: Terminal;
   private fit = new FitAddon();
-  /** Your last click or key in this tile (clipboard writes: clip.ts). */
+  /** Your last real click or key in this tile (clipboard writes: clip.ts). */
   private lastInput = 0;
-  private released: () => void = () => undefined;
+  private released: (e: MouseEvent) => void = () => undefined;
   private body: HTMLElement;
   private title: HTMLElement;
   private badge: HTMLElement;
@@ -165,8 +165,22 @@ export class Tile {
     );
     // A selection starts with a press here and may end anywhere (tmux copies on release).
     let pressed = false;
-    this.body.addEventListener("mousedown", () => ((pressed = true), (this.lastInput = Date.now())), true);
-    this.released = () => pressed && ((pressed = false), (this.lastInput = Date.now()));
+    // Only real (trusted) DOM events count: not data the terminal sends by itself
+    // (cursor and focus reports a program can ask for).
+    this.body.addEventListener(
+      "mousedown",
+      (e) => {
+        if (!e.isTrusted) return;
+        pressed = true;
+        this.lastInput = Date.now();
+      },
+      true,
+    );
+    this.released = (e: MouseEvent) => {
+      if (!e.isTrusted || !pressed) return;
+      pressed = false;
+      this.lastInput = Date.now();
+    };
     window.addEventListener("mouseup", this.released, true);
     // Click a link: preview inside desk; Option-click: Brave / Chrome / system browser.
     const openLink = (e: MouseEvent, uri: string) => {
@@ -194,6 +208,7 @@ export class Tile {
       },
     });
     this.term.attachCustomKeyEventHandler((e) => {
+      if (e.type === "keydown" && e.isTrusted) this.lastInput = Date.now();
       if (actionFor(e)) return false; // app shortcut, handled by the window listener
       // Copy and paste: ⌘C / ⌘V, or Ctrl+Shift+C / V off macOS (plain Ctrl+C goes to the program).
       const clip =
@@ -219,7 +234,6 @@ export class Tile {
       return true;
     });
     this.term.onData((raw) => {
-      this.lastInput = Date.now();
       const d = stripProbeReplies(raw);
       if (d && this.ptyId !== null) void api.ptyWrite(this.ptyId, d);
     });
