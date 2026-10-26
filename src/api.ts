@@ -29,6 +29,8 @@ export interface Layout {
   theme: string;
   /** Web pages outside desk: "auto" (Brave, then Chrome), "brave", "chrome", "system". */
   browser: string;
+  /** Terminal font size in px. */
+  fontSize: number;
 }
 
 /** A newer desk release. */

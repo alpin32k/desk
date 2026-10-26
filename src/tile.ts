@@ -2,6 +2,7 @@
 // terminal attached to the project's tmux session through a Rust PTY.
 import { Channel } from "@tauri-apps/api/core";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
+import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -28,6 +29,14 @@ let termTheme: ITheme = terminalTheme(themeById(DEFAULT_THEME));
 
 export function setTerminalTheme(t: ITheme): void {
   termTheme = t;
+}
+
+export const DEFAULT_FONT_SIZE = 11.5;
+let fontSize = DEFAULT_FONT_SIZE;
+
+/** Font size for new tiles (Options, ⌘= / ⌘-). */
+export function setTerminalFontSize(px: number): void {
+  fontSize = px;
 }
 
 /** State shown on the tile: the hook state while claude runs, "shell" after it exits. */
@@ -124,7 +133,7 @@ export class Tile {
 
     this.term = new Terminal({
       fontFamily: '"JetBrainsMono Nerd Font Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
-      fontSize: 11.5,
+      fontSize,
       lineHeight: 1.08,
       theme: termTheme,
       cursorBlink: false,
@@ -135,7 +144,9 @@ export class Tile {
       drawBoldTextInBrightColors: false,
     });
     this.term.loadAddon(this.fit);
-    this.term.loadAddon(new ClipboardAddon());
+    // OSC 52 (tmux copies a mouse selection this way) goes to the system
+    // clipboard natively. Programs asking to read the clipboard get nothing.
+    this.term.loadAddon(new ClipboardAddon(undefined, { readText: () => "", writeText: (_sel, text) => writeText(text) }));
     // Click a link: preview inside desk; Option-click: Brave / Chrome / system browser.
     const openLink = (e: MouseEvent, uri: string) => {
       const p = e.altKey ? openOutside(uri) : preview(uri);
@@ -163,17 +174,21 @@ export class Tile {
     });
     this.term.attachCustomKeyEventHandler((e) => {
       if (actionFor(e)) return false; // app shortcut, handled by the window listener
-      if (PLATFORM !== "mac" && e.type === "keydown" && e.ctrlKey && e.shiftKey && !e.altKey) {
-        // Ctrl+Shift+C / V: copy and paste (plain Ctrl+C goes to the program).
+      // Copy and paste: ⌘C / ⌘V, or Ctrl+Shift+C / V off macOS (plain Ctrl+C goes to the program).
+      const clip =
+        PLATFORM === "mac" ? e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey : e.ctrlKey && e.shiftKey && !e.metaKey && !e.altKey;
+      if (clip && (e.code === "KeyC" || e.code === "KeyV")) {
+        if (e.type !== "keydown") return false;
+        e.preventDefault(); // not the menu's paste as well
         if (e.code === "KeyC") {
           const text = this.term.getSelection();
-          if (text) void navigator.clipboard.writeText(text);
-          return false;
+          if (text) void writeText(text);
+        } else {
+          void readText()
+            .then((t) => t && this.term.paste(t))
+            .catch(() => undefined);
         }
-        if (e.code === "KeyV") {
-          void navigator.clipboard.readText().then((t) => t && this.term.paste(t));
-          return false;
-        }
+        return false;
       }
       if (e.type === "keydown" && e.key === "Enter" && e.shiftKey && !e.metaKey && !e.ctrlKey) {
         // Shift+Enter = newline in Claude Code (sent as Meta+Enter).
@@ -241,6 +256,11 @@ export class Tile {
 
   setTheme(t: ITheme): void {
     this.term.options.theme = t;
+  }
+
+  setFontSize(px: number): void {
+    this.term.options.fontSize = px;
+    this.fitNow();
   }
 
   /** What the mini card in the side rail shows: the last lines with text. */

@@ -482,6 +482,9 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
+        // The system clipboard for the terminals: the webview refuses script
+        // writes (OSC 52 from tmux) and reads outside a click.
+        .plugin(tauri_plugin_clipboard_manager::init())
         .register_uri_scheme_protocol(preview::SCHEME, |_ctx, req| preview::serve(&req));
     // A menu only on macOS: on Windows and Linux it is a bar in the window whose
     // Edit > Copy (Ctrl+C) would take Ctrl+C away from the terminals.

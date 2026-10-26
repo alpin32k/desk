@@ -5,6 +5,7 @@ import { DEFAULT_THEME, THEMES } from "./themes";
 import type { AgentInfo, CoffeeStatus, Layout, Project } from "./api";
 import { rows, shortPath } from "./projects";
 import { escapeHtml } from "./tile";
+import { shortcuts } from "./platform";
 
 export interface SettingsContext {
   home: () => string;
@@ -14,6 +15,7 @@ export interface SettingsContext {
   setAutoLayout: (on: boolean) => void;
   setTheme: (id: string) => void;
   setBrowser: (id: string) => void;
+  setFontSize: (px: number) => void;
   /** Ask GitHub for a newer desk now. */
   checkUpdate: () => Promise<void>;
   setNotifications: (on: boolean) => void;
@@ -79,6 +81,7 @@ export class Settings {
       <label class="line"><input type="checkbox" data-k="auto-layout" ${layout.autoLayout ? "checked" : ""}/> Układ automatyczny <span class="dim">(kolumny według otwartych projektów, sesji i rozmiaru okna)</span></label>
       <label class="line">Kolumny <input type="number" min="1" max="8" value="${layout.lanes.length}" data-k="lanes" ${layout.autoLayout ? "disabled" : ""}/></label>
       <label class="line"><input type="checkbox" data-k="notify" ${layout.notifications ? "checked" : ""}/> Powiadomienie macOS, gdy sesja czeka na ciebie</label>
+      <label class="line">Czcionka terminali <input type="number" min="8" max="24" step="0.5" value="${layout.fontSize}" data-k="font" /> px <span class="dim">(${shortcuts("⌘= większa, ⌘- mniejsza, ⌘0 zwykła")})</span></label>
       <label class="line">Strony poza desk (↗, ⌥klik) <select data-k="browser">${[
         ["auto", "Brave, a gdy go nie ma Chrome"],
         ["brave", "Brave"],
@@ -162,6 +165,10 @@ export class Settings {
       await this.ctx.checkUpdate();
       b.disabled = false;
       b.textContent = "Sprawdź teraz";
+    });
+    box.querySelector<HTMLInputElement>('[data-k="font"]')!.addEventListener("change", (e) => {
+      const px = Number((e.target as HTMLInputElement).value);
+      if (px > 0) this.ctx.setFontSize(px);
     });
     box.querySelector<HTMLSelectElement>('[data-k="browser"]')!.addEventListener("change", (e) => {
       this.ctx.setBrowser((e.target as HTMLSelectElement).value);

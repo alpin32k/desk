@@ -24,7 +24,15 @@ import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
 import { keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
 import { Settings } from "./settings";
 import { applyTheme, terminalTheme, themeById } from "./themes";
-import { displayState, escapeHtml, setTerminalTheme, Tile, type TileAction } from "./tile";
+import {
+  DEFAULT_FONT_SIZE,
+  displayState,
+  escapeHtml,
+  setTerminalFontSize,
+  setTerminalTheme,
+  Tile,
+  type TileAction,
+} from "./tile";
 import { confirmBox, newProjectBox, pickBox, toast } from "./ui";
 import { usageHtml } from "./usage";
 
@@ -127,6 +135,7 @@ export class App {
         this.save();
       },
       checkUpdate: () => this.checkUpdate(true),
+      setFontSize: (px) => this.setFontSize(px),
       setBrowser: (id) => {
         this.layout.browser = id;
         this.save();
@@ -199,9 +208,11 @@ export class App {
       autoLayout: boot.layout.autoLayout ?? true,
       theme: boot.layout.theme ?? "desk",
       browser: boot.layout.browser ?? "auto",
+      fontSize: boot.layout.fontSize || DEFAULT_FONT_SIZE,
       lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length),
     };
     this.applyTheme();
+    setTerminalFontSize(this.layout.fontSize);
 
     window.addEventListener("keydown", (e) => this.onKey(e), true);
     for (const type of ["paste", "drop", "keypress", "input"]) {
@@ -631,6 +642,16 @@ export class App {
     else body.classList.add("drop-end");
   }
 
+  /** Terminal font size for every tile (8–24 px). */
+  private setFontSize(px: number): void {
+    const size = Math.min(24, Math.max(8, Math.round(px * 2) / 2));
+    this.layout.fontSize = size;
+    setTerminalFontSize(size);
+    for (const t of this.tiles.values()) t.setFontSize(size);
+    this.save();
+    this.settings.render();
+  }
+
   /** Window and terminal colors from the chosen theme. */
   private applyTheme(): void {
     const theme = themeById(this.layout.theme);
@@ -982,6 +1003,9 @@ export class App {
         break;
       case "preview":
         this.side.toggle();
+        break;
+      case "font":
+        this.setFontSize(a.step === 0 ? DEFAULT_FONT_SIZE : this.layout.fontSize + a.step);
         break;
       case "close":
         if (this.palette.isOpen) this.palette.close();

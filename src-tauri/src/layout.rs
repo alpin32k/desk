@@ -6,7 +6,7 @@ use std::path::Path;
 
 pub const DEFAULT_LANES: usize = 4;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Layout {
     pub version: u32,
@@ -36,6 +36,8 @@ pub struct Layout {
     /// Where web pages open outside desk: "auto" (Brave, then Chrome),
     /// "brave", "chrome" or "system" (see browser.rs).
     pub browser: String,
+    /// Terminal font size in px (⌘= / ⌘- / ⌘0, Options).
+    pub font_size: f64,
 }
 
 impl Default for Layout {
@@ -54,6 +56,7 @@ impl Default for Layout {
             auto_layout: true,
             theme: "desk".into(),
             browser: "auto".into(),
+            font_size: 11.5,
         }
     }
 }

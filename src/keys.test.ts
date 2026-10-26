@@ -31,6 +31,9 @@ describe("actionFor", () => {
     expect(mac(k("u"))).toEqual({ type: "run" });
     expect(mac(k("o"))).toEqual({ type: "settings" });
     expect(mac(k("w"))).toEqual({ type: "preview" });
+    expect(mac(k("="))).toEqual({ type: "font", step: 1 });
+    expect(mac(k("-"))).toEqual({ type: "font", step: -1 });
+    expect(mac(k("0"))).toEqual({ type: "font", step: 0 });
   });
 
   it("leaves terminal keys alone", () => {
@@ -38,7 +41,7 @@ describe("actionFor", () => {
     expect(mac(k("c"))).toBeNull(); // copy
     expect(mac(k("v"))).toBeNull(); // paste
     expect(mac(k("p", { ctrlKey: true }))).toBeNull();
-    expect(mac(k("0"))).toBeNull();
+    expect(mac(k("0", { altKey: true }))).toBeNull();
     expect(mac(k("W", { shiftKey: true }))).toBeNull();
   });
 
@@ -50,6 +53,8 @@ describe("actionFor", () => {
     expect(w("Backspace", "Backspace")).toEqual({ type: "kill" });
     expect(w("KeyZ", "Z")).toEqual({ type: "close" });
     expect(w("KeyC", "C")).toBeNull(); // copy, handled by the terminal tile
+    expect(w("Equal", "+")).toEqual({ type: "font", step: 1 });
+    expect(w("Minus", "_")).toEqual({ type: "font", step: -1 });
     expect(w("Escape", "Escape")).toBeNull(); // Task Manager
     expect(w("KeyP", "p", { shiftKey: false })).toBeNull(); // Ctrl+P is the shell's
     expect(w("KeyZ", "Ż", { altKey: true })).toBeNull(); // AltGr+Shift+Z types Ż

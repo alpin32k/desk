@@ -20,7 +20,8 @@ export type Action =
   | { type: "fullscreen" }
   | { type: "exitFullscreen" }
   | { type: "settings" }
-  | { type: "preview" };
+  | { type: "preview" }
+  | { type: "font"; step: 1 | -1 | 0 };
 
 export interface KeyLike {
   key: string;
@@ -47,6 +48,10 @@ export function actionFor(e: KeyLike, platform: Platform = PLATFORM): Action | n
     if (key === "Escape") return null; // Ctrl+Shift+Esc is the Task Manager
   }
   if (key >= "1" && key <= "9" && key.length === 1) return { type: "focus", index: Number(key) - 1 };
+  // Font size: ⌘= / ⌘+ bigger, ⌘- smaller, ⌘0 back to normal.
+  if (key === "=" || key === "+" || key === "Equal") return { type: "font", step: 1 };
+  if (key === "-" || key === "_" || key === "Minus") return { type: "font", step: -1 };
+  if (key === "0") return { type: "font", step: 0 };
   switch (key) {
     case "p": // projekty
       return { type: "palette" };

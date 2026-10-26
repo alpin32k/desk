@@ -10,6 +10,8 @@
     "core:window:allow-start-dragging",
     "notification:default",
     "dialog:allow-open",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
     "allow-bootstrap",
     "allow-open-session",
     "allow-kill-session",
