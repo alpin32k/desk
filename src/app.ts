@@ -1081,9 +1081,16 @@ async function ensureNotificationPermission(): Promise<void> {
 }
 
 /** The lock screen's password field (Linux): the one input that works while locked. */
-/** Where typing edits text: inputs, text areas, the panel's editor. */
+/**
+ * Where typing edits text: inputs, text areas, the panel's editor. Not a
+ * terminal: xterm takes keys through a hidden textarea, and there ⌘Z closes.
+ */
 function isTextField(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && (target.matches("input, textarea") || target.isContentEditable);
+  return (
+    target instanceof HTMLElement &&
+    !target.closest(".xterm") &&
+    (target.matches("input, textarea") || target.isContentEditable)
+  );
 }
 
 function isLockField(target: EventTarget | null): boolean {
