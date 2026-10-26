@@ -229,10 +229,14 @@ fn preview_nav(handle: AppHandle, action: String) -> Result<(), String> {
     preview::navigate(&handle, &action)
 }
 
-/// Plan limits for the given agents, from local files only.
+/// Plan limits for the given agents: local files, plus Claude's account usage every 5 minutes.
 #[tauri::command(async)]
-fn usage(app: State<App>, agents: Vec<String>) -> Vec<usage::Usage> {
-    usage::usage(&agents, &app.hooks.state_dir, &env::home())
+async fn usage(app: State<'_, App>, agents: Vec<String>) -> Result<Vec<usage::Usage>, String> {
+    // Off the main thread: every 5 minutes this asks Anthropic (up to 10 s).
+    let state = app.hooks.state_dir.clone();
+    tauri::async_runtime::spawn_blocking(move || usage::usage(&agents, &state, &env::home()))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Folder for plain conversations (⌘R) that belong to no project.

@@ -24,7 +24,7 @@ po jednej sesji Claude Code (albo Codex, opencode, Gemini, aider, shell) na proj
 | Agenci | Claude Code, Codex, opencode, Gemini, aider, shell, a w opcjach także własne komendy. Tab w palecie przełącza agenta. |
 | Druga sesja | Kilka sesji w jednym projekcie (⌘D), w jednej ramce projektu. ⌘T dokłada do niej zwykły terminal. |
 | Rozmowa | Zwykły czat o czymkolwiek, niezwiązany z żadnym projektem (⌘R). Każde ⌘R otwiera nową rozmowę we własnej ramce „rozmowa”, tak jak nowy projekt, w czystym folderze. Jej zachowanie ustawiasz w `rozmowa/CLAUDE.md` w danych desk. |
-| Limity | W górnym pasku zużycie planu (5h / 7d) dla otwartych agentów: Claude z wejścia status line, Codex z `~/.codex/sessions`. Obok każdego okna czas do resetu (↻2h13m). Kolor bursztynowy od 70%, czerwony od 90%. |
+| Limity | W górnym pasku zużycie planu (5h / 7d) dla otwartych agentów: Claude z konta co 5 min i z status line sesji, Codex z `~/.codex/sessions`. Obok każdego okna czas do resetu (↻2h13m). Kolor bursztynowy od 70%, czerwony od 90%. |
 | Układ | Kolumny dobierają się same do liczby projektów, sesji i rozmiaru okna (1 projekt na całe okno, 2 obok siebie, więcej w kilku kolumnach). W Opcjach można to wyłączyć i ustawić liczbę kolumn ręcznie. |
 | Motywy | 16 motywów w Opcjach, ciemne i jasne: desk, Cursor Dark, One Dark, Dracula, Monokai, Nord, Tokyo Night, Catppuccin (Mocha, Latte), Gruvbox, Rosé Pine, Solarized (Dark, Light), GitHub (Dark, Light), Ayu Light. Zmieniają okno i terminale od razu. |
 | Kafelek | Projekt (każdy ma swój stonowany kolor), branch git (kliknij, aby przełączyć: `git switch`, który przy niezapisanych zmianach odmawia), stan. Powiadomienie, gdy sesja czeka, a okno nie ma fokusu. |
@@ -99,10 +99,12 @@ Zwykłe Esc trafia do terminala, więc dalej przerywa Claude.
   Na Linuksie hasło konta sprawdza PAM (tak jak wygaszacze ekranu).
 - **Kawa na Linuksie** używa `systemd-inhibit` (z klapką: `handle-lid-switch`), a przegrzanie i
   baterię czyta z `/sys`.
-- **Limity Claude** przychodzą z status line sesji uruchomionych przez desk (Claude Code pobiera je
-  sam, bez tokenów; desk prosi o odświeżenie status line co 10 s). Każda sesja pamięta limity z
-  chwili, gdy ostatnio je pobrała, więc desk bierze z wszystkich sesji najświeższy odczyt każdego
-  okna. Twoja własna status line działa dalej: desk ją wywołuje.
+- **Limity Claude** desk co 5 minut pobiera sam z Anthropic (to samo zapytanie co `/usage` w
+  Claude Code, bez modelu i bez tokenów), używając loginu Claude Code: na macOS z pęku kluczy
+  (`Claude Code-credentials`), gdzie indziej z `~/.claude/.credentials.json`. Token idzie tylko do
+  `api.anthropic.com`; desk go nie odświeża ani nie zapisuje. Do tego dochodzą odczyty z status
+  line sesji desk (świeże po każdej turze), a wygrywa najświeższy. Bez loginu zostają same
+  sesje. Twoja własna status line działa dalej: desk ją wywołuje.
 - **Podgląd lokalnych plików** widzi tylko folder podglądanego pliku. Panel podglądu nie ma
   dostępu do API desk. Markdown i inne dokumenty desk renderuje sam: ich własne skrypty się nie
   uruchamiają (mermaid jest wbudowany, działa bez internetu).
