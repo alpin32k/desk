@@ -3,6 +3,8 @@
 import { Channel } from "@tauri-apps/api/core";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { mayWrite } from "./clip";
+import { toast } from "./ui";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -76,6 +78,9 @@ export class Tile {
 
   private term: Terminal;
   private fit = new FitAddon();
+  /** Your last click or key in this tile (clipboard writes: clip.ts). */
+  private lastInput = 0;
+  private released: () => void = () => undefined;
   private body: HTMLElement;
   private title: HTMLElement;
   private badge: HTMLElement;
@@ -144,9 +149,25 @@ export class Tile {
       drawBoldTextInBrightColors: false,
     });
     this.term.loadAddon(this.fit);
-    // OSC 52 (tmux copies a mouse selection this way) goes to the system
-    // clipboard natively. Programs asking to read the clipboard get nothing.
-    this.term.loadAddon(new ClipboardAddon(undefined, { readText: () => "", writeText: (_sel, text) => writeText(text) }));
+    // OSC 52 goes to the system clipboard natively, only right after your own
+    // click or key here (clip.ts). Programs asking to read the clipboard get nothing.
+    this.term.loadAddon(
+      new ClipboardAddon(undefined, {
+        readText: () => "",
+        writeText: (_sel, text) => {
+          if (!mayWrite(text, this.lastInput, Date.now())) {
+            if (text) toast(`${this.name}: program chciał zmienić schowek bez Twojej akcji, zablokowano`);
+            return;
+          }
+          return writeText(text).then(() => toast("Skopiowano do schowka"));
+        },
+      }),
+    );
+    // A selection starts with a press here and may end anywhere (tmux copies on release).
+    let pressed = false;
+    this.body.addEventListener("mousedown", () => ((pressed = true), (this.lastInput = Date.now())), true);
+    this.released = () => pressed && ((pressed = false), (this.lastInput = Date.now()));
+    window.addEventListener("mouseup", this.released, true);
     // Click a link: preview inside desk; Option-click: Brave / Chrome / system browser.
     const openLink = (e: MouseEvent, uri: string) => {
       const p = e.altKey ? openOutside(uri) : preview(uri);
@@ -198,6 +219,7 @@ export class Tile {
       return true;
     });
     this.term.onData((raw) => {
+      this.lastInput = Date.now();
       const d = stripProbeReplies(raw);
       if (d && this.ptyId !== null) void api.ptyWrite(this.ptyId, d);
     });
@@ -359,6 +381,7 @@ export class Tile {
     if (this.disposed) return;
     this.disposed = true;
     this.resizeObs.disconnect();
+    window.removeEventListener("mouseup", this.released, true);
     if (this.ptyId !== null) void api.ptyClose(this.ptyId);
     if (this.webgl) webglBudget++;
     this.term.dispose();
