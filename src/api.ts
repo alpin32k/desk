@@ -63,6 +63,8 @@ export interface AgentInfo {
   id: string;
   command: string;
   installed: boolean;
+  /** Not installed, but desk installs it when a tile opens it. */
+  installable: boolean;
   builtin: boolean;
 }
 
@@ -88,6 +90,8 @@ export interface Bootstrap {
   sessions: SessionInfo[];
   states: SessionState[];
   home: string;
+  /** macOS or Linux without tmux: sessions end when desk closes. */
+  tmuxMissing: boolean;
 }
 
 export interface TileInfo {

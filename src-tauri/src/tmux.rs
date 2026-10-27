@@ -40,22 +40,63 @@ pub struct SessionInfo {
 pub struct Tmux {
     conf: PathBuf,
     socket: String,
+    /// `tmux` from PATH, or desk's own copy (see `find`).
+    bin: PathBuf,
+}
+
+/// The tmux to run: the one in PATH, else the one shipped inside desk (macOS
+/// app, AppImage). That one runs from a copy in the data folder, so a tmux
+/// server left running never runs from an app an update replaced or from an
+/// AppImage that is no longer mounted. None: no tmux at all.
+pub fn find(support_dir: &Path) -> Option<PathBuf> {
+    let works = |bin: &Path| {
+        Command::new(bin)
+            .arg("-V")
+            .output()
+            .is_ok_and(|o| o.status.success())
+    };
+    if works(Path::new("tmux")) {
+        return Some("tmux".into());
+    }
+    let bundled = std::env::current_exe().ok()?.with_file_name("tmux");
+    let copy = install_copy(&bundled, support_dir)?;
+    works(&copy).then_some(copy)
+}
+
+/// `bundled` as `<support_dir>/bin/tmux`, rewritten only when it differs.
+fn install_copy(bundled: &Path, support_dir: &Path) -> Option<PathBuf> {
+    let bytes = std::fs::read(bundled).ok()?;
+    let copy = support_dir.join("bin").join("tmux");
+    if std::fs::read(&copy).ok().as_deref() != Some(&bytes[..]) {
+        std::fs::create_dir_all(copy.parent()?).ok()?;
+        // Renamed into place: a running server keeps the file it started from.
+        let new = copy.with_extension("new");
+        std::fs::write(&new, &bytes).ok()?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&new, std::fs::Permissions::from_mode(0o755)).ok()?;
+        }
+        std::fs::rename(&new, &copy).ok()?;
+    }
+    Some(copy)
 }
 
 impl Tmux {
-    pub fn new(support_dir: &Path) -> std::io::Result<Self> {
+    pub fn new(support_dir: &Path, bin: PathBuf) -> std::io::Result<Self> {
         std::fs::create_dir_all(support_dir)?;
         let conf = support_dir.join("tmux.conf");
         std::fs::write(&conf, CONF)?;
         Ok(Self {
             conf,
             socket: SOCKET.to_string(),
+            bin,
         })
     }
 
     /// Base command: `tmux -u -L desk -f <conf>`.
     pub fn command(&self) -> Command {
-        let mut c = Command::new("tmux");
+        let mut c = Command::new(&self.bin);
         c.arg("-u")
             .arg("-L")
             .arg(&self.socket)
@@ -355,6 +396,30 @@ mod tests {
         assert_eq!(origin_of("shop-08c5", p, &agents), None);
     }
 
+    #[test]
+    fn bundled_tmux_is_copied_once_and_replaced_when_it_changes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bundled = tmp.path().join("tmux");
+        std::fs::write(&bundled, "v1").unwrap();
+        let support = tmp.path().join("support");
+        let copy = install_copy(&bundled, &support).unwrap();
+        assert_eq!(copy, support.join("bin/tmux"));
+        assert_eq!(std::fs::read_to_string(&copy).unwrap(), "v1");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&copy).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o755);
+        }
+        let first = std::fs::metadata(&copy).unwrap().modified().unwrap();
+        install_copy(&bundled, &support).unwrap();
+        assert_eq!(std::fs::metadata(&copy).unwrap().modified().unwrap(), first);
+        std::fs::write(&bundled, "v2").unwrap();
+        install_copy(&bundled, &support).unwrap();
+        assert_eq!(std::fs::read_to_string(&copy).unwrap(), "v2");
+        assert!(install_copy(&tmp.path().join("none"), &support).is_none());
+    }
+
     /// Real tmux on a throwaway socket: a new session must come back tagged
     /// (tmux 3.6 rejects `set-option -t =name`, which left every session untagged).
     #[test]
@@ -366,7 +431,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let t = Tmux {
             socket: format!("desk-test-{}", std::process::id()),
-            ..Tmux::new(tmp.path()).unwrap()
+            ..Tmux::new(tmp.path(), "tmux".into()).unwrap()
         };
         let dir = tmp.path().canonicalize().unwrap();
         let slug = session_slug(&dir, "codex", 1);

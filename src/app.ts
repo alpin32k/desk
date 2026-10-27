@@ -197,6 +197,10 @@ export class App {
     this.chatPath = await api.chatDir().catch(() => "");
     for (const s of boot.states) this.hook.set(s.slug, s);
     for (const s of boot.sessions) this.running.add(keyOf(s));
+    if (boot.tmuxMissing) {
+      const install = PLATFORM === "mac" ? "brew install tmux" : "sudo apt install tmux";
+      toast(`Brak tmux: sesje zamkną się razem z desk. Zainstaluj go (${install}) i uruchom desk ponownie.`, 15000);
+    }
 
     this.layout = {
       ...boot.layout,

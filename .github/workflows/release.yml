@@ -17,12 +17,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # tmux ships inside the app and the AppImage (built by
+          # .github/build-tmux.sh); the .deb depends on the distribution's.
           - platform: macos-latest
             target: aarch64-apple-darwin
-            args: --target aarch64-apple-darwin --bundles app,dmg
+            tmux: true
+            args: --target aarch64-apple-darwin --bundles app,dmg --config src-tauri/tauri.tmux.conf.json
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-            args: --bundles deb,appimage
+            tmux: true
+            args: --bundles appimage --config src-tauri/tauri.tmux.conf.json
+            deb: --bundles deb --config src-tauri/tauri.deb.conf.json
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
             args: --bundles nsis
@@ -34,7 +39,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+            libncurses-dev bison
 
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
@@ -50,7 +56,13 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: tmux for the bundle
+        if: matrix.tmux
+        run: sh .github/build-tmux.sh ${{ matrix.target }}
+
       - run: pnpm tauri build ${{ matrix.args }}
+      - if: matrix.deb
+        run: pnpm tauri build ${{ matrix.deb }}
 
       - uses: actions/upload-artifact@v4
         with:

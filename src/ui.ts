@@ -113,12 +113,12 @@ export function pickBox(title: string, items: string[], opts: PickOptions = {}):
   });
 }
 
-export function toast(message: string): void {
+export function toast(message: string, ms = 4000): void {
   const el = document.createElement("div");
   el.className = "toast";
   el.textContent = message;
   document.body.appendChild(el);
-  setTimeout(() => el.remove(), 4000);
+  setTimeout(() => el.remove(), ms);
 }
 
 export interface NewProject {

@@ -1,6 +1,8 @@
 //! Where sessions live: tmux on macOS and Linux (they outlive desk), or
 //! desk's own pseudo terminals on Windows (see native.rs; they end with desk).
-//! `DESK_NATIVE_SESSIONS=1` picks the native backend elsewhere too, for testing.
+//! Without tmux in PATH desk runs the tmux it ships (see `tmux::find`); with
+//! none at all macOS and Linux use the native backend too, and the window says
+//! so. `DESK_NATIVE_SESSIONS=1` picks it for testing.
 
 use crate::native::Native;
 use crate::pty::{PtyExit, PtyManager};
@@ -17,7 +19,12 @@ pub enum Backend {
 
 impl Backend {
     pub fn new(app: &AppHandle, support_dir: &Path) -> std::io::Result<Self> {
-        if cfg!(windows) || std::env::var_os("DESK_NATIVE_SESSIONS").is_some_and(|v| v == "1") {
+        let tmux = if cfg!(windows) || native_by_choice() {
+            None
+        } else {
+            crate::tmux::find(support_dir)
+        };
+        let Some(bin) = tmux else {
             let app = app.clone();
             return Ok(Self::Native(Native::new(Arc::new(move |slug, ids| {
                 for id in ids {
@@ -25,9 +32,9 @@ impl Backend {
                     let _ = app.emit("pty-exit", PtyExit { id, slug });
                 }
             }))));
-        }
+        };
         Ok(Self::Tmux {
-            tmux: Tmux::new(support_dir)?,
+            tmux: Tmux::new(support_dir, bin)?,
             ptys: PtyManager::default(),
         })
     }
@@ -35,6 +42,11 @@ impl Backend {
     /// Sessions survive closing desk (tmux) or end with it (native).
     pub fn persistent(&self) -> bool {
         matches!(self, Self::Tmux { .. })
+    }
+
+    /// macOS or Linux without tmux: sessions end with desk until it is installed.
+    pub fn tmux_missing(&self) -> bool {
+        !cfg!(windows) && !self.persistent() && !native_by_choice()
     }
 
     pub fn list(&self) -> Vec<SessionInfo> {
@@ -144,4 +156,8 @@ impl Backend {
             Self::Native(n) => n.kill_all(),
         }
     }
+}
+
+fn native_by_choice() -> bool {
+    std::env::var_os("DESK_NATIVE_SESSIONS").is_some_and(|v| v == "1")
 }

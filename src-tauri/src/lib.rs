@@ -46,6 +46,8 @@ struct Bootstrap {
     home: String,
     /// Sessions outlive desk (tmux); false on Windows, where they end with it.
     persistent: bool,
+    /// macOS or Linux without tmux: native sessions until it is installed.
+    tmux_missing: bool,
 }
 
 #[derive(serde::Serialize)]
@@ -61,6 +63,7 @@ fn bootstrap(app: State<App>) -> Bootstrap {
         layout: layout::load(&app.layout_path),
         sessions: app.sessions.list(),
         persistent: app.sessions.persistent(),
+        tmux_missing: app.sessions.tmux_missing(),
         states: state_watch::read_all(&app.hooks.state_dir),
         home: env::home().display().to_string(),
     }
