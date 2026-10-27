@@ -29,7 +29,8 @@
   zamiana, zamknięcie panelu) i systemowe (Wytnij, Pisownia, Mowa). Kafelki układa desk, więc
   oba zniknęły. Programy, które obsługują mysz (vim, htop), dalej dostają prawy klik. Działające
   sesje dostają nowe ustawienie przy starcie desk. Menu tmuxa można włączyć z powrotem w Opcje →
-  Ogólne („Menu tmuxa pod prawym klikiem w terminalu”).
+  Ogólne („Menu tmuxa pod prawym klikiem w terminalu”). Włączone zostaje otwarte po puszczeniu
+  przycisku i przy ruchu myszy, a pozycję wybiera się kliknięciem.
 
 ## 0.1.12 (2026-10-27)
 
