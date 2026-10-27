@@ -1,6 +1,6 @@
 # Zmiany
 
-## Niewydane
+## 0.1.13 (2026-10-27)
 
 - **Zamykanie kafelka to ⌘Q, a zabijanie sesji ⌘⇧Q** (Ctrl⇧Q i Ctrl⇧⌫ na Windows i Linux).
   ⌘Z znów cofa w polach tekstowych. ⌘Q nie zamyka już desk: do tego służy menu desk › Quit desk.
