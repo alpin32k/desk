@@ -1,6 +1,6 @@
 # Zmiany
 
-## Niewydane
+## 0.1.10 (2026-10-27)
 
 - **Nazwy kafelków.** ✎ w nagłówku albo prawy klik na tytule pozwala nadać kafelkowi własną
   nazwę, np. „logi API”. Jest widoczna w nagłówku i na mini kartach, a desk ją pamięta. Pusta
