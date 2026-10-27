@@ -23,8 +23,9 @@ set -g set-clipboard on
 set -g window-size latest
 set -g aggressive-resize on
 set -g remain-on-exit off
-# Right click goes to a program that uses the mouse (vim...), never to tmux's
-# menus (split, swap, kill...): desk lays out its tiles itself.
+# Right click goes to a program that uses the mouse (vim...), not to tmux's
+# menus (split, swap, kill...): desk lays out its tiles itself. Options can
+# turn them on: tmux's own bindings are then appended below.
 bind -n MouseDown3Pane if -F -t = \"#{mouse_any_flag}\" { select-pane -t = ; send-keys -M }
 unbind -n M-MouseDown3Pane
 unbind -n MouseDown3Status
@@ -32,6 +33,16 @@ unbind -n M-MouseDown3Status
 unbind -n MouseDown3StatusLeft
 unbind -n M-MouseDown3StatusLeft
 ";
+
+/// The `list-keys` lines that bind a right click (`bind-key -T root
+/// MouseDown3Pane ...`), each one a command `source-file` takes back.
+fn right_click_bindings(list_keys: &str) -> String {
+    list_keys
+        .lines()
+        .filter(|l| l.split_whitespace().nth(3).is_some_and(|k| k.contains("MouseDown3")))
+        .map(|l| format!("{l}\n"))
+        .collect()
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -137,11 +148,28 @@ impl Tmux {
         .unwrap_or_default()
     }
 
-    /// A server still running from an older desk (sessions outlive it) keeps
-    /// the config it started with: give it this one.
-    pub fn reload_config(&self) {
+    /// Write the config, with tmux's right-click menus when `menu` (Options),
+    /// and give it to the running server: one from an older desk (sessions
+    /// outlive it) keeps the config it started with.
+    pub fn reload_config(&self, menu: bool) {
+        let mut text = CONF.to_string();
+        if menu {
+            text += &self.default_menus();
+        }
+        if std::fs::write(&self.conf, text).is_err() {
+            return;
+        }
         let conf = self.conf.display().to_string();
         let _ = self.run(&["source-file", &conf]); // no server yet: it starts with it
+    }
+
+    /// tmux's own right-click bindings, from a throwaway server without a config.
+    fn default_menus(&self) -> String {
+        let out = Command::new(&self.bin)
+            .args(["-f", "/dev/null", "-L", "desk-defaults", "list-keys", "-T", "root"])
+            .output();
+        out.map(|o| right_click_bindings(&String::from_utf8_lossy(&o.stdout)))
+            .unwrap_or_default()
     }
 
     /// Drop variables a server started by an older desk took from whatever
@@ -354,6 +382,21 @@ mod tests {
     }
 
     #[test]
+    fn right_click_bindings_are_picked_from_list_keys() {
+        let keys = "bind-key -T root MouseDown1Pane select-pane -t = \\; send-keys -M
+bind-key -T root MouseDown3Pane            if-shell -F -t = \"#{mouse_any_flag}\" { display-menu x }
+bind-key -T root M-MouseDown3Status        display-menu -T y
+bind-key -T root WheelUpPane               send-keys -M
+";
+        assert_eq!(
+            right_click_bindings(keys),
+            "bind-key -T root MouseDown3Pane            if-shell -F -t = \"#{mouse_any_flag}\" { display-menu x }
+bind-key -T root M-MouseDown3Status        display-menu -T y
+"
+        );
+    }
+
+    #[test]
     fn same_name_different_path_differs() {
         assert_ne!(slug(Path::new("/a/app")), slug(Path::new("/b/app")));
         // Collided with the old 16-bit suffix.
@@ -493,7 +536,12 @@ mod tests {
         assert!(!right_click(&t).contains("display-menu"), "{}", right_click(&t));
         t.run(&["unbind", "-n", "MouseDown3Pane"]).unwrap();
         t.run(&["bind", "-n", "MouseDown3Pane", "display-menu", "x", "", ""]).unwrap();
-        t.reload_config();
+        t.reload_config(false);
+        assert!(!right_click(&t).contains("display-menu"), "{}", right_click(&t));
+        // ...and comes back when turned on in Options, then goes again.
+        t.reload_config(true);
+        assert!(right_click(&t).contains("Horizontal Split"), "{}", right_click(&t));
+        t.reload_config(false);
         assert!(!right_click(&t).contains("display-menu"), "{}", right_click(&t));
         let _ = t.run(&["kill-server"]);
     }

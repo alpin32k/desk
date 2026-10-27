@@ -42,6 +42,9 @@ pub struct Layout {
     pub minimized: Vec<String>,
     /// Names given to tiles by hand, by session key.
     pub titles: std::collections::BTreeMap<String, String>,
+    /// A right click in a terminal opens tmux's menu (split, swap, kill...)
+    /// when the program in it does not take the mouse.
+    pub tmux_menu: bool,
 }
 
 impl Default for Layout {
@@ -63,6 +66,7 @@ impl Default for Layout {
             font_size: 11.5,
             minimized: Vec::new(),
             titles: Default::default(),
+            tmux_menu: false,
         }
     }
 }

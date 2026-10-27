@@ -145,6 +145,10 @@ export class App {
         this.layout.autoLayout = on;
         this.changed();
       },
+      setTmuxMenu: (on) => {
+        this.layout.tmuxMenu = on;
+        this.save();
+      },
       setNotifications: (on) => {
         this.layout.notifications = on;
         this.save();
@@ -215,6 +219,7 @@ export class App {
       fontSize: boot.layout.fontSize || DEFAULT_FONT_SIZE,
       minimized: boot.layout.minimized ?? [],
       titles: boot.layout.titles ?? {},
+      tmuxMenu: boot.layout.tmuxMenu ?? false,
       lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length),
     };
     this.applyTheme();

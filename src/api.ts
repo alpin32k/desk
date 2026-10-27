@@ -35,6 +35,8 @@ export interface Layout {
   minimized: string[];
   /** Names given to tiles by hand, by session key. */
   titles: Record<string, string>;
+  /** A right click in a terminal opens tmux's menu (split, swap, kill...). */
+  tmuxMenu: boolean;
 }
 
 /** A newer desk release. */
