@@ -27,6 +27,7 @@ export interface SettingsContext {
   /** Ask GitHub for a newer desk now. */
   checkUpdate: () => Promise<void>;
   setNotifications: (on: boolean) => void;
+  setTmuxMenu: (on: boolean) => void;
   toggleAutostart: (path: string) => void;
   addFolder: () => Promise<void>;
   removeFolder: (path: string) => void;
@@ -157,6 +158,7 @@ export class Settings {
       <label class="line"><input type="checkbox" data-k="auto-layout" ${layout.autoLayout ? "checked" : ""}/> Układ automatyczny <span class="dim">(kolumny według otwartych projektów, sesji i rozmiaru okna)</span></label>
       <label class="line">Kolumny <input type="number" min="1" max="8" value="${layout.lanes.length}" data-k="lanes" ${layout.autoLayout ? "disabled" : ""}/></label>
       <label class="line"><input type="checkbox" data-k="notify" ${layout.notifications ? "checked" : ""}/> Powiadomienie macOS, gdy sesja czeka na ciebie</label>
+      <label class="line"><input type="checkbox" data-k="tmux-menu" ${layout.tmuxMenu ? "checked" : ""}/> Menu tmuxa pod prawym klikiem w terminalu <span class="dim">(podział, zamiana, zamknięcie panelu)</span></label>
       <label class="line">Czcionka terminali <input type="number" min="8" max="24" step="0.5" value="${layout.fontSize}" data-k="font" /> px <span class="dim">(${keysIn("⌘= większa, ⌘- mniejsza, ⌘0 zwykła")})</span></label>
       <label class="line">Strony poza desk (↗, ⌥klik) <select data-k="browser">${[
         ["auto", "Brave, a gdy go nie ma Chrome"],
@@ -331,6 +333,9 @@ export class Settings {
     });
     box.querySelector<HTMLInputElement>('[data-k="notify"]')!.addEventListener("change", (e) => {
       this.ctx.setNotifications((e.target as HTMLInputElement).checked);
+    });
+    box.querySelector<HTMLInputElement>('[data-k="tmux-menu"]')!.addEventListener("change", (e) => {
+      this.ctx.setTmuxMenu((e.target as HTMLInputElement).checked);
     });
     box.querySelectorAll<HTMLInputElement>("[data-auto]").forEach((cb) =>
       cb.addEventListener("change", () => this.ctx.toggleAutostart(cb.dataset.auto!)),

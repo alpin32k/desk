@@ -47,6 +47,8 @@ export interface Layout {
   dropdownAnimation: number;
   /** desk's shortcuts changed in Options, by binding id (keys.ts). */
   keys: Record<string, string>;
+  /** A right click in a terminal opens tmux's menu (split, swap, kill...). */
+  tmuxMenu: boolean;
 }
 
 /** A newer desk release. */

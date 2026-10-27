@@ -54,6 +54,9 @@ pub struct Layout {
     pub dropdown_animation: u32,
     /// desk's shortcuts changed in Options, by binding id (src/keys.ts).
     pub keys: std::collections::BTreeMap<String, String>,
+    /// A right click in a terminal opens tmux's menu (split, swap, kill...)
+    /// when the program in it does not take the mouse.
+    pub tmux_menu: bool,
 }
 
 impl Default for Layout {
@@ -82,6 +85,7 @@ impl Default for Layout {
             dropdown_hotkey: crate::dropdown::DEFAULT_HOTKEY.into(),
             dropdown_animation: 200,
             keys: Default::default(),
+            tmux_menu: false,
         }
     }
 }
