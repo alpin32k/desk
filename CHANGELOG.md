@@ -20,6 +20,10 @@
   domyślny skrót to Ctrl+` i jest wyłączony. W czasie blokady skrót nic nie robi.
 - Esc zamyka Opcje także wtedy, gdy fokus jest w terminalu.
 - Dolny pasek: skróty, które się nie mieszczą, znikają w całości, a liczniki sesji zostają.
+- **Prawy klik w terminalu nie otwiera już menu.** Wyskakiwały dwa naraz: menu tmuxa (podział,
+  zamiana, zamknięcie panelu) i systemowe (Wytnij, Pisownia, Mowa). Kafelki układa desk, więc
+  oba zniknęły. Programy, które obsługują mysz (vim, htop), dalej dostają prawy klik. Działające
+  sesje dostają nowe ustawienie przy starcie desk.
 
 ## 0.1.12 (2026-10-27)
 

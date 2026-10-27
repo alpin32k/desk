@@ -270,6 +270,9 @@ export class Tile {
   /** Open the terminal and attach to tmux; call once the element is in the DOM. */
   async start(): Promise<void> {
     this.term.open(this.body);
+    // No system menu (Cut, Spelling, Speech...) over a terminal: right click
+    // belongs to the program in it.
+    this.body.addEventListener("contextmenu", (e) => e.preventDefault());
     // The textarea exists only after open(); clicking a terminal makes its tile active.
     this.term.textarea?.addEventListener("focus", () => this.onAction(this, "focus"));
     this.term.onWriteParsed(() => {

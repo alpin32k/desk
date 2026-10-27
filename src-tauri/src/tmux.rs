@@ -23,6 +23,14 @@ set -g set-clipboard on
 set -g window-size latest
 set -g aggressive-resize on
 set -g remain-on-exit off
+# Right click goes to a program that uses the mouse (vim...), never to tmux's
+# menus (split, swap, kill...): desk lays out its tiles itself.
+bind -n MouseDown3Pane if -F -t = \"#{mouse_any_flag}\" { select-pane -t = ; send-keys -M }
+unbind -n M-MouseDown3Pane
+unbind -n MouseDown3Status
+unbind -n M-MouseDown3Status
+unbind -n MouseDown3StatusLeft
+unbind -n M-MouseDown3StatusLeft
 ";
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -127,6 +135,13 @@ impl Tmux {
         ])
         .map(|s| parse_sessions(&s))
         .unwrap_or_default()
+    }
+
+    /// A server still running from an older desk (sessions outlive it) keeps
+    /// the config it started with: give it this one.
+    pub fn reload_config(&self) {
+        let conf = self.conf.display().to_string();
+        let _ = self.run(&["source-file", &conf]); // no server yet: it starts with it
     }
 
     /// Drop variables a server started by an older desk took from whatever
@@ -472,6 +487,14 @@ mod tests {
             "{env}"
         );
         assert!(env.contains("KEEP_ME=1"));
+
+        // Right click: tmux's menu is gone, also from a server started before.
+        let right_click = |t: &Tmux| t.run(&["list-keys", "-T", "root"]).unwrap();
+        assert!(!right_click(&t).contains("display-menu"), "{}", right_click(&t));
+        t.run(&["unbind", "-n", "MouseDown3Pane"]).unwrap();
+        t.run(&["bind", "-n", "MouseDown3Pane", "display-menu", "x", "", ""]).unwrap();
+        t.reload_config();
+        assert!(!right_click(&t).contains("display-menu"), "{}", right_click(&t));
         let _ = t.run(&["kill-server"]);
     }
 }
