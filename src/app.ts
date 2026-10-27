@@ -75,6 +75,8 @@ export class App {
   /** With the side panel open: the other sessions as mini cards, left of the active one. */
   private rail: HTMLElement;
   private top: HTMLElement;
+  /** Above a fullscreen tile: the open sessions and their ⌘1–9. */
+  private strip: HTMLElement;
   private footer: HTMLElement;
   private palette: Palette;
   private settings: Settings;
@@ -83,16 +85,19 @@ export class App {
     document.documentElement.dataset.platform = PLATFORM; // CSS: room for the macOS traffic lights
     root.innerHTML = `
       <div class="top" data-tauri-drag-region></div>
-      <div class="middle"><aside class="rail" hidden></aside><main class="grid"></main></div>
+      <div class="middle"><aside class="rail" hidden></aside><div class="stage"><nav class="strip" hidden></nav><main class="grid"></main></div></div>
       <footer class="bottom"></footer>`;
     this.top = root.querySelector(".top")!;
     this.grid = root.querySelector(".grid")!;
     // Opening, closing or resizing the panel changes the grid's width: lay out again.
     this.rail = root.querySelector(".rail")!;
-    this.rail.addEventListener("click", (e) => {
-      const key = (e.target as HTMLElement).closest<HTMLElement>("[data-key]")?.dataset.key;
-      if (key) this.setActive(key, true);
-    });
+    this.strip = root.querySelector(".strip")!;
+    for (const el of [this.rail, this.strip]) {
+      el.addEventListener("click", (e) => {
+        const key = (e.target as HTMLElement).closest<HTMLElement>("[data-key]")?.dataset.key;
+        if (key) this.setActive(key, true);
+      });
+    }
     this.side = new Side(() => this.layout && this.render(), {
       project: () => (this.active ? this.projectOf(this.active) : null),
       insert: (text) => {
@@ -511,7 +516,25 @@ export class App {
     this.grid.classList.toggle("has-full", this.fullscreen !== null);
     for (const t of this.tiles.values()) t.el.classList.toggle("full", t.key === this.fullscreen);
     if (target) this.setActive(target, true);
+    this.renderStrip();
     this.fitAll();
+  }
+
+  /** One tab per session, in ⌘1–9 order; the fullscreen one stands out. */
+  private renderStrip(): void {
+    const tiles = L.flatten(this.layout.lanes)
+      .map((k) => this.tiles.get(k))
+      .filter((t): t is Tile => t !== undefined);
+    this.strip.hidden = this.fullscreen === null || tiles.length < 2;
+    if (this.strip.hidden) return this.strip.replaceChildren();
+    this.strip.innerHTML = tiles
+      .map((t) => {
+        const s = t.summary();
+        return `<button class="strip-tab state-${t.state}${t.key === this.fullscreen ? " sel" : ""}" data-key="${escapeHtml(t.key)}" title="${escapeHtml(t.path)}" style="--proj: ${projectColor(this.projectOf(t.key), this.layout.colors)}"><span class="dot"></span><b>${escapeHtml(s.name)}</b> <span class="dim">${escapeHtml(s.label)}</span>${
+          t.index > 0 && t.index < 10 ? `<span class="strip-idx">${shortcut(`⌘${t.index}`)}</span>` : ""
+        }</button>`;
+      })
+      .join("");
   }
 
   // ---- layout ------------------------------------------------------------
@@ -839,6 +862,7 @@ export class App {
   }
 
   private renderChrome(): void {
+    this.renderStrip();
     const states = [...this.tiles.values()].map((t) => t.state);
     const count = (s: string) => states.filter((x) => x === s).length;
     const waiting = count("waiting");

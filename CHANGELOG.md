@@ -1,5 +1,11 @@
 # Zmiany
 
+## Niewydane
+
+- **Zakładki nad kafelkiem na pełnym ekranie (⌘E).** Wąski pasek pokazuje otwarte sesje w kolejności
+  ⌘1–9: kropka stanu, projekt, rodzaj sesji i skrót. Bieżąca ma kolor projektu, a klik w inną
+  przełącza na nią. Przy jednej sesji paska nie ma.
+
 ## 0.1.12 (2026-10-27)
 
 - **Blokada zasłania też Dock i pasek menu na drugim monitorze.** Zasłona leżała pod nimi, więc
