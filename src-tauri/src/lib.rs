@@ -651,7 +651,7 @@ mod acl_tests {
     use tauri::webview::InvokeRequest;
     use tauri::{WebviewUrl, WebviewWindowBuilder};
 
-    fn call(label: &str, url: &str) -> Result<String, String> {
+    fn call(label: &str, url: &str, cmd: &str) -> Result<String, String> {
         let app = mock_builder()
             .manage(super::lock::Lock::default())
             .invoke_handler(tauri::generate_handler![super::is_locked])
@@ -661,11 +661,11 @@ mod acl_tests {
         let w = WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url.clone()))
             .build()
             .unwrap();
-        invoke(&w, url)
+        invoke(&w, url, cmd)
     }
 
     /// The side panel: a second webview inside the main window.
-    fn call_panel(url: &str) -> Result<String, String> {
+    fn call_panel(url: &str, cmd: &str) -> Result<String, String> {
         let app = mock_builder()
             .manage(super::lock::Lock::default())
             .invoke_handler(tauri::generate_handler![super::is_locked])
@@ -688,7 +688,7 @@ mod acl_tests {
                 tauri::LogicalSize::new(100.0, 100.0),
             )
             .unwrap();
-        invoke(&Panel(panel), url)
+        invoke(&Panel(panel), url, cmd)
     }
 
     struct Panel(tauri::Webview<tauri::test::MockRuntime>);
@@ -701,11 +701,12 @@ mod acl_tests {
     fn invoke<W: AsRef<tauri::Webview<tauri::test::MockRuntime>>>(
         w: &W,
         url: url::Url,
+        cmd: &str,
     ) -> Result<String, String> {
         get_ipc_response(
             w,
             InvokeRequest {
-                cmd: "is_locked".into(),
+                cmd: cmd.into(),
                 callback: CallbackFn(0),
                 error: CallbackFn(1),
                 url,
@@ -720,25 +721,41 @@ mod acl_tests {
 
     /// The preview window loads untrusted pages: none of desk's commands
     /// (pty_write would type into a terminal) may be reachable from it.
+    /// The app's own origin: tauri://localhost, http://tauri.localhost on Windows.
+    const LOCAL: &str = if cfg!(windows) {
+        "http://tauri.localhost"
+    } else {
+        "tauri://localhost"
+    };
+
+    /// Pages that are not desk's: a previewed file, a web page.
+    const UNTRUSTED: [&str; 2] = ["deskpreview://localhost/t/mock.html", "https://example.com/"];
+
     #[test]
     fn only_the_main_window_can_call_desk_commands() {
-        // The app's own origin: tauri://localhost, http://tauri.localhost on Windows.
-        let local = if cfg!(windows) {
-            "http://tauri.localhost"
-        } else {
-            "tauri://localhost"
-        };
-        assert!(call("main", local).is_ok());
+        assert!(call("main", LOCAL, "is_locked").is_ok());
         // Granted by webview, not window: the panel shares the main window.
-        assert!(call_panel(local).is_err());
-        for url in [
-            "deskpreview://localhost/t/mock.html",
-            "https://example.com/",
-        ] {
-            let denied = call("preview", url);
+        assert!(call_panel(LOCAL, "is_locked").is_err());
+        for url in UNTRUSTED {
+            let denied = call("preview", url, "is_locked");
             assert!(denied.is_err(), "{url}: {denied:?}");
-            let denied = call_panel(url);
+            let denied = call_panel(url, "is_locked");
             assert!(denied.is_err(), "panel {url}: {denied:?}");
+        }
+    }
+
+    /// dropdown_apply registers a global shortcut (a key taken from every
+    /// app): the ACL lets only desk's own page ask for it.
+    #[test]
+    fn only_the_main_window_can_set_the_dropdown_shortcut() {
+        let denied = |r: Result<String, String>| r.is_err_and(|e| e.contains("not allowed"));
+        // Past the ACL (this mock app has no handler for it, so "not found").
+        let main = call("main", LOCAL, "dropdown_apply");
+        assert!(main.as_ref().is_err_and(|e| e.contains("not found")), "{main:?}");
+        assert!(denied(call_panel(LOCAL, "dropdown_apply")));
+        for url in UNTRUSTED {
+            assert!(denied(call("preview", url, "dropdown_apply")), "{url}");
+            assert!(denied(call_panel(url, "dropdown_apply")), "panel {url}");
         }
     }
 }
