@@ -35,12 +35,14 @@ unbind -n M-MouseDown3StatusLeft
 ";
 
 /// The `list-keys` lines that bind a right click (`bind-key -T root
-/// MouseDown3Pane ...`), each one a command `source-file` takes back.
+/// MouseDown3Pane ...`), each one a command `source-file` takes back. Their
+/// menus get `-O`: tmux's own close on the first mouse move without a button
+/// held, and the terminal reports moves while a menu is up.
 fn right_click_bindings(list_keys: &str) -> String {
     list_keys
         .lines()
         .filter(|l| l.split_whitespace().nth(3).is_some_and(|k| k.contains("MouseDown3")))
-        .map(|l| format!("{l}\n"))
+        .map(|l| format!("{}\n", l.replace("display-menu ", "display-menu -O ")))
         .collect()
 }
 
@@ -390,8 +392,8 @@ bind-key -T root WheelUpPane               send-keys -M
 ";
         assert_eq!(
             right_click_bindings(keys),
-            "bind-key -T root MouseDown3Pane            if-shell -F -t = \"#{mouse_any_flag}\" { display-menu x }
-bind-key -T root M-MouseDown3Status        display-menu -T y
+            "bind-key -T root MouseDown3Pane            if-shell -F -t = \"#{mouse_any_flag}\" { display-menu -O x }
+bind-key -T root M-MouseDown3Status        display-menu -O -T y
 "
         );
     }
@@ -541,6 +543,7 @@ bind-key -T root M-MouseDown3Status        display-menu -T y
         // ...and comes back when turned on in Options, then goes again.
         t.reload_config(true);
         assert!(right_click(&t).contains("Horizontal Split"), "{}", right_click(&t));
+        assert!(!right_click(&t).contains("display-menu -T"), "{}", right_click(&t));
         t.reload_config(false);
         assert!(!right_click(&t).contains("display-menu"), "{}", right_click(&t));
         let _ = t.run(&["kill-server"]);
