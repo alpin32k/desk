@@ -68,17 +68,15 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+      # Notes: the tag's section of CHANGELOG.md, then how to install.
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          sh .github/release-notes.sh "$GITHUB_REF_NAME" > notes.md
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "desk $GITHUB_REF_NAME" \
-            --notes-file - $(find dist -type f) <<'NOTES'
-          macOS (Apple Silicon): `desk_*_aarch64.dmg`. The app is not signed: after copying it to
-          Applications run `xattr -dr com.apple.quarantine /Applications/desk.app` once.
-          Linux: `.deb` or `.AppImage`. Requires tmux.
-          Windows: `desk_*_x64-setup.exe`. Sessions run without tmux and end when desk closes.
-          NOTES
+            --notes-file notes.md $(find dist -type f)
