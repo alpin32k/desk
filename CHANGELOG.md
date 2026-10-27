@@ -5,6 +5,8 @@
 - **Zamykanie kafelka to ⌘Q, a zabijanie sesji ⌘⇧Q** (Ctrl⇧Q i Ctrl⇧⌫ na Windows i Linux).
   ⌘Z znów cofa w polach tekstowych. ⌘Q nie zamyka już desk: do tego służy menu desk › Quit desk.
   desk przechwytuje ⌘⇧Q, zanim zrobi to macOS, więc skrót nie wylogowuje z systemu.
+- **Okno pamięta swoje miejsce.** Otwiera się na tym samym monitorze, w tym samym miejscu
+  i rozmiarze. Gdy tego monitora nie ma, okno otwiera się domyślnie.
 
 ## 0.1.12 (2026-10-27)
 

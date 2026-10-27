@@ -20,6 +20,7 @@ pub mod project;
 pub mod pty;
 pub mod state_watch;
 pub mod tmux;
+mod window_place;
 pub mod update;
 pub mod usage;
 
@@ -516,6 +517,9 @@ pub fn run() {
             app.manage(lock::Lock::default());
             #[cfg(target_os = "macos")]
             mac_keys::install(app.handle());
+            if let Some(w) = app.get_webview_window("main") {
+                window_place::restore(&w, &window_place::file(&support));
+            }
             app.manage(AppCoffee(coffee::Coffee::new(&support)));
             coffee::spawn_guard(app.handle().clone());
             app.manage(App {
@@ -570,7 +574,13 @@ pub fn run() {
             create_project,
         ])
         .on_window_event(|window, event| {
-            if !window.state::<lock::Lock>().is_locked() || window.label() != "main" {
+            if window.label() != "main" {
+                return;
+            }
+            if matches!(event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_)) {
+                window_place::save_soon(window.app_handle(), window_place::file(&env::support_dir()));
+            }
+            if !window.state::<lock::Lock>().is_locked() {
                 return;
             }
             match event {
