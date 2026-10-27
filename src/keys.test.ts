@@ -22,6 +22,7 @@ describe("actionFor", () => {
     expect(mac(k("3"))).toEqual({ type: "focus", index: 2 });
     expect(mac(k("e"))).toEqual({ type: "fullscreen" });
     expect(mac(k("Enter"))).toEqual({ type: "fullscreen" });
+    expect(mac(k("j"))).toEqual({ type: "minimize" });
     expect(mac(k("Escape"))).toEqual({ type: "exitFullscreen" });
     expect(mac(k("k"))).toEqual({ type: "coffee" });
     expect(mac(k("b"))).toEqual({ type: "lock" });

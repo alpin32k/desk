@@ -213,6 +213,8 @@ export class App {
       theme: boot.layout.theme ?? "desk",
       browser: boot.layout.browser ?? "auto",
       fontSize: boot.layout.fontSize || DEFAULT_FONT_SIZE,
+      minimized: boot.layout.minimized ?? [],
+      titles: boot.layout.titles ?? {},
       lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length),
     };
     this.applyTheme();
@@ -265,6 +267,8 @@ export class App {
       if (this.tiles.has(key)) return null; // opened meanwhile (startup restore vs palette)
       const tile = new Tile(spec, slug, (t, a) => void this.onTileAction(t, a));
       tile.detail = this.layout.runs[key] ?? null;
+      tile.setName(this.layout.titles[key] ?? null);
+      tile.onRename = (name) => this.renameTile(key, name);
       tile.chat = spec.path === this.chatPath;
       // One color per project (shared by its agents and sub-sessions), distinct from other projects.
       const taken = [...this.tiles.values()]
@@ -397,16 +401,23 @@ export class App {
     const slug = tile?.slug ?? (await api.listSessions()).find((s) => keyOf(s) === key)?.slug;
     if (slug) await api.killSession(slug).catch((err) => toast(String(err)));
     this.running.delete(key);
-    if (this.layout.runs[key] || this.layout.cards[key]) {
+    if (this.layout.runs[key] || this.layout.cards[key] || this.layout.titles[key] || this.layout.minimized.includes(key)) {
       delete this.layout.runs[key];
       delete this.layout.cards[key];
+      delete this.layout.titles[key];
+      this.layout.minimized = this.layout.minimized.filter((k) => k !== key);
       this.save();
     }
     this.palette.refresh();
   }
 
   private async onTileAction(tile: Tile, action: TileAction): Promise<void> {
-    if (action === "focus") return this.setActive(tile.key, false);
+    if (action === "focus") {
+      // A click on a folded tile's header unfolds it.
+      if (tile.isMinimized) this.toggleMinimized(tile.key);
+      return this.setActive(tile.key, false);
+    }
+    if (action === "minimize") return this.toggleMinimized(tile.key);
     if (action === "close") return this.closeTile(tile.key);
     if (action === "kill") return this.killSession(tile.key);
     if (action === "fullscreen") return this.toggleFullscreen(tile.key);
@@ -463,11 +474,39 @@ export class App {
 
   private focusIndex(i: number): void {
     const key = L.flatten(this.layout.lanes)[i];
-    if (key) this.setActive(key, true);
+    if (!key) return;
+    if (this.tiles.get(key)?.isMinimized) this.toggleMinimized(key);
+    this.setActive(key, true);
+  }
+
+  /** A name given by hand ("" clears it): kept in the layout, shown in the header and the rail. */
+  private renameTile(key: string, name: string): void {
+    const tile = this.tiles.get(key);
+    if (name) this.layout.titles[key] = name;
+    else delete this.layout.titles[key];
+    tile?.setName(name);
+    this.save();
+    this.render();
+  }
+
+  /** Fold a tile to its header (a terminal that only prints logs), or unfold it. */
+  private toggleMinimized(key?: string): void {
+    const target = key ?? this.active;
+    if (!target || !this.tiles.has(target)) return;
+    const on = !this.layout.minimized.includes(target);
+    this.layout.minimized = on ? [...this.layout.minimized, target] : this.layout.minimized.filter((k) => k !== target);
+    if (on && this.fullscreen === target) this.toggleFullscreen(target);
+    this.save();
+    this.render();
   }
 
   private toggleFullscreen(key?: string): void {
     const target = key ?? this.active;
+    if (target && this.fullscreen !== target && this.layout.minimized.includes(target)) {
+      this.layout.minimized = this.layout.minimized.filter((k) => k !== target);
+      this.save();
+      this.render();
+    }
     this.fullscreen = !target || this.fullscreen === target ? null : target;
     this.grid.classList.toggle("has-full", this.fullscreen !== null);
     for (const t of this.tiles.values()) t.el.classList.toggle("full", t.key === this.fullscreen);
@@ -504,13 +543,19 @@ export class App {
       for (const keys of L.groups(open, this.projectOf)) {
         const card = this.card(this.projectOf(keys[0]));
         const cardBody = card.querySelector<HTMLElement>(".card-body")!;
+        let unfolded = 0;
         for (const k of keys) {
           const t = this.tiles.get(k)!;
           cardBody.appendChild(t.el);
           t.update({ grouped: keys.length > 1 });
+          // The one session in the middle (side panel open) always shows.
+          const folded = k !== shown && this.layout.minimized.includes(k);
+          t.setMinimized(folded);
+          if (!folded) unfolded++;
         }
         card.classList.toggle("multi", keys.length > 1);
-        card.style.flexGrow = String(keys.length);
+        // Folded tiles take only their header; a card of folded tiles too.
+        card.style.flex = unfolded ? `${unfolded} 1 0` : "none";
         body.appendChild(card);
       }
       body.classList.toggle("empty", open.length === 0);
@@ -1053,6 +1098,9 @@ export class App {
         break;
       case "fullscreen":
         this.toggleFullscreen();
+        break;
+      case "minimize":
+        this.toggleMinimized();
         break;
       case "exitFullscreen":
         if (this.fullscreen) this.toggleFullscreen(this.fullscreen);

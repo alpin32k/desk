@@ -1,5 +1,17 @@
 # Zmiany
 
+## Niewydane
+
+- **Nazwy kafelków.** ✎ w nagłówku albo prawy klik na tytule pozwala nadać kafelkowi własną
+  nazwę, np. „logi API”. Jest widoczna w nagłówku i na mini kartach, a desk ją pamięta. Pusta
+  nazwa przywraca domyślną.
+- **Zwijanie kafelka (⌘J albo – w nagłówku).** Zostaje sam nagłówek z ostatnią linią wyjścia, na
+  przykład terminal, który tylko wypisuje logi. Sesja działa dalej. ⌘J, klik w nagłówek, ⌘1–9
+  albo ekran pełny go rozwijają. Desk pamięta zwinięte kafelki.
+- **Logowanie z Bitwardenem.** Przeglądarka w panelu nie obsługuje rozszerzeń, więc gdy strona
+  ma pole hasła, na pasku panelu pojawia się „🔑 Zaloguj w Brave (Bitwarden)”. Jedno kliknięcie
+  otwiera ją w Brave albo Chrome, gdzie działa menedżer haseł.
+
 ## 0.1.9 (2026-10-27)
 
 - **tmux przychodzi z desk.** Na macOS i Linuksie bez tmux każda sesja kończyła się błędem

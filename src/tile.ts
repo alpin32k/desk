@@ -24,7 +24,7 @@ const LINK_ROWS = 4;
 
 export type TileState = Exclude<HookState, "exited"> | "shell" | "starting";
 
-export type TileAction = "close" | "kill" | "fullscreen" | "focus" | "color" | "attached" | "sub" | "terminal" | "branch" | "run";
+export type TileAction = "close" | "kill" | "fullscreen" | "minimize" | "focus" | "color" | "attached" | "sub" | "terminal" | "branch" | "run";
 
 /** Terminal colors of the chosen theme (Options); new tiles start with them. */
 let termTheme: ITheme = terminalTheme(themeById(DEFAULT_THEME));
@@ -73,6 +73,10 @@ export class Tile {
   grouped = false;
   /** For a ⌘U session: the command it runs ("pnpm dev"). */
   detail: string | null = null;
+  /** Name given by hand (✎ or right-click on the title), shown instead of the agent. */
+  private customName: string | null = null;
+  /** The user named the tile; "" clears the name. */
+  onRename: (name: string) => void = () => {};
   /** A ⌘R conversation, labelled "rozmowa" instead of the agent. */
   chat = false;
 
@@ -86,6 +90,10 @@ export class Tile {
   private badge: HTMLElement;
   private resizeObs: ResizeObserver;
   private fitQueued = false;
+  /** Folded to its header, which shows the last line of output. */
+  private minimized = false;
+  private peek: HTMLElement;
+  private peekQueued = false;
   private webgl: WebglAddon | null = null;
   private disposed = false;
 
@@ -109,10 +117,13 @@ export class Tile {
         <span class="dot" data-a="color" title="Kolor projektu (kliknij, aby zmienić)"></span>
         <span class="badge"></span>
         <span class="title"></span>
+        <span class="peek"></span>
         <span class="actions">
           <button data-a="sub" title="Druga sesja w tym projekcie (⌘D)">+</button>
           <button data-a="terminal" title="Terminal w tym projekcie (⌘T)">›_</button>
           <button data-a="run" title="Uruchom w tym projekcie, np. dev serwer (⌘U)">▶</button>
+          <button data-a="rename" title="Nazwij kafelek (albo prawy klik na tytule)">✎</button>
+          <button data-a="minimize" title="Zwiń: zostaje nagłówek z ostatnią linią (⌘J)">–</button>
           <button data-a="fullscreen" title="Ekran pełny (⌘E)">⤢</button>
           <button data-a="close" title="Zamknij kafelek, sesja zostaje (⌘Z)">×</button>
           <button data-a="kill" title="Zabij sesję (⌘⇧Z)">⏻</button>
@@ -122,6 +133,7 @@ export class Tile {
     this.badge = this.el.querySelector(".badge")!;
     this.title = this.el.querySelector(".title")!;
     this.body = this.el.querySelector(".term")!;
+    this.peek = this.el.querySelector(".peek")!;
 
     const header = this.el.querySelector("header")!;
     header.addEventListener("dragstart", (e) => {
@@ -132,8 +144,14 @@ export class Tile {
     header.addEventListener("dragend", () => this.el.classList.remove("dragging"));
     header.addEventListener("dblclick", () => this.onAction(this, "fullscreen"));
     header.addEventListener("click", (e) => {
-      const a = (e.target as HTMLElement).closest<HTMLElement>("[data-a]")?.dataset.a as TileAction | undefined;
-      this.onAction(this, a ?? "focus");
+      if (this.renaming) return;
+      const a = (e.target as HTMLElement).closest<HTMLElement>("[data-a]")?.dataset.a;
+      if (a === "rename") return this.rename();
+      this.onAction(this, (a as TileAction | undefined) ?? "focus");
+    });
+    this.title.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      this.rename();
     });
 
     this.term = new Terminal({
@@ -247,6 +265,9 @@ export class Tile {
     this.term.open(this.body);
     // The textarea exists only after open(); clicking a terminal makes its tile active.
     this.term.textarea?.addEventListener("focus", () => this.onAction(this, "focus"));
+    this.term.onWriteParsed(() => {
+      if (this.minimized) this.queuePeek();
+    });
     if (webglBudget > 0) {
       try {
         const gl = new WebglAddon();
@@ -347,6 +368,34 @@ export class Tile {
     this.render();
   }
 
+  get isMinimized(): boolean {
+    return this.minimized;
+  }
+
+  /** Fold the tile to its header (the session keeps running), or unfold it. */
+  setMinimized(on: boolean): void {
+    if (on === this.minimized) return;
+    this.minimized = on;
+    this.el.classList.toggle("minimized", on);
+    const btn = this.el.querySelector<HTMLElement>('[data-a="minimize"]')!;
+    btn.textContent = on ? "▢" : "–";
+    btn.title = shortcuts(on ? "Rozwiń (⌘J)" : "Zwiń: zostaje nagłówek z ostatnią linią (⌘J)");
+    if (on) this.queuePeek();
+    else {
+      this.peek.textContent = "";
+      this.queueFit();
+    }
+  }
+
+  private queuePeek(): void {
+    if (this.peekQueued) return;
+    this.peekQueued = true;
+    requestAnimationFrame(() => {
+      this.peekQueued = false;
+      if (this.minimized && !this.disposed) this.peek.textContent = this.snapshot(1)[0] ?? "";
+    });
+  }
+
   queueFit(): void {
     if (this.fitQueued) return;
     this.fitQueued = true;
@@ -372,7 +421,7 @@ export class Tile {
     const parts = [
       this.grouped
         ? `<b>${escapeHtml(this.label())}</b>`
-        : `<span class="agent">${escapeHtml(this.label())}</span>`,
+        : `<span class="${this.customName ? "named" : "agent"}">${escapeHtml(this.label())}</span>`,
       this.grouped ? "" : `<b>${escapeHtml(this.name)}</b>`,
       this.branch && !this.grouped
         ? `<span class="branch" data-a="branch" title="Zmień branch">${escapeHtml(this.branch)}</span>`
@@ -380,11 +429,52 @@ export class Tile {
       // Only Claude Code reports working/waiting/idle through desk's hooks.
       this.agent === "claude" ? `<span class="state">${STATE_LABEL[this.state]}</span>` : "",
     ].filter(Boolean);
-    this.title.innerHTML = parts.join(`<span class="sep"> · </span>`);
+    if (!this.renaming) this.title.innerHTML = parts.join(`<span class="sep"> · </span>`);
     this.title.title = `${this.agent} · ${this.path}`;
   }
 
+  private renaming = false;
+
+  setName(name: string | null): void {
+    this.customName = name || null;
+    this.render();
+  }
+
+  /** Edit the tile's name in its header: Enter or leaving the field saves, Esc cancels. */
+  rename(): void {
+    if (this.renaming) return;
+    this.renaming = true;
+    const header = this.el.querySelector("header")!;
+    header.draggable = false;
+    const input = document.createElement("input");
+    input.className = "rename";
+    input.spellcheck = false;
+    input.placeholder = "nazwa kafelka, np. logi API";
+    input.value = this.customName ?? "";
+    // Selecting text in the field must not start fullscreen or a drag.
+    for (const type of ["click", "dblclick", "mousedown"]) input.addEventListener(type, (e) => e.stopPropagation());
+    let done = false;
+    const finish = (save: boolean) => {
+      if (done) return;
+      done = true;
+      this.renaming = false;
+      header.draggable = true;
+      if (save) this.onRename(input.value.trim());
+      this.render();
+      this.focus();
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") finish(true);
+      else if (e.key === "Escape") finish(false);
+    });
+    input.addEventListener("blur", () => finish(true));
+    this.title.replaceChildren(input);
+    input.focus();
+    input.select();
+  }
+
   private label(): string {
+    if (this.customName) return this.customName;
     if (this.detail) return `▶ ${this.detail}`;
     if (this.chat) return this.instance > 0 ? `rozmowa #${this.instance + 1}` : "rozmowa";
     return agentLabel(this);

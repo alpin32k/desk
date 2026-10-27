@@ -413,6 +413,12 @@ button:hover {
   color: var(--dim);
 }
 
+/* a name given by hand reads first */
+.tile .named {
+  color: var(--fg);
+  font-weight: 600;
+}
+
 .tile .branch {
   color: var(--accent);
 }
@@ -521,6 +527,46 @@ button:hover {
   50% {
     opacity: 0.25;
   }
+}
+
+/* naming a tile in its header */
+.tile header input.rename {
+  width: 100%;
+  height: 16px;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+/* folded (⌘J): only the header, with the last line of output */
+.tile .peek {
+  display: none;
+}
+
+.tile.minimized {
+  flex: none;
+  min-height: 0;
+}
+
+.tile.minimized .term {
+  display: none;
+}
+
+.tile.minimized .title {
+  flex: 0 1 auto;
+}
+
+.tile.minimized .peek {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--dim);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 /* fullscreen: one tile covers the whole grid */
@@ -1054,6 +1100,14 @@ button.danger {
 
 .side-save.dirty {
   color: var(--waiting);
+}
+
+.side-head .side-login {
+  flex: none;
+  white-space: nowrap;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--fg);
 }
 
 /* ---- theme picker (Options) ---- */

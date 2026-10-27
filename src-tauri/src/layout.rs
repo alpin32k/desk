@@ -38,6 +38,10 @@ pub struct Layout {
     pub browser: String,
     /// Terminal font size in px (⌘= / ⌘- / ⌘0, Options).
     pub font_size: f64,
+    /// Session keys whose tiles are folded to their header (⌘J).
+    pub minimized: Vec<String>,
+    /// Names given to tiles by hand, by session key.
+    pub titles: std::collections::BTreeMap<String, String>,
 }
 
 impl Default for Layout {
@@ -57,6 +61,8 @@ impl Default for Layout {
             theme: "desk".into(),
             browser: "auto".into(),
             font_size: 11.5,
+            minimized: Vec::new(),
+            titles: Default::default(),
         }
     }
 }

@@ -18,6 +18,7 @@ export type Action =
   | { type: "run" }
   | { type: "focus"; index: number }
   | { type: "fullscreen" }
+  | { type: "minimize" }
   | { type: "exitFullscreen" }
   | { type: "settings" }
   | { type: "preview" }
@@ -66,6 +67,8 @@ export function actionFor(e: KeyLike, platform: Platform = PLATFORM): Action | n
       return { type: "fullscreen" };
     case "Escape":
       return { type: "exitFullscreen" };
+    case "j": // zwiń (⌘M zwija całe okno)
+      return { type: "minimize" };
     case "k": // kawa
       return { type: "coffee" };
     case "b": // blokada
@@ -101,6 +104,7 @@ export const HINTS: [string, string][] = [
   ["⌘⇧Z", "zabij"],
   ["⌘1-9", "skok"],
   ["⌘E", "ekran"],
+  ["⌘J", "zwiń"],
   ["⌘K", "kawa"],
   ["⌘B", "blokada"],
   ["⌘O", "opcje"],
