@@ -1,5 +1,12 @@
 # Zmiany
 
+## Niewydane
+
+- **Blokada zasłania też Dock i pasek menu na drugim monitorze.** Zasłona leżała pod nimi, więc
+  dało się kliknąć Dock albo pasek menu i uruchomić inną aplikację. Teraz leży nad nimi i nad
+  menu, ale pod oknem Touch ID, więc to okno widać na każdym monitorze. Zasłony nie znikają też
+  na czas odblokowania.
+
 ## 0.1.11 (2026-10-27)
 
 - **Klikalne ścieżki względne i dokumenty.** Ścieżka taka jak `docs/superpowers/plans/plan.md`,

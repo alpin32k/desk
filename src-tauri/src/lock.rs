@@ -6,7 +6,9 @@
 //! - the window covers the screen (macOS kiosk options also hide the Dock and
 //!   menu bar and disable app switching, Force Quit and log out),
 //! - every other screen goes dark under a window that stays on top, takes the
-//!   clicks and never the focus; screens plugged in while locked get one too,
+//!   clicks and never the focus; screens plugged in while locked get one too.
+//!   On macOS it sits above the Dock and the menu bar and just below the
+//!   Touch ID dialog, which may open on that screen,
 //! - quitting desk or closing its window is refused, the menu shrinks to
 //!   Edit > Copy, and the window comes back to the front if it loses focus
 //!   or gets minimized.
@@ -129,7 +131,10 @@ fn cover_screens(app: &AppHandle, on: bool) {
                     .background_color(tauri::window::Color(11, 13, 16, 255))
                     .build()
                 {
-                    Ok(w) => w,
+                    Ok(w) => {
+                        above_everything(&w);
+                        w
+                    }
                     Err(_) => continue,
                 }
             }
@@ -139,6 +144,30 @@ fn cover_screens(app: &AppHandle, on: bool) {
         let _ = window.set_size(*screen.size());
     }
 }
+
+/// Tauri's always-on-top level is below the Dock and the menu bar, which then
+/// stay clickable on a covered screen. One below the screen saver's level is
+/// above them and above menus, and still under the Touch ID dialog (coreautha
+/// shows it at the screen saver's level), which may open on a covered screen.
+#[cfg(target_os = "macos")]
+fn above_everything(window: &tauri::Window) {
+    use objc2_app_kit::{NSScreenSaverWindowLevel, NSWindow, NSWindowCollectionBehavior as B};
+    let Ok(ptr) = window.ns_window() else {
+        return;
+    };
+    let ptr = ptr as usize;
+    let _ = window.run_on_main_thread(move || {
+        // SAFETY: the NSWindow of a window desk keeps open; used on the main thread.
+        let ns = unsafe { &*(ptr as *const NSWindow) };
+        ns.setLevel(NSScreenSaverWindowLevel - 1);
+        ns.setCollectionBehavior(
+            B::CanJoinAllSpaces | B::Stationary | B::FullScreenAuxiliary | B::IgnoresCycle,
+        );
+    });
+}
+
+#[cfg(not(target_os = "macos"))]
+fn above_everything(_window: &tauri::Window) {}
 
 #[cfg(target_os = "macos")]
 fn kiosk(app: &AppHandle, on: bool) {
