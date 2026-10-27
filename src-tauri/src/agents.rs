@@ -119,13 +119,22 @@ fn is_installed(id: &str, command: &str) -> bool {
 }
 
 /// The install command for `id` when it is a built-in that is not installed.
-fn pending_install(id: &str, command: &str) -> Option<(&'static str, &'static str)> {
+fn pending_install(id: &str, command: &str) -> Install {
     installer(id).filter(|_| !is_installed(id, command))
 }
 
 /// Shell script run in the tmux pane. After the agent exits the pane falls
 /// back to a login shell so the tile stays usable.
 pub fn launch_script(id: &str, command: &str, hooks_settings: &Path) -> String {
+    script(id, command, hooks_settings, pending_install(id, command))
+}
+
+/// An install step: `installer`'s (POSIX sh, PowerShell) commands, or None.
+type Install = Option<(&'static str, &'static str)>;
+
+/// `launch_script`, with the install step given: tests do not depend on
+/// which agents the machine has.
+fn script(id: &str, command: &str, hooks_settings: &Path, install: Install) -> String {
     let shell = shell_quote(&crate::env::user_shell());
     let run = if id == "claude" {
         format!(
@@ -138,7 +147,7 @@ pub fn launch_script(id: &str, command: &str, hooks_settings: &Path) -> String {
     } else {
         resolve_command(command, which)
     };
-    let run = match pending_install(id, command) {
+    let run = match install {
         Some((sh, _)) => install_then_run(id, sh, &run),
         None => run,
     };
@@ -169,12 +178,16 @@ fn install_then_run(id: &str, install: &str, run: &str) -> String {
 /// PowerShell, which stays open after the agent exits, like the tmux pane.
 /// Elsewhere (native sessions for testing) it is the login shell script.
 pub fn launch_argv(id: &str, command: &str, hooks_settings: &Path) -> Vec<String> {
+    argv(id, command, hooks_settings, pending_install(id, command))
+}
+
+fn argv(id: &str, command: &str, hooks_settings: &Path, install: Install) -> Vec<String> {
     let shell = crate::env::user_shell();
     if !cfg!(windows) {
         return vec![
             shell,
             "-lc".into(),
-            launch_script(id, command, hooks_settings),
+            script(id, command, hooks_settings, install),
         ];
     }
     let run = if id == "claude" {
@@ -191,7 +204,7 @@ pub fn launch_argv(id: &str, command: &str, hooks_settings: &Path) -> Vec<String
         let program = which(first).map_or(first.to_string(), |p| p.display().to_string());
         format!("& {}{}", ps_quote(&program), &trimmed[first.len()..])
     };
-    let run = match pending_install(id, command) {
+    let run = match install {
         // Installers add their folder to the user's PATH in the registry.
         Some((_, ps)) => format!(
             "Write-Host {}; {ps}; $env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + \";$HOME\\.local\\bin\"; {run}",
@@ -296,18 +309,23 @@ mod tests {
     #[test]
     fn launch_scripts() {
         let hooks = Path::new("/s/claude-hooks.json");
-        let claude = launch_script("claude", "claude", hooks);
+        let claude = script("claude", "claude", hooks, None);
         assert!(
             claude.contains("--settings '/s/claude-hooks.json'"),
             "{claude}"
         );
         assert!(claude.ends_with(" -l"));
-        assert!(launch_script("shell", "", hooks).starts_with("exec "));
-        let custom = launch_script("mine", "definitely-not-installed-xyz --flag", hooks);
+        assert!(script("shell", "", hooks, None).starts_with("exec "));
+        let custom = script("mine", "definitely-not-installed-xyz --flag", hooks, None);
         assert!(
             custom.starts_with("definitely-not-installed-xyz --flag; exec "),
             "{custom}"
         );
+        // Not installed: the installer runs first, then the same claude line.
+        let install = script("claude", "claude", hooks, installer("claude"));
+        assert!(install.starts_with("/bin/sh -c '"), "{install}");
+        assert!(install.contains("https://claude.ai/install.sh"), "{install}");
+        assert!(install.ends_with(" -l"), "{install}");
     }
 
     #[test]
@@ -364,16 +382,20 @@ mod tests {
     #[cfg(windows)]
     fn windows_sessions_run_in_powershell() {
         let hooks = Path::new(r"C:\desk\claude-hooks.json");
-        let argv = launch_argv("claude", "claude", hooks);
+        let argv = super::argv("claude", "claude", hooks, None);
         assert_eq!(argv[1..4], ["-NoLogo", "-NoExit", "-Command"]);
         assert!(argv[4].starts_with("& '"), "{argv:?}");
         assert!(
             argv[4].ends_with(r"--settings 'C:\desk\claude-hooks.json'"),
             "{argv:?}"
         );
-        assert_eq!(launch_argv("shell", "", hooks)[1..], ["-NoLogo"]);
-        let run = launch_argv("run", "nonexistent-tool-xyz dev", hooks);
+        assert_eq!(super::argv("shell", "", hooks, None)[1..], ["-NoLogo"]);
+        let run = super::argv("run", "nonexistent-tool-xyz dev", hooks, None);
         assert_eq!(run[4], "& 'nonexistent-tool-xyz' dev");
+        let install = super::argv("claude", "claude", hooks, installer("claude"));
+        assert!(install[4].starts_with("Write-Host "), "{install:?}");
+        assert!(install[4].contains("irm https://claude.ai/install.ps1 | iex"), "{install:?}");
+        assert!(install[4].ends_with(r"--settings 'C:\desk\claude-hooks.json'"), "{install:?}");
     }
 
     #[test]
