@@ -1,6 +1,6 @@
 # Zmiany
 
-## Niewydane
+## 0.1.9 (2026-10-27)
 
 - **tmux przychodzi z desk.** Na macOS i Linuksie bez tmux każda sesja kończyła się błędem
   „tmux: No such file or directory”. Teraz tmux jest w aplikacji na macOS i w AppImage, a paczka
