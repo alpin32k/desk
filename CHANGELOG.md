@@ -1,6 +1,6 @@
 # Zmiany
 
-## Niewydane
+## 0.1.11 (2026-10-27)
 
 - **Klikalne ścieżki względne i dokumenty.** Ścieżka taka jak `docs/superpowers/plans/plan.md`,
   którą agent wypisze w terminalu, otwiera się w panelu jako plik projektu kafelka. Do stron,
