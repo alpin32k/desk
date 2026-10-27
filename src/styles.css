@@ -994,8 +994,98 @@ button.danger {
   min-width: 0;
 }
 
-.middle > .grid {
+.middle > .stage {
   flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.stage > .grid {
+  flex: 1 1 0;
+}
+
+/* ---- tabs above a fullscreen tile: the sessions and their ⌘1–9 ---- */
+.strip {
+  flex: none;
+  display: flex;
+  height: 24px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.strip[hidden] {
+  display: none;
+}
+
+.strip-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--dim);
+  font: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.strip-tab:last-child {
+  border-right: 0;
+}
+
+.strip-tab:hover {
+  color: var(--fg);
+}
+
+.strip-tab b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 400;
+}
+
+.strip-tab .dim {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.strip-tab.sel {
+  color: var(--fg);
+  background: var(--panel);
+  border-bottom-color: var(--proj, var(--fg));
+}
+
+.strip-tab.sel b {
+  color: var(--proj, var(--fg));
+  font-weight: 700;
+}
+
+.strip-tab .dot {
+  width: 6px;
+  height: 6px;
+  background: var(--idle);
+}
+
+.strip-tab.state-working .dot {
+  background: var(--working);
+}
+
+.strip-tab.state-waiting .dot {
+  background: var(--waiting);
+}
+
+.strip-idx {
+  flex: none;
+  margin-left: auto;
+  color: var(--dim);
 }
 
 .side {
