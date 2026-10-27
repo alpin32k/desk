@@ -803,6 +803,14 @@ button:hover {
   display: none;
 }
 
+/* The dialog scrolls; nothing in it may shrink to fit (rows of a list
+   with overflow: hidden would squeeze into each other). */
+.settings > *,
+.settings .pane > *,
+.settings .checks > * {
+  flex-shrink: 0;
+}
+
 .settings .shortcut-list {
   display: grid;
   grid-template-columns: max-content 1fr;
