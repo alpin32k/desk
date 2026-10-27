@@ -5,6 +5,7 @@
 
 import { listen } from "@tauri-apps/api/event";
 import { api, type PreviewBounds } from "./api";
+import { keysIn } from "./keys";
 import { PLATFORM, shortcut } from "./platform";
 import { toast } from "./ui";
 import { mention, normalize, rendered } from "./address";
@@ -90,7 +91,7 @@ export class Side {
         <button data-a="attach" title="Dodaj do aktywnej sesji (@ścieżka)">@</button>
         <button data-a="edit" title="Edytuj plik">✎</button>
         <button data-a="external" title="Otwórz w przeglądarce albo w domyślnym programie">↗</button>
-        <button data-a="files" title="Pliki projektu (${shortcut("⌘F")})">☰</button>
+        <button data-a="files" title="Pliki projektu (${keysIn("⌘F")})">☰</button>
         <button data-a="close" title="Zamknij podgląd">×</button>
       </div>
       <div class="side-body"><div class="side-view"><div class="side-empty dim">Kliknij link w terminalu (⌥-klik: przeglądarka) albo wpisz adres powyżej.</div></div></div>`;

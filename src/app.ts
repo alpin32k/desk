@@ -15,13 +15,14 @@ import {
   type Update,
   type Usage,
 } from "./api";
-import { actionFor, hints, type Action } from "./keys";
-import { PLATFORM, shortcut, shortcuts } from "./platform";
+import { actionFor, hints, keysIn, setCustomKeys, type Action } from "./keys";
+import { PLATFORM, shortcut } from "./platform";
 import { Side } from "./side";
 import * as L from "./lanes";
 import { Palette } from "./palette";
 import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
 import { keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
+import { DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
 import { Settings } from "./settings";
 import { applyTheme, terminalTheme, themeById } from "./themes";
 import {
@@ -68,6 +69,8 @@ export class App {
   private coffee: CoffeeStatus = { level: "off", helperInstalled: false, sleepDisabled: false, stoppedBecause: null };
   private fullscreen: string | null = null;
   private locked = false;
+  /** Docked at the top of the screen (⌘`, dropdown.rs). */
+  private docked = false;
   private lockEl: HTMLElement | null = null;
 
   private grid: HTMLElement;
@@ -141,6 +144,31 @@ export class App {
         this.save();
         void this.side.browserChanged();
       },
+      setDropdown: async (change) => {
+        const before = this.layout.dropdownHotkey;
+        Object.assign(this.layout, change);
+        // Rust reads the dropdown options from the file.
+        clearTimeout(this.saveTimer);
+        await this.persist();
+        await api.dropdownApply().catch(async (err) => {
+          toast(`Dropdown: ${err}`, 8000);
+          if (change.dropdownHotkey === undefined) return;
+          // Taken by another app: keep the one that works.
+          this.layout.dropdownHotkey = before;
+          await this.persist();
+          await api.dropdownApply().catch(() => {});
+        });
+        this.renderChrome();
+      },
+      setKey: (id, accelerator) => {
+        const keys = { ...this.layout.keys };
+        if (accelerator) keys[id] = accelerator;
+        else delete keys[id];
+        this.layout.keys = keys;
+        setCustomKeys(keys);
+        this.save();
+        this.renderChrome();
+      },
       setAutoLayout: (on) => {
         this.layout.autoLayout = on;
         this.changed();
@@ -182,6 +210,18 @@ export class App {
     await listen<SessionState>("session-state", (e) => this.onHookState(e.payload));
     await listen<PtyExit>("pty-exit", (e) => void this.onPtyExit(e.payload));
     await listen<CoffeeStatus>("coffee", (e) => this.onCoffeeStopped(e.payload));
+    // Docked at the top of the screen: no traffic lights to make room for.
+    await listen<boolean>("dropdown", (e) => {
+      this.docked = e.payload;
+      document.documentElement.toggleAttribute("data-dropdown", e.payload);
+      this.renderChrome();
+    });
+    // You dragged the dropdown's edge: the next one comes down this tall.
+    await listen<number>("dropdown-height", (e) => {
+      this.layout.dropdownHeight = e.payload;
+      this.save();
+      if (this.settings.isOpen) this.settings.render();
+    });
     this.top.addEventListener("click", (e) => {
       const a = (e.target as HTMLElement).closest<HTMLElement>("[data-coffee]")?.dataset.coffee;
       if (a === "cycle") void this.cycleCoffee();
@@ -215,9 +255,18 @@ export class App {
       fontSize: boot.layout.fontSize || DEFAULT_FONT_SIZE,
       minimized: boot.layout.minimized ?? [],
       titles: boot.layout.titles ?? {},
+      dropdown: boot.layout.dropdown ?? PLATFORM === "mac",
+      dropdownHeight: boot.layout.dropdownHeight || 50,
+      dropdownAutohide: boot.layout.dropdownAutohide ?? true,
+      dropdownHotkey: boot.layout.dropdownHotkey || DEFAULT_HOTKEY(),
+      dropdownAnimation: boot.layout.dropdownAnimation ?? 200,
+      keys: boot.layout.keys ?? {},
       lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length),
     };
+    setCustomKeys(this.layout.keys);
     this.applyTheme();
+    // Another app (iTerm's hotkey window...) may hold ⌘` already.
+    if (this.layout.dropdown) void api.dropdownApply().catch((err) => toast(`Dropdown: ${err}`, 10000));
     setTerminalFontSize(this.layout.fontSize);
 
     window.addEventListener("keydown", (e) => this.onKey(e), true);
@@ -602,7 +651,7 @@ export class App {
     if (card) return card;
     card = document.createElement("div");
     card.className = "card";
-    card.innerHTML = shortcuts(`
+    card.innerHTML = keysIn(`
       <header class="card-head" draggable="true">
         <span class="dot"></span><span class="card-title"></span>
         <span class="actions"><button data-a="sub" title="Kolejna sesja w tym projekcie (⌘D)">+</button><button data-a="terminal" title="Terminal w tym projekcie (⌘T)">›_</button><button data-a="run" title="Uruchom w tym projekcie, np. dev serwer (⌘U)">▶</button></span>
@@ -657,7 +706,7 @@ export class App {
   private laneEl(): HTMLElement {
     const lane = document.createElement("div");
     lane.className = "lane";
-    lane.innerHTML = `<div class="lane-head"></div><div class="lane-body"><div class="hint">${shortcut("⌘P")} — otwórz projekt</div></div>`;
+    lane.innerHTML = `<div class="lane-head"></div><div class="lane-body"><div class="hint">${keysIn("⌘P")} — otwórz projekt</div></div>`;
     const body = lane.querySelector<HTMLElement>(".lane-body")!;
     body.addEventListener("dragover", (e) => {
       if (!e.dataTransfer?.types.includes("text/x-desk-key")) return;
@@ -842,12 +891,19 @@ export class App {
     const states = [...this.tiles.values()].map((t) => t.state);
     const count = (s: string) => states.filter((x) => x === s).length;
     const waiting = count("waiting");
-    this.top.innerHTML = `<span class="brand" data-tauri-drag-region>desk</span><span class="dim" data-tauri-drag-region> · ${this.tiles.size} sessions</span>${
+    // Docked: no traffic lights, so the bar says how to put desk away.
+    const hide = this.docked
+      ? `<span class="dim" data-tauri-drag-region> · </span><span class="dropdown-hint" data-tauri-drag-region title="Skrót zmienisz w Opcje → Skróty"><kbd>${escapeHtml(
+          hotkeyLabel(this.layout.dropdownHotkey || DEFAULT_HOTKEY()),
+        )}</kbd> chowa</span>`
+      : "";
+    this.top.innerHTML = `<span class="brand" data-tauri-drag-region>desk</span>${hide}<span class="dim" data-tauri-drag-region> · ${this.tiles.size} sessions</span>${
       waiting ? `<span class="waiting-pill" data-tauri-drag-region>${waiting} czeka</span>` : ""
-    }<span class="spacer" data-tauri-drag-region></span>${this.updateHtml()}${usageHtml(this.usage, Date.now())}<button class="top-btn" data-top="browser" title="Przeglądarka w panelu obok (${shortcut("⌘W")}); ↗ otwiera stronę w Brave albo Chrome">🌐 przeglądarka</button>${this.coffeeHtml()}`;
+    }<span class="spacer" data-tauri-drag-region></span>${this.updateHtml()}${usageHtml(this.usage, Date.now())}<button class="top-btn" data-top="browser" title="Przeglądarka w panelu obok (${keysIn("⌘W")}); ↗ otwiera stronę w Brave albo Chrome">🌐 przeglądarka</button>${this.coffeeHtml()}`;
     this.footer.innerHTML =
-      hints().map(([k, label]) => `<span><kbd>${k}</kbd> ${escapeHtml(label)}</span>`).join("") +
-      `<span class="spacer"></span><span class="counts"><b>${this.tiles.size}</b> sessions · <span class="c-working">${count("working")} working</span> · <span class="c-waiting">${waiting} waiting</span> · ${count("idle")} idle</span>`;
+      `<span class="hints">${hints()
+        .map(([k, label]) => `<span><kbd>${k}</kbd> ${escapeHtml(label)}</span>`)
+        .join("")}</span><span class="counts"><b>${this.tiles.size}</b> sessions · <span class="c-working">${count("working")} working</span> · <span class="c-waiting">${waiting} waiting</span> · ${count("idle")} idle</span>`;
   }
 
   // ---- updates -----------------------------------------------------------
@@ -956,7 +1012,7 @@ export class App {
       c.sleepDisabled && c.level !== "lid"
         ? `<button class="coffee warn" data-coffee="restore" title="Usypianie po zamknięciu klapki jest wyłączone w systemie, np. po restarcie w trakcie kawy. Kliknij, aby przywrócić.">sen wyłączony · przywróć</button>`
         : "";
-    return `${stray}<button class="coffee ${c.level}" data-coffee="cycle" title="${shortcuts(title)}">${label}</button>`;
+    return `${stray}<button class="coffee ${c.level}" data-coffee="cycle" title="${keysIn(title)}">${label}</button>`;
   }
 
   // ---- lock --------------------------------------------------------------
@@ -1024,6 +1080,7 @@ export class App {
       if (e.key === "Enter" && e.type === "keydown") void this.unlock();
       return;
     }
+    if (this.settings.isRecording) return; // the dropdown's new shortcut
     const action = actionFor(e);
     if (!action) return;
     // In a text field ⌘Z / ⌘⇧Z (Ctrl+Shift+Z) are undo and redo, not close and kill.

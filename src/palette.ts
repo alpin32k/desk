@@ -3,6 +3,7 @@
 import type { AgentInfo, Project } from "./api";
 import { ago, rows, shortPath, type Row } from "./projects";
 import { escapeHtml } from "./tile";
+import { keysIn } from "./keys";
 import { PLATFORM, shortcut } from "./platform";
 
 export interface PaletteContext {
@@ -90,7 +91,7 @@ export class Palette {
     items.push(
       `<div class="row action ${this.selected === n ? "sel" : ""}" data-i="${n}">+ Nowy projekt…</div>`,
       `<div class="row action ${this.selected === n + 1 ? "sel" : ""}" data-i="${n + 1}">+ Dodaj istniejący folder…</div>`,
-      `<div class="row action ${this.selected === n + 2 ? "sel" : ""}" data-i="${n + 2}">+ Rozmowa: zwykły czat o czymkolwiek, bez projektu (${shortcut("⌘R")})</div>`,
+      `<div class="row action ${this.selected === n + 2 ? "sel" : ""}" data-i="${n + 2}">+ Rozmowa: zwykły czat o czymkolwiek, bez projektu (${keysIn("⌘R")})</div>`,
     );
     const agents = this.ctx.agents().filter(usable);
     if (!agents.some((a) => a.id === this.agent)) this.agent = agents[0]?.id ?? "claude";

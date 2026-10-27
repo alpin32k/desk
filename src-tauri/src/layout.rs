@@ -42,6 +42,18 @@ pub struct Layout {
     pub minimized: Vec<String>,
     /// Names given to tiles by hand, by session key.
     pub titles: std::collections::BTreeMap<String, String>,
+    /// ⌘` slides the window down from the top of the screen (see dropdown.rs).
+    pub dropdown: bool,
+    /// Height of the dropped-down window, in percent of the screen.
+    pub dropdown_height: u32,
+    /// The dropdown goes up when another app takes the focus.
+    pub dropdown_autohide: bool,
+    /// Its shortcut, as "Super+Backquote" (see dropdown::DEFAULT_HOTKEY).
+    pub dropdown_hotkey: String,
+    /// How long it slides, in ms (0: no slide).
+    pub dropdown_animation: u32,
+    /// desk's shortcuts changed in Options, by binding id (src/keys.ts).
+    pub keys: std::collections::BTreeMap<String, String>,
 }
 
 impl Default for Layout {
@@ -63,6 +75,13 @@ impl Default for Layout {
             font_size: 11.5,
             minimized: Vec::new(),
             titles: Default::default(),
+            // Ctrl+` belongs to editors' terminals on Windows and Linux: opt in there.
+            dropdown: cfg!(target_os = "macos"),
+            dropdown_height: 50,
+            dropdown_autohide: true,
+            dropdown_hotkey: crate::dropdown::DEFAULT_HOTKEY.into(),
+            dropdown_animation: 200,
+            keys: Default::default(),
         }
     }
 }
@@ -162,5 +181,7 @@ mod tests {
         assert_eq!(l.lanes, vec![vec!["/a".to_string(), "/b".into()], vec![]]);
         assert_eq!(l.autostart, vec!["/a".to_string()]);
         assert!(l.notifications);
+        assert_eq!(l.dropdown, cfg!(target_os = "macos"));
+        assert_eq!((l.dropdown_height, l.dropdown_autohide), (50, true));
     }
 }

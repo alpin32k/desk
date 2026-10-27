@@ -31,6 +31,7 @@ const COMMANDS: &[&str] = &[
     "lock_desk",
     "unlock_desk",
     "is_locked",
+    "dropdown_apply",
     "open_preview",
     "preview_bounds",
     "preview_visible",
