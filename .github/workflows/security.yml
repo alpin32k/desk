@@ -1,0 +1,31 @@
+name: security
+
+# Known vulnerabilities in dependencies (RustSec for Cargo.lock, the npm
+# advisory database for pnpm-lock.yaml) fail the run. Weekly too, since new
+# advisories come out for code that did not change. Rust warnings (crates
+# that are unmaintained) are listed but do not fail it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - run: cargo audit --file src-tauri/Cargo.lock
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # What ships in the app; dev tools (vite, eslint...) stay on the developer's machine.
+      - run: pnpm audit --prod
