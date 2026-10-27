@@ -56,6 +56,7 @@ pub fn init() {
     }
     if cfg!(windows) {
         // Apps on Windows get the user's PATH from the environment already.
+        add_install_dirs();
         if let Some(c) = crate::agents::which("claude") {
             let _ = CLAUDE.set(c.display().to_string());
         }
@@ -85,6 +86,26 @@ pub fn init() {
         if std::env::var("LANG").map(|v| v.is_empty()).unwrap_or(true) {
             std::env::set_var("LANG", "en_US.UTF-8");
         }
+    }
+    add_install_dirs();
+}
+
+/// The folders agent installers use (see `agents::installer`), at the end of
+/// PATH: an agent desk installed is found even when the shell profile does
+/// not add its folder.
+fn add_install_dirs() {
+    let h = home();
+    let mut paths: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).collect())
+        .unwrap_or_default();
+    for dir in [h.join(".local").join("bin"), h.join(".opencode").join("bin")] {
+        if !paths.contains(&dir) {
+            paths.push(dir);
+        }
+    }
+    if let Ok(path) = std::env::join_paths(paths) {
+        // SAFETY: called once at startup before any other thread is spawned.
+        unsafe { std::env::set_var("PATH", path) };
     }
 }
 

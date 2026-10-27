@@ -86,9 +86,14 @@ Zwykłe Esc trafia do terminala, więc dalej przerywa Claude.
 ## Wymagania
 
 - macOS, Linux (webkit2gtk 4.1) albo Windows 10/11 (WebView2)
-- macOS i Linux: `tmux` (3.2+) w PATH, np. `brew install tmux`
-- agenci, których chcesz używać (`claude`, `codex`, ...). desk bierze PATH z Twojej powłoki
-  logowania, więc widzi to samo co terminal.
+- tmux przychodzi z desk: jest w aplikacji na macOS i w AppImage, a paczka `.deb` instaluje go
+  z repozytorium systemu. Jeśli masz własny `tmux` (3.2+) w PATH, desk używa tego. Gdyby żadnego
+  nie było, sesje kończą się razem z desk (jak na Windows), a okno o tym mówi.
+- Agentów nie trzeba instalować ręcznie. Pierwszy kafelek z agentem, którego nie ma, uruchamia
+  jego oficjalny instalator (Claude Code, Cursor, opencode i aider przez `curl`, a Codex i Gemini
+  przez `npm`, więc potrzebny jest Node.js), a potem samego agenta. W palecie taki agent ma znak ↓.
+  desk bierze PATH z Twojej powłoki logowania, więc widzi to samo co terminal, a do tego
+  `~/.local/bin` i `~/.opencode/bin`.
 
 ## Uwagi
 

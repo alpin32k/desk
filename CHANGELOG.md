@@ -1,5 +1,16 @@
 # Zmiany
 
+## Niewydane
+
+- **tmux przychodzi z desk.** Na macOS i Linuksie bez tmux każda sesja kończyła się błędem
+  „tmux: No such file or directory”. Teraz tmux jest w aplikacji na macOS i w AppImage, a paczka
+  `.deb` instaluje go z repozytorium systemu. Własny tmux w PATH ma pierwszeństwo. Gdyby nie było
+  żadnego, desk sam trzyma sesje (jak na Windows) i mówi o tym przy starcie.
+- **Agenci instalują się sami.** Kafelek z agentem, którego nie ma (Claude Code, Codex, Cursor,
+  opencode, Gemini, aider), uruchamia jego oficjalny instalator na widoku, a potem agenta.
+  W palecie taki agent ma znak ↓.
+- **Cursor** (`cursor-agent`) jest na liście agentów.
+
 ## 0.1.8 (2026-10-27)
 
 - **Blokada zasłania wszystkie monitory.** Do tej pory przykrywała tylko ekran z oknem desk, a na

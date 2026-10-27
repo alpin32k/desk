@@ -113,7 +113,11 @@ export class Settings {
         .agents()
         .map(
           (a) => `<div class="agent-row"><b>${escapeHtml(a.id)}</b> <span class="dim">${escapeHtml(a.command || "login shell")}</span> ${
-            a.installed ? `<span class="tag open">jest</span>` : `<span class="tag">brak w PATH</span>`
+            a.installed
+              ? `<span class="tag open">jest</span>`
+              : a.installable
+                ? `<span class="tag">zainstaluje się przy otwarciu</span>`
+                : `<span class="tag">brak w PATH</span>`
           }${a.builtin ? "" : ` <button data-rm-agent="${escapeHtml(a.id)}">usuń</button>`}</div>`,
         )
         .join("")}

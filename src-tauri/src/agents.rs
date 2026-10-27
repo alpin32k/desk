@@ -12,8 +12,42 @@ pub const BUILTIN: &[(&str, &str)] = &[
     ("opencode", "opencode"),
     ("gemini", "gemini"),
     ("aider", "aider"),
+    ("cursor", "cursor-agent"),
     ("shell", ""),
 ];
+
+/// Official install commands of the built-in agents, (POSIX sh, PowerShell).
+/// A tile that opens an agent which is not installed runs it first, in view.
+fn installer(id: &str) -> Option<(&'static str, &'static str)> {
+    Some(match id {
+        "claude" => (
+            "curl -fsSL https://claude.ai/install.sh | bash",
+            "irm https://claude.ai/install.ps1 | iex",
+        ),
+        "codex" => ("npm install -g @openai/codex", "npm install -g @openai/codex"),
+        "opencode" => (
+            "curl -fsSL https://opencode.ai/install | bash",
+            "npm install -g opencode-ai",
+        ),
+        "gemini" => (
+            "npm install -g @google/gemini-cli",
+            "npm install -g @google/gemini-cli",
+        ),
+        "aider" => (
+            "curl -LsSf https://aider.chat/install.sh | sh",
+            "irm https://aider.chat/install.ps1 | iex",
+        ),
+        "cursor" => (
+            "curl -fsSL https://cursor.com/install | bash",
+            "irm 'https://cursor.com/install?win32=true' | iex",
+        ),
+        _ => return None,
+    })
+}
+
+/// Where the installers above put programs that may not be in PATH yet
+/// (desk adds them to its own PATH too, see env.rs).
+const INSTALL_DIRS: &str = "$HOME/.local/bin:$HOME/.opencode/bin";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,16 +62,22 @@ pub struct AgentInfo {
     pub id: String,
     pub command: String,
     pub installed: bool,
+    /// Not installed, but desk installs it when a tile opens it.
+    pub installable: bool,
     pub builtin: bool,
 }
 
 /// Built-ins first, then custom ones (a custom id never shadows a built-in).
 pub fn list(custom: &[CustomAgent]) -> Vec<AgentInfo> {
-    let builtin = BUILTIN.iter().map(|(id, cmd)| AgentInfo {
-        id: id.to_string(),
-        command: cmd.to_string(),
-        installed: cmd.is_empty() || which(cmd).is_some(),
-        builtin: true,
+    let builtin = BUILTIN.iter().map(|(id, cmd)| {
+        let installed = is_installed(id, cmd);
+        AgentInfo {
+            id: id.to_string(),
+            command: cmd.to_string(),
+            installed,
+            installable: !installed && installer(id).is_some(),
+            builtin: true,
+        }
     });
     let custom = custom
         .iter()
@@ -45,7 +85,8 @@ pub fn list(custom: &[CustomAgent]) -> Vec<AgentInfo> {
         .map(|c| AgentInfo {
             id: c.id.clone(),
             command: c.command.clone(),
-            installed: first_word(&c.command).is_some_and(|w| which(w).is_some()),
+            installed: is_installed(&c.id, &c.command),
+            installable: false,
             builtin: false,
         });
     builtin.chain(custom).collect()
@@ -65,21 +106,63 @@ pub fn command_for(id: &str, custom: &[CustomAgent]) -> Option<String> {
         })
 }
 
+fn is_installed(id: &str, command: &str) -> bool {
+    let program = if id == "claude" {
+        crate::env::claude_bin()
+    } else {
+        match first_word(command) {
+            Some(w) => w,
+            None => return true, // the login shell
+        }
+    };
+    which(program).is_some()
+}
+
+/// The install command for `id` when it is a built-in that is not installed.
+fn pending_install(id: &str, command: &str) -> Option<(&'static str, &'static str)> {
+    installer(id).filter(|_| !is_installed(id, command))
+}
+
 /// Shell script run in the tmux pane. After the agent exits the pane falls
 /// back to a login shell so the tile stays usable.
 pub fn launch_script(id: &str, command: &str, hooks_settings: &Path) -> String {
     let shell = shell_quote(&crate::env::user_shell());
-    if id == "claude" {
-        return format!(
-            "{} --settings {}; exec {shell} -l",
+    let run = if id == "claude" {
+        format!(
+            "{} --settings {}",
             shell_quote(crate::env::claude_bin()),
             shell_quote(&hooks_settings.display().to_string())
-        );
-    }
-    if command.trim().is_empty() {
+        )
+    } else if command.trim().is_empty() {
         return format!("exec {shell} -l");
-    }
-    format!("{}; exec {shell} -l", resolve_command(command, which))
+    } else {
+        resolve_command(command, which)
+    };
+    let run = match pending_install(id, command) {
+        Some((sh, _)) => install_then_run(id, sh, &run),
+        None => run,
+    };
+    format!("{run}; exec {shell} -l")
+}
+
+/// `/bin/sh` script: install the agent with its official installer, then run
+/// it. A missing curl or npm, or a failed install, leaves the login shell.
+fn install_then_run(id: &str, install: &str, run: &str) -> String {
+    let need = first_word(install).unwrap_or("sh");
+    let hint = if need == "npm" { " (Node.js: https://nodejs.org)" } else { "" };
+    let say = |text: String| format!("echo {}", shell_quote(&text));
+    let script = [
+        say(format!("desk: {id} nie jest zainstalowany. Instaluję: {install}")),
+        format!(
+            "command -v {need} >/dev/null 2>&1 || {{ {}; exit 1; }}",
+            say(format!("desk: do instalacji potrzebny jest {need}{hint}"))
+        ),
+        format!("{install} || {{ {}; exit 1; }}", say("desk: instalacja się nie udała".into())),
+        format!("PATH=\"{INSTALL_DIRS}:$PATH\"; export PATH"),
+        format!("exec {run}"),
+    ]
+    .join("\n");
+    format!("/bin/sh -c {}", shell_quote(&script))
 }
 
 /// Program and arguments for a native (Windows) session: the agent runs in
@@ -107,6 +190,14 @@ pub fn launch_argv(id: &str, command: &str, hooks_settings: &Path) -> Vec<String
         let first = first_word(trimmed).unwrap_or(trimmed);
         let program = which(first).map_or(first.to_string(), |p| p.display().to_string());
         format!("& {}{}", ps_quote(&program), &trimmed[first.len()..])
+    };
+    let run = match pending_install(id, command) {
+        // Installers add their folder to the user's PATH in the registry.
+        Some((_, ps)) => format!(
+            "Write-Host {}; {ps}; $env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + \";$HOME\\.local\\bin\"; {run}",
+            ps_quote(&format!("desk: {id} nie jest zainstalowany. Instaluję: {ps}"))
+        ),
+        None => run,
     };
     vec![
         shell,
@@ -217,6 +308,48 @@ mod tests {
             custom.starts_with("definitely-not-installed-xyz --flag; exec "),
             "{custom}"
         );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_missing_agent_is_installed_in_view_then_run() {
+        let (sh, _) = installer("codex").unwrap();
+        let script = install_then_run("codex", sh, "codex --x");
+        assert!(script.starts_with("/bin/sh -c '"), "{script}");
+        assert!(script.contains("command -v npm"), "{script}");
+        assert!(script.ends_with("exec codex --x'"), "{script}");
+        // The script itself runs: a fake npm "installs" codex into ~/.local/bin.
+        let tmp = tempfile::tempdir().unwrap();
+        let bin = tmp.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        let npm = bin.join("npm");
+        std::fs::write(
+            &npm,
+            "#!/bin/sh\nmkdir -p \"$HOME/.local/bin\"\nprintf '#!/bin/sh\\necho ran \"$@\"\\n' > \"$HOME/.local/bin/codex\"\nchmod +x \"$HOME/.local/bin/codex\"\n",
+        )
+        .unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&npm, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let out = std::process::Command::new("/bin/sh")
+            .args(["-c", &script])
+            .env("HOME", tmp.path())
+            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .output()
+            .unwrap();
+        let out = String::from_utf8_lossy(&out.stdout);
+        assert!(out.contains("Instaluję: npm install -g @openai/codex"), "{out}");
+        assert!(out.ends_with("ran --x\n"), "{out}");
+        // Without npm: a hint, and the agent does not start.
+        let out = std::process::Command::new("/bin/sh")
+            .args(["-c", &script])
+            .env("HOME", tmp.path().join("empty"))
+            .env("PATH", "/usr/bin:/bin")
+            .output()
+            .unwrap();
+        let out = String::from_utf8_lossy(&out.stdout);
+        assert!(out.contains("potrzebny jest npm (Node.js"), "{out}");
+        assert!(!out.contains("ran"), "{out}");
+        assert!(installer("shell").is_none() && installer("mine").is_none());
     }
 
     #[test]

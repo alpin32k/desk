@@ -92,10 +92,13 @@ export class Palette {
       `<div class="row action ${this.selected === n + 1 ? "sel" : ""}" data-i="${n + 1}">+ Dodaj istniejący folder…</div>`,
       `<div class="row action ${this.selected === n + 2 ? "sel" : ""}" data-i="${n + 2}">+ Rozmowa: zwykły czat o czymkolwiek, bez projektu (${shortcut("⌘R")})</div>`,
     );
-    const agents = this.ctx.agents().filter((a) => a.installed);
+    const agents = this.ctx.agents().filter(usable);
     if (!agents.some((a) => a.id === this.agent)) this.agent = agents[0]?.id ?? "claude";
     this.el.querySelector(".agent-pick")!.innerHTML = `<kbd>⇥</kbd> agent: ${agents
-      .map((a) => `<span class="${a.id === this.agent ? "on" : ""}">${escapeHtml(a.id)}</span>`)
+      .map(
+        (a) =>
+          `<span class="${a.id === this.agent ? "on" : ""}"${a.installed ? "" : ` title="zainstaluje się przy otwarciu"`}>${escapeHtml(a.id)}${a.installed ? "" : " ↓"}</span>`,
+      )
       .join(" ")}`;
     this.list.innerHTML = items.join("");
     this.list.querySelector(".sel")?.scrollIntoView({ block: "nearest" });
@@ -121,7 +124,7 @@ export class Palette {
   private onKey(e: KeyboardEvent): void {
     const count = this.shown.length + 3;
     if (e.key === "Tab") {
-      const ids = this.ctx.agents().filter((a) => a.installed).map((a) => a.id);
+      const ids = this.ctx.agents().filter(usable).map((a) => a.id);
       const i = ids.indexOf(this.agent);
       this.agent = ids[(i + (e.shiftKey ? ids.length - 1 : 1)) % ids.length] ?? "claude";
     } else if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) {
@@ -156,4 +159,9 @@ export class Palette {
     else if (action === 1) this.ctx.addFolder();
     else this.ctx.chat(this.agent);
   }
+}
+
+/** Installed, or a built-in desk installs on first use. */
+function usable(a: AgentInfo): boolean {
+  return a.installed || a.installable;
 }
