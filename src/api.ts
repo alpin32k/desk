@@ -35,6 +35,18 @@ export interface Layout {
   minimized: string[];
   /** Names given to tiles by hand, by session key. */
   titles: Record<string, string>;
+  /** ⌘` slides the window down from the top of the screen. */
+  dropdown: boolean;
+  /** Height of the dropped-down window, percent of the screen. */
+  dropdownHeight: number;
+  /** The dropdown goes up when another app takes the focus. */
+  dropdownAutohide: boolean;
+  /** Its shortcut as an accelerator, "Super+Backquote" (hotkey.ts). */
+  dropdownHotkey: string;
+  /** How long it slides, ms (0: no slide). */
+  dropdownAnimation: number;
+  /** desk's shortcuts changed in Options, by binding id (keys.ts). */
+  keys: Record<string, string>;
 }
 
 /** A newer desk release. */
@@ -159,6 +171,8 @@ export const api = {
   /** `password`: the account password typed on the lock screen (Linux). */
   unlockDesk: (password?: string) => invoke<void>("unlock_desk", { password: password ?? null }),
   isLocked: () => invoke<boolean>("is_locked"),
+  /** Register or drop ⌘` and refit the dropped-down window, as layout.json says. */
+  dropdownApply: () => invoke<void>("dropdown_apply"),
   /** Show a link in the side panel at `bounds`; resolves to what its address bar shows. */
   openPreview: (url: string, bounds: PreviewBounds) => invoke<string>("open_preview", { url, bounds }),
   previewBounds: (bounds: PreviewBounds) => invoke<void>("preview_bounds", { bounds }),

@@ -35,6 +35,7 @@ po jednej sesji Claude Code (albo Codex, opencode, Gemini, aider, shell) na proj
 | Uruchom | ⌘U albo ▶: skrypty z `package.json` (z pnpm/yarn/npm/bun według lockfile), `cargo run`/`test`, cele z `Makefile`, `docker compose up`, Django. Uruchamia się w ramce projektu, a link `localhost` z wyjścia kliknięciem otwiera podgląd. |
 | Podgląd | Panel obok terminali (⌘W): kliknięty link (strona, `localhost`, plik) otwiera się w nim, a ⌥-klik w przeglądarce. Klikalne są też ścieżki względne, np. `docs/plans/plan.md`, liczone od folderu projektu kafelka, oraz dokumenty `.md`, `.mmd`, `.json`, `.csv`, `.tsv` i `.txt`. Przycisk „🌐 przeglądarka” u góry otwiera panel z paskiem adresu. Pokazuje strony i obrazki, PDF, Markdown z diagramami mermaid, pliki `.mmd`, JSON, CSV jako tabelę oraz kod i tekst. Pasek adresu działa jak przeglądarka (wstecz, odśwież, wpisany adres). Pliki z kodem i tekstem otwierają się od razu w edytorze z kolorowaniem składni (kolory z motywu). Markdown, diagramy i tabele startują jako podgląd, a ✎ przełącza je na edytor. ⌘S zapisuje, ⌘Z / ⌘⇧Z w edytorze cofa i ponawia, a „podgląd” wraca do widoku. ↗ otwiera stronę w Brave, a gdy go nie ma w Chrome (do zmiany w Opcjach, także na przeglądarkę systemową), a plik w jego domyślnym programie. Przeglądarka w panelu nie obsługuje rozszerzeń, więc gdy strona ma pole hasła, pasek pokazuje „🔑 Zaloguj w Brave (Bitwarden)”, który otwiera ją w przeglądarce z menedżerem haseł. Gdy panel jest otwarty, w środku zostaje aktywna sesja, a pozostałe są po lewej jako mini karty (stan i ostatnie linie). Kliknięcie albo ⌘1–9 przenosi sesję do środka. |
 | Kawa | ⌘K: komputer nie zaśnie. Drugie ⌘K: także przy zamkniętej klapce. Wyłącza się sama przy przegrzaniu lub baterii ≤15%. Działa na macOS, Windows i Linuksie. |
+| Dropdown | ⌘`: desk zjeżdża z góry ekranu z kursorem, jak okno iTerm na skrót. Na całą szerokość, nad innymi oknami i na każdym biurku, bez świateł okna, a pasek menu zostaje od aplikacji, w której pracujesz (desk znika wtedy z Docka i ⌘Tab). Drugie ⌘` chowa go w górę i wraca do poprzedniej aplikacji, a kliknięcie innej aplikacji też go chowa. Przeciągnięta dolna krawędź ustawia wysokość na stałe. W Opcje → Dropdown: wysokość, czas animacji, chowanie i wyłączenie (przywraca zwykłe okno), a skrót w Opcje → Skróty. Windows i Linux: Ctrl+`, włączane w Opcjach. |
 | Blokada | ⌘B: ekran zostaje włączony, terminale widać, ale nic nie da się wpisać, dopóki nie odblokujesz: Touch ID albo hasłem na macOS, Windows Hello (PIN, odcisk palca, twarz) na Windows, hasłem konta na Linuksie. |
 
 ## Motywy
@@ -63,9 +64,12 @@ po jednej sesji Claude Code (albo Codex, opencode, Gemini, aider, shell) na proj
 | ⌘J | zwiń kafelek do nagłówka z ostatnią linią (np. terminal z logami), ⌘J albo klik w nagłówek rozwija |
 | ⌘K | kawa |
 | ⌘B | blokada |
+| ⌘` | dropdown z góry ekranu (z każdej aplikacji), drugi raz chowa; skrót zmienisz w Opcjach |
 | ⌘O | opcje |
 
 W palecie: ↵ otwiera, ⌘↵ włącza lub wyłącza autostart, ⌘⌫ zabija sesję, Tab wybiera agenta.
+Skróty zmienisz w Opcje → Skróty (kliknij skrót i naciśnij nowy, ↺ przywraca domyślny). Stałe
+zostają ⌘1–9, kopiuj / wklej, klawisze palety i ⌘S w edytorze.
 Zwykłe Esc trafia do terminala, więc dalej przerywa Claude.
 
 ## Windows

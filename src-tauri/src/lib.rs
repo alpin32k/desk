@@ -4,6 +4,7 @@ pub mod browser;
 pub mod claude_projects;
 pub mod coffee;
 pub mod discovery;
+pub mod dropdown;
 pub mod env;
 pub mod git;
 pub mod hooks;
@@ -270,6 +271,12 @@ fn open_external(url: String, browser: Option<String>) -> Result<(), String> {
     preview::open_external(&url, browser.as_deref().unwrap_or("auto"))
 }
 
+/// Options changed the dropdown (⌘`): register or drop the shortcut, refit the window.
+#[tauri::command]
+fn dropdown_apply(handle: AppHandle) -> Result<(), String> {
+    dropdown::apply(&handle)
+}
+
 #[tauri::command]
 fn is_locked(lock: State<lock::Lock>) -> bool {
     lock.is_locked()
@@ -492,6 +499,15 @@ pub fn run() {
         // The system clipboard for the terminals: the webview refuses script
         // writes (OSC 52 from tmux) and reads outside a click.
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        dropdown::toggle(app);
+                    }
+                })
+                .build(),
+        )
         .register_uri_scheme_protocol(preview::SCHEME, |_ctx, req| preview::serve(&req));
     // A menu only on macOS: on Windows and Linux it is a bar in the window whose
     // Edit > Copy (Ctrl+C) would take Ctrl+C away from the terminals.
@@ -528,6 +544,11 @@ pub fn run() {
                 layout_path: support.join("layout.json"),
                 _watcher: Mutex::new(watcher),
             });
+            app.manage(dropdown::Dropdown::new(support.join("layout.json")));
+            // Taken by another app: desk still starts, Options shows why.
+            if let Err(e) = dropdown::apply(app.handle()) {
+                eprintln!("dropdown: {e}");
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -560,6 +581,7 @@ pub fn run() {
             lock_desk,
             unlock_desk,
             is_locked,
+            dropdown_apply,
             open_preview,
             preview_bounds,
             preview_visible,
@@ -580,7 +602,14 @@ pub fn run() {
             if matches!(event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_)) {
                 window_place::save_soon(window.app_handle(), window_place::file(&env::support_dir()));
             }
-            if !window.state::<lock::Lock>().is_locked() {
+            let locked = window.state::<lock::Lock>().is_locked();
+            if matches!(event, tauri::WindowEvent::Focused(false)) && !locked {
+                dropdown::blurred(window.app_handle());
+            }
+            if let tauri::WindowEvent::Resized(size) = event {
+                dropdown::resized(window.app_handle(), *size);
+            }
+            if !locked {
                 return;
             }
             match event {

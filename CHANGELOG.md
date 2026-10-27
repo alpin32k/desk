@@ -1,5 +1,26 @@
 # Zmiany
 
+## Niewydane
+
+- **Dropdown z góry ekranu (⌘`), jak w iTerm.** Skrót działa w każdej aplikacji: desk zjeżdża
+  z animacją z góry ekranu, na którym jest kursor, na całą szerokość pod paskiem menu i nad
+  innymi oknami, na każdym biurku (Space). Drugie ⌘` chowa go w górę i oddaje fokus poprzedniej
+  aplikacji. Chowa się też sam po kliknięciu innej aplikacji. Pasek menu zostaje od aplikacji,
+  w której pracujesz, a okno nie ma świateł (zamknij, zwiń, powiększ): w ich miejscu jest
+  podpowiedź, który skrót chowa desk. Na czas trybu dropdown
+  desk znika z Docka i z ⌘Tab.
+- **Opcje mają trzy zakładki:** Ogólne (dotychczasowe ustawienia), Dropdown i Skróty.
+- **Każdy skrót desk można zmienić** w Opcje → Skróty: kliknij skrót i naciśnij nowy, ↺ wraca do
+  domyślnego. Zajęty skrót (inna akcja, ⌘C / ⌘V, ⌘Z...) desk odrzuca z komunikatem. Nowe skróty
+  widać od razu w dolnym pasku i podpowiedziach. Stałe zostają ⌘1–9, kopiuj / wklej, klawisze
+  palety i ⌘S w edytorze.
+- W Opcje → Dropdown: wysokość, czas animacji (0 bez animacji), chowanie przy utracie fokusu
+  i wyłączenie, które przywraca zwykłe okno. Skrót dropdownu zmienisz w Opcje → Skróty. Wysokość
+  ustawiona przeciągnięciem dolnej krawędzi zostaje na następne razy. Na Windows i Linuksie
+  domyślny skrót to Ctrl+` i jest wyłączony. W czasie blokady skrót nic nie robi.
+- Esc zamyka Opcje także wtedy, gdy fokus jest w terminalu.
+- Dolny pasek: skróty, które się nie mieszczą, znikają w całości, a liczniki sesji zostają.
+
 ## 0.1.13 (2026-10-27)
 
 - **Zamykanie kafelka to ⌘Q, a zabijanie sesji ⌘⇧Q** (Ctrl⇧Q i Ctrl⇧⌫ na Windows i Linux).

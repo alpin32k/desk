@@ -66,6 +66,10 @@ pub fn save_soon(app: &AppHandle, file: PathBuf) {
         if app.state::<crate::lock::Lock>().is_locked() {
             return;
         }
+        // Docked as the dropdown, it is at the top of the screen: neither.
+        if app.try_state::<crate::dropdown::Dropdown>().is_some_and(|d| d.docked()) {
+            return;
+        }
         if let Some(place) = app.get_webview_window("main").and_then(|w| read(&w)) {
             let _ = save(&file, place);
         }
