@@ -1,6 +1,6 @@
 # Zmiany
 
-## Niewydane
+## 0.1.12 (2026-10-27)
 
 - **Blokada zasłania też Dock i pasek menu na drugim monitorze.** Zasłona leżała pod nimi, więc
   dało się kliknąć Dock albo pasek menu i uruchomić inną aplikację. Teraz leży nad nimi i nad
