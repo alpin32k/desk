@@ -1,11 +1,11 @@
 # Zmiany
 
-## Niewydane
+## 0.1.15 (2026-10-27)
 
 - **Zakładki nad kafelkiem na pełnym ekranie (⌘E).** Wąski pasek pokazuje otwarte sesje w kolejności
   ⌘1–9: kropka stanu, projekt, rodzaj sesji i skrót. Bieżąca ma kolor projektu, a klik w inną
   przełącza na nią. Przy jednej sesji paska nie ma.
-- **Zamknięcie sesji na pełnym ekranie nie wychodzi z niego.** Po ⌘Z (albo ⇧⌘Z, albo gdy sesja się
+- **Zamknięcie sesji na pełnym ekranie nie wychodzi z niego.** Po ⌘Q (albo ⌘⇧Q, albo gdy sesja się
   skończy) ekran dostaje sąsiednia sesja, jak po zamknięciu zakładki.
 - **Dropdown z góry ekranu (⌘`), jak w iTerm.** Skrót działa w każdej aplikacji: desk zjeżdża
   z animacją z góry ekranu, na którym jest kursor, na całą szerokość pod paskiem menu i nad
@@ -25,6 +25,7 @@
   domyślny skrót to Ctrl+` i jest wyłączony. W czasie blokady skrót nic nie robi.
 - Esc zamyka Opcje także wtedy, gdy fokus jest w terminalu.
 - Dolny pasek: skróty, które się nie mieszczą, znikają w całości, a liczniki sesji zostają.
+- README z nowymi zrzutami: podgląd, dropdown, pełny ekran z zakładkami, skróty i motywy.
 - **Prawy klik w terminalu nie otwiera już menu.** Wyskakiwały dwa naraz: menu tmuxa (podział,
   zamiana, zamknięcie panelu) i systemowe (Wytnij, Pisownia, Mowa). Kafelki układa desk, więc
   oba zniknęły. Programy, które obsługują mysz (vim, htop), dalej dostają prawy klik. Działające
