@@ -447,10 +447,14 @@ export class App {
     tile.dispose();
     this.tiles.delete(key);
     this.layout.lanes = L.remove(this.layout.lanes, key);
-    if (this.fullscreen === key) this.fullscreen = null;
+    const full = this.fullscreen === key;
+    if (full) this.fullscreen = null;
     this.changed();
     const next = order.filter((k) => k !== key)[Math.max(0, at - 1)];
-    if (next) this.setActive(next, true);
+    // Fullscreen stays on, like closing a tab: the neighbour takes the screen.
+    if (next && full) this.toggleFullscreen(next);
+    else if (next) this.setActive(next, true);
+    else this.grid.classList.remove("has-full");
   }
 
   async killSession(key: string): Promise<void> {

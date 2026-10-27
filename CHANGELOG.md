@@ -5,6 +5,8 @@
 - **Zakładki nad kafelkiem na pełnym ekranie (⌘E).** Wąski pasek pokazuje otwarte sesje w kolejności
   ⌘1–9: kropka stanu, projekt, rodzaj sesji i skrót. Bieżąca ma kolor projektu, a klik w inną
   przełącza na nią. Przy jednej sesji paska nie ma.
+- **Zamknięcie sesji na pełnym ekranie nie wychodzi z niego.** Po ⌘Z (albo ⇧⌘Z, albo gdy sesja się
+  skończy) ekran dostaje sąsiednia sesja, jak po zamknięciu zakładki.
 - **Dropdown z góry ekranu (⌘`), jak w iTerm.** Skrót działa w każdej aplikacji: desk zjeżdża
   z animacją z góry ekranu, na którym jest kursor, na całą szerokość pod paskiem menu i nad
   innymi oknami, na każdym biurku (Space). Drugie ⌘` chowa go w górę i oddaje fokus poprzedniej
