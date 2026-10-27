@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dropdown-apply"
+description = "Enables the dropdown_apply command without any pre-configured scope."
+commands.allow = ["dropdown_apply"]
+
+[[permission]]
+identifier = "deny-dropdown-apply"
+description = "Denies the dropdown_apply command without any pre-configured scope."
+commands.deny = ["dropdown_apply"]

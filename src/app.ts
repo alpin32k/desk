@@ -15,13 +15,14 @@ import {
   type Update,
   type Usage,
 } from "./api";
-import { actionFor, hints, type Action } from "./keys";
-import { PLATFORM, shortcut, shortcuts } from "./platform";
+import { actionFor, hints, keysIn, setCustomKeys, type Action } from "./keys";
+import { PLATFORM, shortcut } from "./platform";
 import { Side } from "./side";
 import * as L from "./lanes";
 import { Palette } from "./palette";
 import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
 import { keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
+import { DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
 import { Settings } from "./settings";
 import { applyTheme, terminalTheme, themeById } from "./themes";
 import {
@@ -68,6 +69,8 @@ export class App {
   private coffee: CoffeeStatus = { level: "off", helperInstalled: false, sleepDisabled: false, stoppedBecause: null };
   private fullscreen: string | null = null;
   private locked = false;
+  /** Docked at the top of the screen (⌘`, dropdown.rs). */
+  private docked = false;
   private lockEl: HTMLElement | null = null;
 
   private grid: HTMLElement;
@@ -75,6 +78,8 @@ export class App {
   /** With the side panel open: the other sessions as mini cards, left of the active one. */
   private rail: HTMLElement;
   private top: HTMLElement;
+  /** Above a fullscreen tile: the open sessions and their ⌘1–9. */
+  private strip: HTMLElement;
   private footer: HTMLElement;
   private palette: Palette;
   private settings: Settings;
@@ -83,16 +88,19 @@ export class App {
     document.documentElement.dataset.platform = PLATFORM; // CSS: room for the macOS traffic lights
     root.innerHTML = `
       <div class="top" data-tauri-drag-region></div>
-      <div class="middle"><aside class="rail" hidden></aside><main class="grid"></main></div>
+      <div class="middle"><aside class="rail" hidden></aside><div class="stage"><nav class="strip" hidden></nav><main class="grid"></main></div></div>
       <footer class="bottom"></footer>`;
     this.top = root.querySelector(".top")!;
     this.grid = root.querySelector(".grid")!;
     // Opening, closing or resizing the panel changes the grid's width: lay out again.
     this.rail = root.querySelector(".rail")!;
-    this.rail.addEventListener("click", (e) => {
-      const key = (e.target as HTMLElement).closest<HTMLElement>("[data-key]")?.dataset.key;
-      if (key) this.setActive(key, true);
-    });
+    this.strip = root.querySelector(".strip")!;
+    for (const el of [this.rail, this.strip]) {
+      el.addEventListener("click", (e) => {
+        const key = (e.target as HTMLElement).closest<HTMLElement>("[data-key]")?.dataset.key;
+        if (key) this.setActive(key, true);
+      });
+    }
     this.side = new Side(() => this.layout && this.render(), {
       project: () => (this.active ? this.projectOf(this.active) : null),
       insert: (text) => {
@@ -141,9 +149,38 @@ export class App {
         this.save();
         void this.side.browserChanged();
       },
+      setDropdown: async (change) => {
+        const before = this.layout.dropdownHotkey;
+        Object.assign(this.layout, change);
+        // Rust reads the dropdown options from the file.
+        clearTimeout(this.saveTimer);
+        await this.persist();
+        await api.dropdownApply().catch(async (err) => {
+          toast(`Dropdown: ${err}`, 8000);
+          if (change.dropdownHotkey === undefined) return;
+          // Taken by another app: keep the one that works.
+          this.layout.dropdownHotkey = before;
+          await this.persist();
+          await api.dropdownApply().catch(() => {});
+        });
+        this.renderChrome();
+      },
+      setKey: (id, accelerator) => {
+        const keys = { ...this.layout.keys };
+        if (accelerator) keys[id] = accelerator;
+        else delete keys[id];
+        this.layout.keys = keys;
+        setCustomKeys(keys);
+        this.save();
+        this.renderChrome();
+      },
       setAutoLayout: (on) => {
         this.layout.autoLayout = on;
         this.changed();
+      },
+      setTmuxMenu: (on) => {
+        this.layout.tmuxMenu = on;
+        this.save();
       },
       setNotifications: (on) => {
         this.layout.notifications = on;
@@ -184,6 +221,18 @@ export class App {
     await listen<CoffeeStatus>("coffee", (e) => this.onCoffeeStopped(e.payload));
     // macOS: desk catches ⌘Q / ⌘⇧Q itself, before its menu (Quit) and the Apple menu (Log Out).
     await listen<"close" | "kill">("shortcut", (e) => this.onShortcut(e.payload));
+    // Docked at the top of the screen: no traffic lights to make room for.
+    await listen<boolean>("dropdown", (e) => {
+      this.docked = e.payload;
+      document.documentElement.toggleAttribute("data-dropdown", e.payload);
+      this.renderChrome();
+    });
+    // You dragged the dropdown's edge: the next one comes down this tall.
+    await listen<number>("dropdown-height", (e) => {
+      this.layout.dropdownHeight = e.payload;
+      this.save();
+      if (this.settings.isOpen) this.settings.render();
+    });
     this.top.addEventListener("click", (e) => {
       const a = (e.target as HTMLElement).closest<HTMLElement>("[data-coffee]")?.dataset.coffee;
       if (a === "cycle") void this.cycleCoffee();
@@ -217,9 +266,19 @@ export class App {
       fontSize: boot.layout.fontSize || DEFAULT_FONT_SIZE,
       minimized: boot.layout.minimized ?? [],
       titles: boot.layout.titles ?? {},
+      dropdown: boot.layout.dropdown ?? PLATFORM === "mac",
+      dropdownHeight: boot.layout.dropdownHeight || 50,
+      dropdownAutohide: boot.layout.dropdownAutohide ?? true,
+      dropdownHotkey: boot.layout.dropdownHotkey || DEFAULT_HOTKEY(),
+      dropdownAnimation: boot.layout.dropdownAnimation ?? 200,
+      keys: boot.layout.keys ?? {},
+      tmuxMenu: boot.layout.tmuxMenu ?? false,
       lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length),
     };
+    setCustomKeys(this.layout.keys);
     this.applyTheme();
+    // Another app (iTerm's hotkey window...) may hold ⌘` already.
+    if (this.layout.dropdown) void api.dropdownApply().catch((err) => toast(`Dropdown: ${err}`, 10000));
     setTerminalFontSize(this.layout.fontSize);
 
     window.addEventListener("keydown", (e) => this.onKey(e), true);
@@ -388,10 +447,14 @@ export class App {
     tile.dispose();
     this.tiles.delete(key);
     this.layout.lanes = L.remove(this.layout.lanes, key);
-    if (this.fullscreen === key) this.fullscreen = null;
+    const full = this.fullscreen === key;
+    if (full) this.fullscreen = null;
     this.changed();
     const next = order.filter((k) => k !== key)[Math.max(0, at - 1)];
-    if (next) this.setActive(next, true);
+    // Fullscreen stays on, like closing a tab: the neighbour takes the screen.
+    if (next && full) this.toggleFullscreen(next);
+    else if (next) this.setActive(next, true);
+    else this.grid.classList.remove("has-full");
   }
 
   async killSession(key: string): Promise<void> {
@@ -513,7 +576,25 @@ export class App {
     this.grid.classList.toggle("has-full", this.fullscreen !== null);
     for (const t of this.tiles.values()) t.el.classList.toggle("full", t.key === this.fullscreen);
     if (target) this.setActive(target, true);
+    this.renderStrip();
     this.fitAll();
+  }
+
+  /** One tab per session, in ⌘1–9 order; the fullscreen one stands out. */
+  private renderStrip(): void {
+    const tiles = L.flatten(this.layout.lanes)
+      .map((k) => this.tiles.get(k))
+      .filter((t): t is Tile => t !== undefined);
+    this.strip.hidden = this.fullscreen === null || tiles.length < 2;
+    if (this.strip.hidden) return this.strip.replaceChildren();
+    this.strip.innerHTML = tiles
+      .map((t) => {
+        const s = t.summary();
+        return `<button class="strip-tab state-${t.state}${t.key === this.fullscreen ? " sel" : ""}" data-key="${escapeHtml(t.key)}" title="${escapeHtml(t.path)}" style="--proj: ${projectColor(this.projectOf(t.key), this.layout.colors)}"><span class="dot"></span><b>${escapeHtml(s.name)}</b> <span class="dim">${escapeHtml(s.label)}</span>${
+          t.index > 0 && t.index < 10 ? `<span class="strip-idx">${shortcut(`⌘${t.index}`)}</span>` : ""
+        }</button>`;
+      })
+      .join("");
   }
 
   // ---- layout ------------------------------------------------------------
@@ -604,7 +685,7 @@ export class App {
     if (card) return card;
     card = document.createElement("div");
     card.className = "card";
-    card.innerHTML = shortcuts(`
+    card.innerHTML = keysIn(`
       <header class="card-head" draggable="true">
         <span class="dot"></span><span class="card-title"></span>
         <span class="actions"><button data-a="sub" title="Kolejna sesja w tym projekcie (⌘D)">+</button><button data-a="terminal" title="Terminal w tym projekcie (⌘T)">›_</button><button data-a="run" title="Uruchom w tym projekcie, np. dev serwer (⌘U)">▶</button></span>
@@ -659,7 +740,7 @@ export class App {
   private laneEl(): HTMLElement {
     const lane = document.createElement("div");
     lane.className = "lane";
-    lane.innerHTML = `<div class="lane-head"></div><div class="lane-body"><div class="hint">${shortcut("⌘P")} — otwórz projekt</div></div>`;
+    lane.innerHTML = `<div class="lane-head"></div><div class="lane-body"><div class="hint">${keysIn("⌘P")} — otwórz projekt</div></div>`;
     const body = lane.querySelector<HTMLElement>(".lane-body")!;
     body.addEventListener("dragover", (e) => {
       if (!e.dataTransfer?.types.includes("text/x-desk-key")) return;
@@ -841,15 +922,23 @@ export class App {
   }
 
   private renderChrome(): void {
+    this.renderStrip();
     const states = [...this.tiles.values()].map((t) => t.state);
     const count = (s: string) => states.filter((x) => x === s).length;
     const waiting = count("waiting");
-    this.top.innerHTML = `<span class="brand" data-tauri-drag-region>desk</span><span class="dim" data-tauri-drag-region> · ${this.tiles.size} sessions</span>${
+    // Docked: no traffic lights, so the bar says how to put desk away.
+    const hide = this.docked
+      ? `<span class="dim" data-tauri-drag-region> · </span><span class="dropdown-hint" data-tauri-drag-region title="Skrót zmienisz w Opcje → Skróty"><kbd>${escapeHtml(
+          hotkeyLabel(this.layout.dropdownHotkey || DEFAULT_HOTKEY()),
+        )}</kbd> chowa</span>`
+      : "";
+    this.top.innerHTML = `<span class="brand" data-tauri-drag-region>desk</span>${hide}<span class="dim" data-tauri-drag-region> · ${this.tiles.size} sessions</span>${
       waiting ? `<span class="waiting-pill" data-tauri-drag-region>${waiting} czeka</span>` : ""
-    }<span class="spacer" data-tauri-drag-region></span>${this.updateHtml()}${usageHtml(this.usage, Date.now())}<button class="top-btn" data-top="browser" title="Przeglądarka w panelu obok (${shortcut("⌘W")}); ↗ otwiera stronę w Brave albo Chrome">🌐 przeglądarka</button>${this.coffeeHtml()}`;
+    }<span class="spacer" data-tauri-drag-region></span>${this.updateHtml()}${usageHtml(this.usage, Date.now())}<button class="top-btn" data-top="browser" title="Przeglądarka w panelu obok (${keysIn("⌘W")}); ↗ otwiera stronę w Brave albo Chrome">🌐 przeglądarka</button>${this.coffeeHtml()}`;
     this.footer.innerHTML =
-      hints().map(([k, label]) => `<span><kbd>${k}</kbd> ${escapeHtml(label)}</span>`).join("") +
-      `<span class="spacer"></span><span class="counts"><b>${this.tiles.size}</b> sessions · <span class="c-working">${count("working")} working</span> · <span class="c-waiting">${waiting} waiting</span> · ${count("idle")} idle</span>`;
+      `<span class="hints">${hints()
+        .map(([k, label]) => `<span><kbd>${k}</kbd> ${escapeHtml(label)}</span>`)
+        .join("")}</span><span class="counts"><b>${this.tiles.size}</b> sessions · <span class="c-working">${count("working")} working</span> · <span class="c-waiting">${waiting} waiting</span> · ${count("idle")} idle</span>`;
   }
 
   // ---- updates -----------------------------------------------------------
@@ -958,7 +1047,7 @@ export class App {
       c.sleepDisabled && c.level !== "lid"
         ? `<button class="coffee warn" data-coffee="restore" title="Usypianie po zamknięciu klapki jest wyłączone w systemie, np. po restarcie w trakcie kawy. Kliknij, aby przywrócić.">sen wyłączony · przywróć</button>`
         : "";
-    return `${stray}<button class="coffee ${c.level}" data-coffee="cycle" title="${shortcuts(title)}">${label}</button>`;
+    return `${stray}<button class="coffee ${c.level}" data-coffee="cycle" title="${keysIn(title)}">${label}</button>`;
   }
 
   // ---- lock --------------------------------------------------------------
@@ -1026,6 +1115,7 @@ export class App {
       if (e.key === "Enter" && e.type === "keydown") void this.unlock();
       return;
     }
+    if (this.settings.isRecording) return; // the dropdown's new shortcut
     const action = actionFor(e);
     if (!action) return;
     const overlay = document.querySelector(".overlay") !== null;
@@ -1037,9 +1127,13 @@ export class App {
 
   /** ⌘Q / ⌘⇧Q from desk's key monitor, under the same rules as a key press. */
   private onShortcut(type: "close" | "kill"): void {
-    if (this.locked) return;
-    if (type === "kill" && document.querySelector(".overlay")) return;
-    this.run({ type });
+    if (this.locked || this.settings.isRecording) return;
+    // The monitor reports the keys: Options may have bound ⌘Q to another action.
+    const action = actionFor({ key: "q", metaKey: true, shiftKey: type === "kill", altKey: false, ctrlKey: false });
+    if (!action) return;
+    const overlay = document.querySelector(".overlay") !== null;
+    if (overlay && !["palette", "new", "settings", "close"].includes(action.type)) return;
+    this.run(action);
   }
 
   private run(a: Action): void {

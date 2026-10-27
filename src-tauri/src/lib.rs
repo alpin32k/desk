@@ -4,6 +4,7 @@ pub mod browser;
 pub mod claude_projects;
 pub mod coffee;
 pub mod discovery;
+pub mod dropdown;
 pub mod env;
 pub mod git;
 pub mod hooks;
@@ -25,6 +26,7 @@ pub mod update;
 pub mod usage;
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::ipc::{Channel, Response};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -37,6 +39,8 @@ struct App {
     sessions: backend::Backend,
     hooks: hooks::HookFiles,
     layout_path: PathBuf,
+    /// tmux's right-click menu is on (Options); see `Tmux::reload_config`.
+    tmux_menu: AtomicBool,
     _watcher: Mutex<Option<notify::RecommendedWatcher>>,
 }
 
@@ -270,6 +274,12 @@ fn open_external(url: String, browser: Option<String>) -> Result<(), String> {
     preview::open_external(&url, browser.as_deref().unwrap_or("auto"))
 }
 
+/// Options changed the dropdown (⌘`): register or drop the shortcut, refit the window.
+#[tauri::command]
+fn dropdown_apply(handle: AppHandle) -> Result<(), String> {
+    dropdown::apply(&handle)
+}
+
 #[tauri::command]
 fn is_locked(lock: State<lock::Lock>) -> bool {
     lock.is_locked()
@@ -287,6 +297,9 @@ fn pty_close(app: State<App>, id: u32) {
 
 #[tauri::command]
 fn save_layout(app: State<App>, layout: layout::Layout) -> Result<(), String> {
+    if app.tmux_menu.swap(layout.tmux_menu, Ordering::Relaxed) != layout.tmux_menu {
+        app.sessions.reload_config(layout.tmux_menu);
+    }
     layout::save(&app.layout_path, &layout).map_err(|e| e.to_string())
 }
 
@@ -492,6 +505,15 @@ pub fn run() {
         // The system clipboard for the terminals: the webview refuses script
         // writes (OSC 52 from tmux) and reads outside a click.
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        dropdown::toggle(app);
+                    }
+                })
+                .build(),
+        )
         .register_uri_scheme_protocol(preview::SCHEME, |_ctx, req| preview::serve(&req));
     // A menu only on macOS: on Windows and Linux it is a bar in the window whose
     // Edit > Copy (Ctrl+C) would take Ctrl+C away from the terminals.
@@ -508,10 +530,14 @@ pub fn run() {
         .setup(|app| {
             let support = env::support_dir();
             let sessions = backend::Backend::new(app.handle(), &support)?;
-            let custom = layout::load(&support.join("layout.json")).agents;
-            let ids: Vec<String> = agents::list(&custom).into_iter().map(|a| a.id).collect();
+            let saved = layout::load(&support.join("layout.json"));
+            let ids: Vec<String> = agents::list(&saved.agents)
+                .into_iter()
+                .map(|a| a.id)
+                .collect();
             sessions.retag_untagged(&ids);
             sessions.clean_env();
+            sessions.reload_config(saved.tmux_menu);
             let hooks = hooks::install(&support)?;
             let watcher = state_watch::watch(app.handle().clone(), &hooks.state_dir).ok();
             app.manage(lock::Lock::default());
@@ -526,8 +552,14 @@ pub fn run() {
                 sessions,
                 hooks,
                 layout_path: support.join("layout.json"),
+                tmux_menu: AtomicBool::new(saved.tmux_menu),
                 _watcher: Mutex::new(watcher),
             });
+            app.manage(dropdown::Dropdown::new(support.join("layout.json")));
+            // Taken by another app: desk still starts, Options shows why.
+            if let Err(e) = dropdown::apply(app.handle()) {
+                eprintln!("dropdown: {e}");
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -560,6 +592,7 @@ pub fn run() {
             lock_desk,
             unlock_desk,
             is_locked,
+            dropdown_apply,
             open_preview,
             preview_bounds,
             preview_visible,
@@ -580,7 +613,14 @@ pub fn run() {
             if matches!(event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_)) {
                 window_place::save_soon(window.app_handle(), window_place::file(&env::support_dir()));
             }
-            if !window.state::<lock::Lock>().is_locked() {
+            let locked = window.state::<lock::Lock>().is_locked();
+            if matches!(event, tauri::WindowEvent::Focused(false)) && !locked {
+                dropdown::blurred(window.app_handle());
+            }
+            if let tauri::WindowEvent::Resized(size) = event {
+                dropdown::resized(window.app_handle(), *size);
+            }
+            if !locked {
                 return;
             }
             match event {
@@ -622,7 +662,7 @@ mod acl_tests {
     use tauri::webview::InvokeRequest;
     use tauri::{WebviewUrl, WebviewWindowBuilder};
 
-    fn call(label: &str, url: &str) -> Result<String, String> {
+    fn call(label: &str, url: &str, cmd: &str) -> Result<String, String> {
         let app = mock_builder()
             .manage(super::lock::Lock::default())
             .invoke_handler(tauri::generate_handler![super::is_locked])
@@ -632,11 +672,11 @@ mod acl_tests {
         let w = WebviewWindowBuilder::new(&app, label, WebviewUrl::External(url.clone()))
             .build()
             .unwrap();
-        invoke(&w, url)
+        invoke(&w, url, cmd)
     }
 
     /// The side panel: a second webview inside the main window.
-    fn call_panel(url: &str) -> Result<String, String> {
+    fn call_panel(url: &str, cmd: &str) -> Result<String, String> {
         let app = mock_builder()
             .manage(super::lock::Lock::default())
             .invoke_handler(tauri::generate_handler![super::is_locked])
@@ -659,7 +699,7 @@ mod acl_tests {
                 tauri::LogicalSize::new(100.0, 100.0),
             )
             .unwrap();
-        invoke(&Panel(panel), url)
+        invoke(&Panel(panel), url, cmd)
     }
 
     struct Panel(tauri::Webview<tauri::test::MockRuntime>);
@@ -672,11 +712,12 @@ mod acl_tests {
     fn invoke<W: AsRef<tauri::Webview<tauri::test::MockRuntime>>>(
         w: &W,
         url: url::Url,
+        cmd: &str,
     ) -> Result<String, String> {
         get_ipc_response(
             w,
             InvokeRequest {
-                cmd: "is_locked".into(),
+                cmd: cmd.into(),
                 callback: CallbackFn(0),
                 error: CallbackFn(1),
                 url,
@@ -691,25 +732,41 @@ mod acl_tests {
 
     /// The preview window loads untrusted pages: none of desk's commands
     /// (pty_write would type into a terminal) may be reachable from it.
+    /// The app's own origin: tauri://localhost, http://tauri.localhost on Windows.
+    const LOCAL: &str = if cfg!(windows) {
+        "http://tauri.localhost"
+    } else {
+        "tauri://localhost"
+    };
+
+    /// Pages that are not desk's: a previewed file, a web page.
+    const UNTRUSTED: [&str; 2] = ["deskpreview://localhost/t/mock.html", "https://example.com/"];
+
     #[test]
     fn only_the_main_window_can_call_desk_commands() {
-        // The app's own origin: tauri://localhost, http://tauri.localhost on Windows.
-        let local = if cfg!(windows) {
-            "http://tauri.localhost"
-        } else {
-            "tauri://localhost"
-        };
-        assert!(call("main", local).is_ok());
+        assert!(call("main", LOCAL, "is_locked").is_ok());
         // Granted by webview, not window: the panel shares the main window.
-        assert!(call_panel(local).is_err());
-        for url in [
-            "deskpreview://localhost/t/mock.html",
-            "https://example.com/",
-        ] {
-            let denied = call("preview", url);
+        assert!(call_panel(LOCAL, "is_locked").is_err());
+        for url in UNTRUSTED {
+            let denied = call("preview", url, "is_locked");
             assert!(denied.is_err(), "{url}: {denied:?}");
-            let denied = call_panel(url);
+            let denied = call_panel(url, "is_locked");
             assert!(denied.is_err(), "panel {url}: {denied:?}");
+        }
+    }
+
+    /// dropdown_apply registers a global shortcut (a key taken from every
+    /// app): the ACL lets only desk's own page ask for it.
+    #[test]
+    fn only_the_main_window_can_set_the_dropdown_shortcut() {
+        let denied = |r: Result<String, String>| r.is_err_and(|e| e.contains("not allowed"));
+        // Past the ACL (this mock app has no handler for it, so "not found").
+        let main = call("main", LOCAL, "dropdown_apply");
+        assert!(main.as_ref().is_err_and(|e| e.contains("not found")), "{main:?}");
+        assert!(denied(call_panel(LOCAL, "dropdown_apply")));
+        for url in UNTRUSTED {
+            assert!(denied(call("preview", url, "dropdown_apply")), "{url}");
+            assert!(denied(call_panel(url, "dropdown_apply")), "panel {url}");
         }
     }
 }

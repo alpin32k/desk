@@ -79,10 +79,17 @@ button:hover {
 :root[data-platform="mac"] .top {
   padding-left: 80px; /* traffic lights over the overlay title bar */
 }
+:root[data-platform="mac"][data-dropdown] .top {
+  padding-left: 10px; /* hidden while docked (dropdown.rs) */
+}
 
 .brand {
   font-weight: 700;
   color: var(--fg);
+}
+
+.dropdown-hint {
+  color: var(--dim);
 }
 
 .top .spacer {
@@ -595,8 +602,21 @@ button:hover {
   color: var(--fg);
 }
 
-.bottom .spacer {
+.bottom .hints {
+  /* Hints that do not fit wrap onto a hidden second line: whole ones go,
+     none is cut in half, and the counts stay. */
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 14px;
+  height: 1.6em;
+  line-height: 1.6em;
+  overflow: hidden;
+}
+
+.bottom .counts {
+  flex-shrink: 0;
 }
 
 .bottom .counts b {
@@ -757,6 +777,63 @@ button:hover {
   font-size: 13px;
 }
 
+.settings-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.settings .tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.settings .tabs .tab.sel {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.settings .pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings .pane[hidden] {
+  display: none;
+}
+
+/* The dialog scrolls; nothing in it may shrink to fit (rows of a list
+   with overflow: hidden would squeeze into each other). */
+.settings > *,
+.settings .pane > *,
+.settings .checks > * {
+  flex-shrink: 0;
+}
+
+.settings .shortcut-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  align-items: baseline;
+}
+
+.settings .shortcut-list kbd,
+.settings .shortcut-list button.key {
+  justify-self: start;
+}
+
+.settings .shortcut-list button.reset {
+  padding: 0 5px;
+  margin-left: 4px;
+}
+
+.settings .shortcut-list .group {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  color: var(--dim);
+}
+
 .settings h3 {
   margin: 10px 0 0;
   font-size: 11px;
@@ -775,6 +852,10 @@ button:hover {
   width: 56px;
 }
 
+.settings button.recording {
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .settings .checks {
   max-height: 34vh;
   overflow-y: auto;
@@ -913,8 +994,98 @@ button.danger {
   min-width: 0;
 }
 
-.middle > .grid {
+.middle > .stage {
   flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.stage > .grid {
+  flex: 1 1 0;
+}
+
+/* ---- tabs above a fullscreen tile: the sessions and their ⌘1–9 ---- */
+.strip {
+  flex: none;
+  display: flex;
+  height: 24px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.strip[hidden] {
+  display: none;
+}
+
+.strip-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--dim);
+  font: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.strip-tab:last-child {
+  border-right: 0;
+}
+
+.strip-tab:hover {
+  color: var(--fg);
+}
+
+.strip-tab b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 400;
+}
+
+.strip-tab .dim {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.strip-tab.sel {
+  color: var(--fg);
+  background: var(--panel);
+  border-bottom-color: var(--proj, var(--fg));
+}
+
+.strip-tab.sel b {
+  color: var(--proj, var(--fg));
+  font-weight: 700;
+}
+
+.strip-tab .dot {
+  width: 6px;
+  height: 6px;
+  background: var(--idle);
+}
+
+.strip-tab.state-working .dot {
+  background: var(--working);
+}
+
+.strip-tab.state-waiting .dot {
+  background: var(--waiting);
+}
+
+.strip-idx {
+  flex: none;
+  margin-left: auto;
+  color: var(--dim);
 }
 
 .side {

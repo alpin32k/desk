@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionFor, hints } from "./keys";
+import { actionFor, BINDINGS, clashWith, hints, keysIn, keyText, setCustomKeys } from "./keys";
 
 const k = (key: string, mods: Partial<{ metaKey: boolean; shiftKey: boolean; altKey: boolean; ctrlKey: boolean }> = {}) => ({
   key,
@@ -69,5 +69,32 @@ describe("actionFor", () => {
     expect(hints("mac")[0]).toEqual(["⌘P", "projekty"]);
     expect(hints("windows")[0]).toEqual(["Ctrl⇧P", "projekty"]);
     expect(hints("linux").find(([, l]) => l === "zabij")).toEqual(["Ctrl⇧⌫", "zabij"]);
+  });
+});
+
+describe("custom shortcuts", () => {
+  it("replace the defaults everywhere they are shown", () => {
+    setCustomKeys({ palette: "Super+Shift+KeyP" });
+    try {
+      expect(mac(k("p"))).toBeNull();
+      expect(mac(k("P", { shiftKey: true }))).toEqual({ type: "palette" });
+      expect(hints("mac")[0]).toEqual(["⇧⌘P", "projekty"]);
+      expect(keyText("palette", "mac")).toBe("⇧⌘P");
+      expect(keysIn("Otwórz (⌘P), zwiń (⌘J)", "mac")).toBe("Otwórz (⇧⌘P), zwiń (⌘J)");
+    } finally {
+      setCustomKeys({});
+    }
+  });
+
+  it("refuse a key that is taken", () => {
+    expect(clashWith("palette", "Super+KeyN", "mac")).toBe("nowy projekt (folder + opcjonalnie git init)");
+    expect(clashWith("palette", "Super+KeyC", "mac")).toBe("kopiuj");
+    expect(clashWith("palette", "Super+Digit4", "mac")).toBe("skok do kafelka");
+    expect(clashWith("palette", "Super+KeyP", "mac")).toBeNull(); // its own
+    expect(clashWith("palette", "Super+KeyI", "mac")).toBeNull();
+  });
+
+  it("have unique ids", () => {
+    expect(new Set(BINDINGS.map((b) => b.id)).size).toBe(BINDINGS.length);
   });
 });

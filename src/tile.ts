@@ -14,8 +14,8 @@ import { openOutside, preview, previewFile } from "./side";
 import { api, type HookState } from "./api";
 import { stripProbeReplies } from "./input";
 import { DEFAULT_THEME, terminalTheme, themeById } from "./themes";
-import { PLATFORM, shortcuts } from "./platform";
-import { actionFor } from "./keys";
+import { PLATFORM } from "./platform";
+import { actionFor, keysIn } from "./keys";
 import { rowLinks, type Row } from "./links";
 import { agentLabel, keyOf, type Spec } from "./sessions";
 
@@ -112,7 +112,7 @@ export class Tile {
     this.el = document.createElement("section");
     this.el.className = "tile state-starting";
     this.el.dataset.key = this.key;
-    this.el.innerHTML = shortcuts(`
+    this.el.innerHTML = keysIn(`
       <header draggable="true">
         <span class="dot" data-a="color" title="Kolor projektu (kliknij, aby zmienić)"></span>
         <span class="badge"></span>
@@ -270,6 +270,9 @@ export class Tile {
   /** Open the terminal and attach to tmux; call once the element is in the DOM. */
   async start(): Promise<void> {
     this.term.open(this.body);
+    // No system menu (Cut, Spelling, Speech...) over a terminal: right click
+    // belongs to the program in it.
+    this.body.addEventListener("contextmenu", (e) => e.preventDefault());
     // The textarea exists only after open(); clicking a terminal makes its tile active.
     this.term.textarea?.addEventListener("focus", () => this.onAction(this, "focus"));
     this.term.onWriteParsed(() => {
@@ -386,7 +389,7 @@ export class Tile {
     this.el.classList.toggle("minimized", on);
     const btn = this.el.querySelector<HTMLElement>('[data-a="minimize"]')!;
     btn.textContent = on ? "▢" : "–";
-    btn.title = shortcuts(on ? "Rozwiń (⌘J)" : "Zwiń: zostaje nagłówek z ostatnią linią (⌘J)");
+    btn.title = keysIn(on ? "Rozwiń (⌘J)" : "Zwiń: zostaje nagłówek z ostatnią linią (⌘J)");
     if (on) this.queuePeek();
     else {
       this.peek.textContent = "";
