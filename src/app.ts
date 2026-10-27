@@ -173,6 +173,10 @@ export class App {
         this.layout.autoLayout = on;
         this.changed();
       },
+      setTmuxMenu: (on) => {
+        this.layout.tmuxMenu = on;
+        this.save();
+      },
       setNotifications: (on) => {
         this.layout.notifications = on;
         this.save();
@@ -261,6 +265,7 @@ export class App {
       dropdownHotkey: boot.layout.dropdownHotkey || DEFAULT_HOTKEY(),
       dropdownAnimation: boot.layout.dropdownAnimation ?? 200,
       keys: boot.layout.keys ?? {},
+      tmuxMenu: boot.layout.tmuxMenu ?? false,
       lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length),
     };
     setCustomKeys(this.layout.keys);

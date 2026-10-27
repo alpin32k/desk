@@ -23,6 +23,7 @@ pub mod update;
 pub mod usage;
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::ipc::{Channel, Response};
 use tauri::menu::{Menu, PredefinedMenuItem, Submenu};
@@ -35,6 +36,8 @@ struct App {
     sessions: backend::Backend,
     hooks: hooks::HookFiles,
     layout_path: PathBuf,
+    /// tmux's right-click menu is on (Options); see `Tmux::reload_config`.
+    tmux_menu: AtomicBool,
     _watcher: Mutex<Option<notify::RecommendedWatcher>>,
 }
 
@@ -291,6 +294,9 @@ fn pty_close(app: State<App>, id: u32) {
 
 #[tauri::command]
 fn save_layout(app: State<App>, layout: layout::Layout) -> Result<(), String> {
+    if app.tmux_menu.swap(layout.tmux_menu, Ordering::Relaxed) != layout.tmux_menu {
+        app.sessions.reload_config(layout.tmux_menu);
+    }
     layout::save(&app.layout_path, &layout).map_err(|e| e.to_string())
 }
 
@@ -516,11 +522,14 @@ pub fn run() {
         .setup(|app| {
             let support = env::support_dir();
             let sessions = backend::Backend::new(app.handle(), &support)?;
-            let custom = layout::load(&support.join("layout.json")).agents;
-            let ids: Vec<String> = agents::list(&custom).into_iter().map(|a| a.id).collect();
+            let saved = layout::load(&support.join("layout.json"));
+            let ids: Vec<String> = agents::list(&saved.agents)
+                .into_iter()
+                .map(|a| a.id)
+                .collect();
             sessions.retag_untagged(&ids);
             sessions.clean_env();
-            sessions.reload_config();
+            sessions.reload_config(saved.tmux_menu);
             let hooks = hooks::install(&support)?;
             let watcher = state_watch::watch(app.handle().clone(), &hooks.state_dir).ok();
             app.manage(lock::Lock::default());
@@ -530,6 +539,7 @@ pub fn run() {
                 sessions,
                 hooks,
                 layout_path: support.join("layout.json"),
+                tmux_menu: AtomicBool::new(saved.tmux_menu),
                 _watcher: Mutex::new(watcher),
             });
             app.manage(dropdown::Dropdown::new(support.join("layout.json")));

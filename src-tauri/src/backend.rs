@@ -102,9 +102,9 @@ impl Backend {
     }
 
     /// See `Tmux::reload_config`.
-    pub fn reload_config(&self) {
+    pub fn reload_config(&self, menu: bool) {
         if let Backend::Tmux { tmux, .. } = self {
-            tmux.reload_config();
+            tmux.reload_config(menu);
         }
     }
 
