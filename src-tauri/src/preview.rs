@@ -29,6 +29,22 @@ use url::Url;
 pub const LABEL: &str = "preview";
 pub const SCHEME: &str = "deskpreview";
 
+/// A web page in the panel has a password field: desk offers to open it in
+/// a real browser, where a password manager (Bitwarden) can fill it. The
+/// page tells desk by trying to open `deskpanel:password`, which is refused;
+/// a page that fakes it only makes that offer appear.
+const SIGNAL: &str = "deskpanel";
+const LOGIN_SCRIPT: &str = r#"(() => {
+  if (!/^https?:$/.test(location.protocol)) return;
+  const look = () => {
+    if (!document.querySelector('input[type="password"]')) return;
+    watch.disconnect();
+    location.href = "deskpanel:password";
+  };
+  const watch = new MutationObserver(look);
+  watch.observe(document, { childList: true, subtree: true });
+})();"#;
+
 /// Folders opened for preview, by token (the first path segment).
 static ROOTS: Mutex<Option<HashMap<String, PathBuf>>> = Mutex::new(None);
 
@@ -305,10 +321,22 @@ pub fn open(app: &AppHandle, link: &str, bounds: Bounds) -> Result<String, Strin
     let window = app.get_window("main").ok_or("brak głównego okna")?;
     let local = url.scheme() == SCHEME;
     let handle = app.clone();
+    let signal = app.clone();
     let builder = WebviewBuilder::new(LABEL, WebviewUrl::External(url.clone()))
-        .on_navigation(allow_navigation)
-        .on_page_load(move |_, payload| {
-            if payload.event() == PageLoadEvent::Finished {
+        .initialization_script(LOGIN_SCRIPT)
+        .on_navigation(move |u| {
+            if u.scheme() == SIGNAL {
+                let _ = signal.emit_to("main", "preview-login", true);
+                return false;
+            }
+            allow_navigation(u)
+        })
+        .on_page_load(move |_, payload| match payload.event() {
+            // A new page: no password field seen yet.
+            PageLoadEvent::Started => {
+                let _ = handle.emit_to("main", "preview-login", false);
+            }
+            PageLoadEvent::Finished => {
                 let _ = handle.emit_to("main", "preview-url", display(payload.url()));
             }
         });

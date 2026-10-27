@@ -67,6 +67,8 @@ export class Side {
   private tree: FileTree;
   /** "Brave" / "Chrome", or null when web pages go to the system browser. */
   private browserName: string | null = null;
+  /** The page has a password field: offer the real browser and its password manager. */
+  private login = false;
 
   constructor(
     private onLayout: () => void,
@@ -83,6 +85,7 @@ export class Side {
         <button data-a="forward" title="Dalej">›</button>
         <button data-a="reload" title="Odśwież">⟳</button>
         <input class="side-address" spellcheck="false" placeholder="adres, localhost:5173 albo ścieżka pliku" />
+        <button data-a="login" class="side-login" hidden></button>
         <button data-a="save" class="side-save" hidden title="Zapisz (${shortcut("⌘S")})">zapisz</button>
         <button data-a="attach" title="Dodaj do aktywnej sesji (@ścieżka)">@</button>
         <button data-a="edit" title="Edytuj plik">✎</button>
@@ -130,6 +133,7 @@ export class Side {
       else if (a === "edit") void (this.editing ? this.stopEditing() : this.edit());
       else if (a === "save") void this.save();
       else if (a === "external" && this.address.value) void openOutside(this.editing?.path ?? this.address.value).catch(this.fail);
+      else if (a === "login" && this.address.value) void openOutside(this.address.value).catch(this.fail);
       else if ((a === "back" || a === "forward" || a === "reload") && this.created && !this.editing) {
         void api.previewNav(a).catch(this.fail);
       }
@@ -144,6 +148,10 @@ export class Side {
     // A native view sits above the page: hide it while a dialog or the lock covers it.
     new MutationObserver(() => this.cover()).observe(document.body, { childList: true });
     this.covered = document.querySelector(".overlay, .lock-screen") !== null;
+    void listen<boolean>("preview-login", (e) => {
+      this.login = e.payload;
+      this.syncButtons();
+    });
     void listen<string>("preview-url", (e) => {
       if (document.activeElement !== this.address && !this.editing) this.address.value = e.payload;
       this.syncButtons();
@@ -295,6 +303,10 @@ export class Side {
     const web = !local && !this.folder && /^https?:/i.test(this.address.value);
     ext.textContent = web && this.browserName ? `↗ ${this.browserName}` : "↗";
     ext.title = web ? `Otwórz w ${this.browserName ?? "przeglądarce systemowej"}` : "Otwórz w domyślnym programie";
+    const login = this.el.querySelector<HTMLElement>('[data-a="login"]')!;
+    login.hidden = !this.login || !web || !!this.editing;
+    login.textContent = `🔑 Zaloguj w ${this.browserName ?? "przeglądarce"} (Bitwarden)`;
+    login.title = "Ta przeglądarka nie obsługuje rozszerzeń: logowanie z menedżerem haseł działa w prawdziwej przeglądarce";
   }
 
   private dirty(): boolean {
