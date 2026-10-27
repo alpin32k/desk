@@ -1,5 +1,11 @@
 # Zmiany
 
+## Niewydane
+
+- **Zamykanie kafelka to ⌘Q, a zabijanie sesji ⌘⇧Q** (Ctrl⇧Q i Ctrl⇧⌫ na Windows i Linux).
+  ⌘Z znów cofa w polach tekstowych. ⌘Q nie zamyka już desk: do tego służy menu desk › Quit desk.
+  desk przechwytuje ⌘⇧Q, zanim zrobi to macOS, więc skrót nie wylogowuje z systemu.
+
 ## 0.1.12 (2026-10-27)
 
 - **Blokada zasłania też Dock i pasek menu na drugim monitorze.** Zasłona leżała pod nimi, więc

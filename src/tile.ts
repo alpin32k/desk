@@ -125,8 +125,8 @@ export class Tile {
           <button data-a="rename" title="Nazwij kafelek (albo prawy klik na tytule)">✎</button>
           <button data-a="minimize" title="Zwiń: zostaje nagłówek z ostatnią linią (⌘J)">–</button>
           <button data-a="fullscreen" title="Ekran pełny (⌘E)">⤢</button>
-          <button data-a="close" title="Zamknij kafelek, sesja zostaje (⌘Z)">×</button>
-          <button data-a="kill" title="Zabij sesję (⌘⇧Z)">⏻</button>
+          <button data-a="close" title="Zamknij kafelek, sesja zostaje (⌘Q)">×</button>
+          <button data-a="kill" title="Zabij sesję (⌘⇧Q)">⏻</button>
         </span>
       </header>
       <div class="term"></div>`);
@@ -301,7 +301,7 @@ export class Tile {
     try {
       this.ptyId = await api.ptyAttach(this.slug, this.term.cols, this.term.rows, ch);
     } catch (err) {
-      this.term.write(`\r\n\x1b[31mNie udało się podłączyć do sesji: ${err}\x1b[0m\r\n⌘Z zamyka kafelek.\r\n`);
+      this.term.write(`\r\n\x1b[31mNie udało się podłączyć do sesji: ${err}\x1b[0m\r\n⌘Q zamyka kafelek.\r\n`);
       return;
     }
     if (this.disposed) void api.ptyClose(this.ptyId);

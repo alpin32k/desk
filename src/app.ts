@@ -182,6 +182,8 @@ export class App {
     await listen<SessionState>("session-state", (e) => this.onHookState(e.payload));
     await listen<PtyExit>("pty-exit", (e) => void this.onPtyExit(e.payload));
     await listen<CoffeeStatus>("coffee", (e) => this.onCoffeeStopped(e.payload));
+    // macOS: desk catches ⌘Q / ⌘⇧Q itself, before its menu (Quit) and the Apple menu (Log Out).
+    await listen<"close" | "kill">("shortcut", (e) => this.onShortcut(e.payload));
     this.top.addEventListener("click", (e) => {
       const a = (e.target as HTMLElement).closest<HTMLElement>("[data-coffee]")?.dataset.coffee;
       if (a === "cycle") void this.cycleCoffee();
@@ -1026,13 +1028,18 @@ export class App {
     }
     const action = actionFor(e);
     if (!action) return;
-    // In a text field ⌘Z / ⌘⇧Z (Ctrl+Shift+Z) are undo and redo, not close and kill.
-    if ((action.type === "close" || action.type === "kill") && isTextField(e.target)) return;
     const overlay = document.querySelector(".overlay") !== null;
     if (overlay && !["palette", "new", "settings", "close"].includes(action.type)) return; // e.g. ⌘↵ in the palette
     e.preventDefault();
     e.stopPropagation();
     this.run(action);
+  }
+
+  /** ⌘Q / ⌘⇧Q from desk's key monitor, under the same rules as a key press. */
+  private onShortcut(type: "close" | "kill"): void {
+    if (this.locked) return;
+    if (type === "kill" && document.querySelector(".overlay")) return;
+    this.run({ type });
   }
 
   private run(a: Action): void {
@@ -1133,18 +1140,6 @@ async function ensureNotificationPermission(): Promise<void> {
 }
 
 /** The lock screen's password field (Linux): the one input that works while locked. */
-/**
- * Where typing edits text: inputs, text areas, the panel's editor. Not a
- * terminal: xterm takes keys through a hidden textarea, and there ⌘Z closes.
- */
-function isTextField(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    !target.closest(".xterm") &&
-    (target.matches("input, textarea") || target.isContentEditable)
-  );
-}
-
 function isLockField(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && target.classList.contains("lock-password");
 }

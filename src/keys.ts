@@ -1,6 +1,6 @@
 import { PLATFORM, shortcut, type Platform } from "./platform";
 
-// App shortcuts, named after the Polish actions (⌘P projekty, ⌘Z zamknij, ...);
+// App shortcuts, named after the Polish actions (⌘P projekty, ⌘Q zamknij, ...);
 // Ctrl+Shift instead of ⌘ on Windows and Linux (see platform.ts).
 // Anything not listed here goes to the focused terminal, so plain Esc still
 // reaches Claude (it interrupts a turn there).
@@ -39,7 +39,7 @@ export function actionFor(e: KeyLike, platform: Platform = PLATFORM): Action | n
   if (platform === "mac") {
     if (!e.metaKey || e.ctrlKey || e.altKey) return null;
     key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-    if (e.shiftKey) return key === "z" ? { type: "kill" } : null;
+    if (e.shiftKey) return key === "q" ? { type: "kill" } : null;
   } else {
     // Ctrl+Shift+letter; Ctrl+Shift+Backspace kills. Alt stays free for AltGr (ą, ż...).
     if (!e.ctrlKey || !e.shiftKey || e.metaKey || e.altKey) return null;
@@ -60,7 +60,7 @@ export function actionFor(e: KeyLike, platform: Platform = PLATFORM): Action | n
       return { type: "new" };
     case "d": // druga sesja w tym projekcie
       return { type: "sub" };
-    case "z": // zamknij
+    case "q": // zamknij (desk itself quits only from its menu)
       return { type: "close" };
     case "e": // ekran pełny
     case "Enter":
@@ -100,8 +100,8 @@ export const HINTS: [string, string][] = [
   ["⌘U", "uruchom"],
   ["⌘R", "rozmowa"],
   ["⌘W", "podgląd"],
-  ["⌘Z", "zamknij"],
-  ["⌘⇧Z", "zabij"],
+  ["⌘Q", "zamknij"],
+  ["⌘⇧Q", "zabij"],
   ["⌘1-9", "skok"],
   ["⌘E", "ekran"],
   ["⌘J", "zwiń"],

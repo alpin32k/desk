@@ -17,8 +17,10 @@ describe("actionFor", () => {
     expect(mac(k("p"))).toEqual({ type: "palette" });
     expect(mac(k("n"))).toEqual({ type: "new" });
     expect(mac(k("d"))).toEqual({ type: "sub" });
-    expect(mac(k("z"))).toEqual({ type: "close" });
-    expect(mac(k("Z", { shiftKey: true }))).toEqual({ type: "kill" });
+    expect(mac(k("q"))).toEqual({ type: "close" });
+    expect(mac(k("z"))).toBeNull(); // ⌘Z is undo again
+    expect(mac(k("Q", { shiftKey: true }))).toEqual({ type: "kill" });
+    expect(mac(k("Z", { shiftKey: true }))).toBeNull(); // redo
     expect(mac(k("3"))).toEqual({ type: "focus", index: 2 });
     expect(mac(k("e"))).toEqual({ type: "fullscreen" });
     expect(mac(k("Enter"))).toEqual({ type: "fullscreen" });
@@ -52,7 +54,8 @@ describe("actionFor", () => {
     expect(w("KeyP", "P")).toEqual({ type: "palette" });
     expect(w("Digit3", "#")).toEqual({ type: "focus", index: 2 }); // Shift turns 3 into #
     expect(w("Backspace", "Backspace")).toEqual({ type: "kill" });
-    expect(w("KeyZ", "Z")).toEqual({ type: "close" });
+    expect(w("KeyQ", "Q")).toEqual({ type: "close" });
+    expect(w("KeyZ", "Z")).toBeNull();
     expect(w("KeyC", "C")).toBeNull(); // copy, handled by the terminal tile
     expect(w("Equal", "+")).toEqual({ type: "font", step: 1 });
     expect(w("Minus", "_")).toEqual({ type: "font", step: -1 });

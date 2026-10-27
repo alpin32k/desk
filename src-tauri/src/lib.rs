@@ -9,6 +9,8 @@ pub mod git;
 pub mod hooks;
 pub mod layout;
 pub mod lock;
+#[cfg(target_os = "macos")]
+mod mac_keys;
 pub mod native;
 pub mod new_project;
 #[cfg(target_os = "linux")]
@@ -24,7 +26,7 @@ pub mod usage;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::ipc::{Channel, Response};
-use tauri::menu::{Menu, PredefinedMenuItem, Submenu};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Manager, RunEvent, State};
 
 /// Coffee state lives in its own managed value so the guard thread can reach it.
@@ -449,7 +451,8 @@ pub(crate) fn menu(app: &AppHandle, locked: bool) -> tauri::Result<Menu<tauri::W
             &PredefinedMenuItem::hide(app, None)?,
             &PredefinedMenuItem::hide_others(app, None)?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, None)?,
+            // No ⌘Q: that closes a tile (see mac_keys.rs).
+            &MenuItem::with_id(app, "quit", "Quit desk", true, None::<&str>)?,
         ],
     )?;
     let edit = Submenu::with_items(
@@ -492,7 +495,11 @@ pub fn run() {
     // A menu only on macOS: on Windows and Linux it is a bar in the window whose
     // Edit > Copy (Ctrl+C) would take Ctrl+C away from the terminals.
     let builder = if cfg!(target_os = "macos") {
-        builder.menu(|app| menu(app, false))
+        builder.menu(|app| menu(app, false)).on_menu_event(|app, event| {
+            if event.id() == "quit" {
+                app.exit(0);
+            }
+        })
     } else {
         builder
     };
@@ -507,6 +514,8 @@ pub fn run() {
             let hooks = hooks::install(&support)?;
             let watcher = state_watch::watch(app.handle().clone(), &hooks.state_dir).ok();
             app.manage(lock::Lock::default());
+            #[cfg(target_os = "macos")]
+            mac_keys::install(app.handle());
             app.manage(AppCoffee(coffee::Coffee::new(&support)));
             coffee::spawn_guard(app.handle().clone());
             app.manage(App {

@@ -54,8 +54,8 @@ po jednej sesji Claude Code (albo Codex, opencode, Gemini, aider, shell) na proj
 | ⌘U | uruchom (dev serwer, testy...) |
 | ⌘R | rozmowa (czat bez projektu) |
 | ⌘W | podgląd obok (pliki, Markdown, diagramy, strony) |
-| ⌘Z | zamknij kafelek (sesja w tmux zostaje) |
-| ⌘⇧Z | zabij sesję |
+| ⌘Q | zamknij kafelek (sesja w tmux zostaje). Sam desk zamyka się tylko z menu (desk › Quit desk) |
+| ⌘⇧Q | zabij sesję (desk przejmuje skrót, więc nie wylogowuje z macOS) |
 | ⌘1–9 | skok do kafelka |
 | ⌘E / ⌘↵ | ekran pełny kafelka, ⌘Esc wraca |
 | ✎ | nazwij kafelek (albo prawy klik na tytule), np. „logi API”; pusta nazwa przywraca domyślną |
@@ -70,7 +70,7 @@ Zwykłe Esc trafia do terminala, więc dalej przerywa Claude.
 ## Windows
 
 - **Sesje działają bez tmux:** trzyma je sam desk (ConPTY), więc kończą się po zamknięciu desk.
-  Zamknięcie kafelka (Ctrl⇧Z) zostawia sesję, dopóki desk jest otwarty.
+  Zamknięcie kafelka (Ctrl⇧Q) zostawia sesję, dopóki desk jest otwarty.
 - **Skróty to Ctrl+Shift+litera** zamiast ⌘ (Ctrl⇧P projekty, Ctrl⇧D druga sesja...). Zabicie
   sesji to Ctrl⇧⌫. Zwykłe Ctrl+C trafia do programu w terminalu, a kopiowanie i wklejanie to
   Ctrl⇧C / Ctrl⇧V. Tak samo jest na Linuksie.
