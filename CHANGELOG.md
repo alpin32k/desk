@@ -1,6 +1,6 @@
 # Zmiany
 
-## Niewydane
+## 0.1.8 (2026-10-27)
 
 - **Blokada zasłania wszystkie monitory.** Do tej pory przykrywała tylko ekran z oknem desk, a na
   drugim monitorze można było normalnie pracować. Teraz każdy inny ekran przykrywa ciemne okno,
