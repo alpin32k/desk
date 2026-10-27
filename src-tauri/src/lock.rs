@@ -5,6 +5,8 @@
 //! - `pty_write` refuses input (enforced here, not only in the UI),
 //! - the window covers the screen (macOS kiosk options also hide the Dock and
 //!   menu bar and disable app switching, Force Quit and log out),
+//! - every other screen goes dark under a window that stays on top, takes the
+//!   clicks and never the focus; screens plugged in while locked get one too,
 //! - quitting desk or closing its window is refused, the menu shrinks to
 //!   Edit > Copy, and the window comes back to the front if it loses focus
 //!   or gets minimized.
@@ -13,14 +15,21 @@
 //! the `desk` socket are still reachable from any other program that runs as
 //! you. For the whole machine use the system's lock screen.
 
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::AppHandle;
+use std::time::Duration;
+use tauri::{AppHandle, Manager};
+
+/// Labels of the windows over the other screens: `lock-cover-0`, `-1`, ...
+const COVER: &str = "lock-cover";
 
 #[derive(Default)]
 pub struct Lock {
     locked: AtomicBool,
     /// The Touch ID / password dialog is up and must keep the focus.
     authenticating: AtomicBool,
+    /// Held while the covers change, so unlocking cannot race the watcher.
+    covers: Mutex<()>,
 }
 
 impl Lock {
@@ -34,11 +43,28 @@ impl Lock {
     }
 
     pub fn lock(&self, app: &AppHandle) -> Result<(), String> {
-        self.locked.store(true, Ordering::SeqCst);
+        if self.locked.swap(true, Ordering::SeqCst) {
+            return Ok(());
+        }
         if cfg!(target_os = "macos") {
             let _ = crate::menu(app, true).and_then(|m| app.set_menu(m));
         }
         kiosk(app, true);
+        // Off the main thread: a command that builds windows on it deadlocks on
+        // Windows. It also follows screens plugged in or out while locked.
+        let app = app.clone();
+        std::thread::spawn(move || {
+            loop {
+                let lock = app.state::<Lock>();
+                let _covers = lock.covers.lock().unwrap_or_else(|e| e.into_inner());
+                if !lock.is_locked() {
+                    break;
+                }
+                cover_screens(&app, true);
+                drop(_covers);
+                std::thread::sleep(Duration::from_secs(1));
+            }
+        });
         Ok(())
     }
 
@@ -54,6 +80,10 @@ impl Lock {
         self.authenticating.store(false, Ordering::SeqCst);
         result?;
         self.locked.store(false, Ordering::SeqCst);
+        {
+            let _covers = self.covers.lock().unwrap_or_else(|e| e.into_inner());
+            cover_screens(app, false);
+        }
         kiosk(app, false);
         if cfg!(target_os = "macos") {
             let _ = crate::menu(app, false).and_then(|m| app.set_menu(m));
@@ -62,11 +92,58 @@ impl Lock {
     }
 }
 
+/// One dark window over each screen except the one desk's window is on, or
+/// none (`on` false). Windows already in place are only moved, so calling it
+/// again does not flicker.
+fn cover_screens(app: &AppHandle, on: bool) {
+    let mut screens = Vec::new();
+    if on && let Some(main) = app.get_webview_window("main") {
+        let here = main.current_monitor().ok().flatten().map(|m| *m.position());
+        screens = main.available_monitors().unwrap_or_default();
+        screens.retain(|m| Some(*m.position()) != here);
+    }
+    let labels: Vec<String> = (0..screens.len()).map(|i| format!("{COVER}-{i}")).collect();
+    for (label, window) in app.windows() {
+        if label.starts_with(COVER) && !labels.contains(&label) {
+            let _ = window.destroy();
+        }
+    }
+    for (screen, label) in screens.iter().zip(&labels) {
+        let window = match app.get_window(label) {
+            Some(w) => w,
+            None => {
+                let at = screen.position().to_logical::<f64>(screen.scale_factor());
+                let size = screen.size().to_logical::<f64>(screen.scale_factor());
+                match tauri::window::WindowBuilder::new(app, label)
+                    .title("desk")
+                    .position(at.x, at.y)
+                    .inner_size(size.width, size.height)
+                    .decorations(false)
+                    .shadow(false)
+                    .resizable(false)
+                    .always_on_top(true)
+                    .visible_on_all_workspaces(true)
+                    .skip_taskbar(true)
+                    .focused(false)
+                    .focusable(false)
+                    .background_color(tauri::window::Color(11, 13, 16, 255))
+                    .build()
+                {
+                    Ok(w) => w,
+                    Err(_) => continue,
+                }
+            }
+        };
+        // Exact pixels, now that the window sits on its screen.
+        let _ = window.set_position(*screen.position());
+        let _ = window.set_size(*screen.size());
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn kiosk(app: &AppHandle, on: bool) {
     use objc2::MainThreadMarker;
     use objc2_app_kit::{NSApplication, NSApplicationPresentationOptions as O};
-    use tauri::Manager;
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.set_simple_fullscreen(on);
         let _ = w.set_focus();
@@ -93,7 +170,6 @@ fn kiosk(app: &AppHandle, on: bool) {
 /// Windows, Linux: the window fills the screen while locked.
 #[cfg(not(target_os = "macos"))]
 fn kiosk(app: &AppHandle, on: bool) {
-    use tauri::Manager;
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.set_fullscreen(on);
         let _ = w.set_focus();
@@ -137,7 +213,6 @@ fn authenticate(_app: &AppHandle, reason: &str, _password: Option<&str>) -> Resu
 /// Windows Hello (PIN, fingerprint or face), its dialog owned by desk's window.
 #[cfg(windows)]
 fn authenticate(app: &AppHandle, reason: &str, _password: Option<&str>) -> Result<(), String> {
-    use tauri::Manager;
     use windows::Security::Credentials::UI::{
         UserConsentVerificationResult as R, UserConsentVerifier, UserConsentVerifierAvailability,
     };
