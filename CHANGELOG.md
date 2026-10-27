@@ -1,5 +1,12 @@
 # Zmiany
 
+## Niewydane
+
+- **Klikalne ścieżki względne i dokumenty.** Ścieżka taka jak `docs/superpowers/plans/plan.md`,
+  którą agent wypisze w terminalu, otwiera się w panelu jako plik projektu kafelka. Do stron,
+  obrazków i PDF doszły `.md`, `.mmd`, `.json`, `.csv`, `.tsv` i `.txt`. Sama nazwa bez folderu
+  (`README.md`) zostaje zwykłym tekstem.
+
 ## 0.1.10 (2026-10-27)
 
 - **Nazwy kafelków.** ✎ w nagłówku albo prawy klik na tytule pozwala nadać kafelkowi własną

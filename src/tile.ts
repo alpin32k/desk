@@ -10,7 +10,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { openOutside, preview } from "./side";
+import { openOutside, preview, previewFile } from "./side";
 import { api, type HookState } from "./api";
 import { stripProbeReplies } from "./input";
 import { DEFAULT_THEME, terminalTheme, themeById } from "./themes";
@@ -201,8 +201,15 @@ export class Tile {
     };
     window.addEventListener("mouseup", this.released, true);
     // Click a link: preview inside desk; Option-click: Brave / Chrome / system browser.
-    const openLink = (e: MouseEvent, uri: string) => {
-      const p = e.altKey ? openOutside(uri) : preview(uri);
+    const openLink = (e: MouseEvent, uri: string, relative = false) => {
+      // A relative path (docs/plan.md) is a file of this tile's project.
+      const p = relative
+        ? e.altKey
+          ? openOutside(`${this.path.replace(/[\\/]+$/, "")}/${uri}`)
+          : previewFile(this.path, uri)
+        : e.altKey
+          ? openOutside(uri)
+          : preview(uri);
       p.catch((err) => this.term.write(`\r\n\x1b[33m${err}\x1b[0m\r\n`));
     };
     this.term.loadAddon(new WebLinksAddon(openLink));
@@ -220,7 +227,7 @@ export class Tile {
           rowLinks(rows, y - 1 - top, this.term.cols).map((l) => ({
             range: { start: { x: l.start.col + 1, y: top + l.start.row + 1 }, end: { x: l.end.col, y: top + l.end.row + 1 } },
             text: l.path,
-            activate: (e: MouseEvent, text: string) => openLink(e, text),
+            activate: (e: MouseEvent, text: string) => openLink(e, text, l.relative),
           })),
         );
       },

@@ -1,10 +1,21 @@
 // Local files worth previewing when a path is printed in a terminal
-// (Claude often writes mockups to an .html file and prints its path).
-const FILE =
-  /(?:^|[\s'"(`])((?:~|\/(?!\/)|[A-Za-z]:[\\/])[^\s'"()`]*\.(?:html?|svg|png|jpe?g|gif|webp|pdf))(?=$|[\s'"),.:;`])/gi;
+// (Claude often writes mockups to an .html file, or a plan to a .md file,
+// and prints its path): pages, images, PDF and the documents the panel
+// renders. Absolute paths (~ too), or relative ones with a folder in them
+// (docs/plan.md, ./notes.md), which the tile resolves in its project.
+const EXT = String.raw`\.(?:html?|svg|png|jpe?g|gif|webp|pdf|md|markdown|mmd|json|csv|tsv|txt)`;
+const SEG = String.raw`[^\s'"()\`\\/:]+`;
+const ABSOLUTE = String.raw`(?:~|\/(?!\/)|[A-Za-z]:[\\/])[^\s'"()\`]*`;
+const RELATIVE = String.raw`(?:\.\.?\/)*(?:${SEG}\/)*${SEG}`;
+const FILE = new RegExp(
+  String.raw`(?:^|[\s'"(\`])((?:${ABSOLUTE}|${RELATIVE})${EXT})(?=$|[\s'"),.:;\`])`,
+  "gi",
+);
 
 export interface FileLink {
   path: string;
+  /** Relative to the tile's project (docs/plan.md), not absolute. */
+  relative: boolean;
   /** 0-based column of the first character. */
   start: number;
   /** 0-based column after the last character. */
@@ -17,7 +28,10 @@ export function fileLinks(line: string, home = ""): FileLink[] {
     const raw = m[1];
     const start = (m.index ?? 0) + m[0].indexOf(raw);
     const path = raw.startsWith("~") ? (home ? home + raw.slice(1) : raw) : raw;
-    if (path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path)) out.push({ path, start, end: start + raw.length });
+    const absolute = path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path);
+    // A bare name (README.md) is too often just a word; a relative path needs a folder.
+    const relative = !absolute && !path.startsWith("~") && path.includes("/");
+    if (absolute || relative) out.push({ path, relative, start, end: start + raw.length });
   }
   return out;
 }
@@ -36,6 +50,7 @@ export interface Cell {
 
 export interface RowLink {
   path: string;
+  relative: boolean;
   start: Cell;
   /** Just after the last character. */
   end: Cell;
@@ -79,7 +94,7 @@ export function rowLinks(rows: Row[], at: number, cols: number, home = ""): RowL
   return fileLinks(text, home)
     .map((l) => {
       const lastCell = cells[l.end - 1];
-      return { path: l.path, start: cells[l.start], end: { row: lastCell.row, col: lastCell.col + 1 } };
+      return { path: l.path, relative: l.relative, start: cells[l.start], end: { row: lastCell.row, col: lastCell.col + 1 } };
     })
     .filter((l) => l.start.row <= at && l.end.row >= at);
 }
