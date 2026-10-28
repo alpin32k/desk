@@ -78,7 +78,7 @@ impl Lock {
             return Ok(());
         }
         self.authenticating.store(true, Ordering::SeqCst);
-        let result = authenticate(app, "odblokować desk", password);
+        let result = authenticate(app, tr!("odblokować desk", "unlock desk"), password);
         self.authenticating.store(false, Ordering::SeqCst);
         result?;
         self.locked.store(false, Ordering::SeqCst);
@@ -219,7 +219,7 @@ fn authenticate(_app: &AppHandle, reason: &str, _password: Option<&str>) -> Resu
         let result = if ok.as_bool() {
             Ok(())
         } else if err.is_null() {
-            Err("nie udało się odblokować".into())
+            Err(tr!("nie udało się odblokować", "could not unlock").into())
         } else {
             // SAFETY: LocalAuthentication passes a valid NSError when ok is false.
             Err(unsafe { &*err }.localizedDescription().to_string())
@@ -235,7 +235,9 @@ fn authenticate(_app: &AppHandle, reason: &str, _password: Option<&str>) -> Resu
             &reply,
         );
         rx.recv_timeout(Duration::from_secs(600))
-            .map_err(|_| "czas na odblokowanie minął".to_string())?
+            .map_err(|_| {
+                tr!("czas na odblokowanie minął", "the time to unlock ran out").to_string()
+            })?
     }
 }
 
@@ -260,7 +262,7 @@ fn authenticate(app: &AppHandle, reason: &str, _password: Option<&str>) -> Resul
                 .into(),
         );
     }
-    let window = app.get_webview_window("main").ok_or("brak okna")?;
+    let window = app.get_webview_window("main").ok_or(tr!("brak okna", "no window"))?;
     let hwnd = window.hwnd().map_err(|e| e.to_string())?;
     let interop = factory::<UserConsentVerifier, IUserConsentVerifierInterop>().map_err(err)?;
     // SAFETY: a valid window handle of this process and a message string.
@@ -271,12 +273,14 @@ fn authenticate(app: &AppHandle, reason: &str, _password: Option<&str>) -> Resul
     match op.join().map_err(err)? {
         R::Verified => Ok(()),
         R::Canceled => Err("anulowano".into()),
-        _ => Err("Windows Hello nie potwierdziło".into()),
+        _ => Err(tr!("Windows Hello nie potwierdziło", "Windows Hello did not confirm").into()),
     }
 }
 
 /// The account password, checked by PAM.
 #[cfg(target_os = "linux")]
 fn authenticate(_app: &AppHandle, _reason: &str, password: Option<&str>) -> Result<(), String> {
-    crate::pam::check_password(password.ok_or("wpisz hasło konta")?)
+    crate::pam::check_password(
+        password.ok_or(tr!("wpisz hasło konta", "type the account password"))?,
+    )
 }

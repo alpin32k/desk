@@ -1,3 +1,6 @@
+// First: its tr! macro is used by the modules below.
+#[macro_use]
+pub mod i18n;
 pub mod agents;
 pub mod backend;
 pub mod browser;
@@ -69,8 +72,10 @@ struct TileInfo {
 
 #[tauri::command]
 fn bootstrap(app: State<App>) -> Bootstrap {
+    let layout = layout::load(&app.layout_path);
+    i18n::set(&layout.language);
     Bootstrap {
-        layout: layout::load(&app.layout_path),
+        layout,
         sessions: app.sessions.list(),
         persistent: app.sessions.persistent(),
         tmux_missing: app.sessions.tmux_missing(),
@@ -117,7 +122,10 @@ fn open_session(
             .iter()
             .any(|t| t.command == command)
         {
-            return Err(format!("{path} nie definiuje polecenia „{command}”"));
+            return Err(tr!(
+                format!("{path} nie definiuje polecenia „{command}”"),
+                format!("{path} does not define the command “{command}”")
+            ));
         }
         command
     } else {
@@ -204,7 +212,7 @@ fn pty_write(
     data: String,
 ) -> Result<(), String> {
     if lock.is_locked() {
-        return Err("desk jest zablokowany".into());
+        return Err(tr!("desk jest zablokowany", "desk is locked").into());
     }
     app.sessions.write(id, data.as_bytes())
 }
@@ -328,6 +336,7 @@ fn save_layout(app: State<App>, layout: layout::Layout) -> Result<(), String> {
     if app.tmux_menu.swap(layout.tmux_menu, Ordering::Relaxed) != layout.tmux_menu {
         app.sessions.reload_config(layout.tmux_menu);
     }
+    i18n::set(&layout.language);
     layout::save(&app.layout_path, &layout).map_err(|e| e.to_string())
 }
 
@@ -369,7 +378,7 @@ async fn update_install(handle: AppHandle, version: String) -> Result<(), String
         .await
         .map_err(|e| e.to_string())??;
     let mut cmd = if cfg!(windows) {
-        let (exe, args) = start.split_first().ok_or("nic do uruchomienia")?;
+        let (exe, args) = start.split_first().ok_or(tr!("nic do uruchomienia", "nothing to run"))?;
         let mut c = std::process::Command::new(exe);
         c.args(args);
         c
@@ -559,6 +568,7 @@ pub fn run() {
             let support = env::support_dir();
             let sessions = backend::Backend::new(app.handle(), &support)?;
             let saved = layout::load(&support.join("layout.json"));
+            i18n::set(&saved.language);
             let ids: Vec<String> = agents::list(&saved.agents)
                 .into_iter()
                 .map(|a| a.id)

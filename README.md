@@ -133,6 +133,7 @@ Zmieniają okno i terminale od razu.
 | **Pliki** | ⌘F: drzewo plików projektu (z `git ls-files`, bez `node_modules`). Filtr po nazwie, `?tekst` szuka w treści. Klik pokazuje plik w podglądzie, dwuklik otwiera edytor. Folder ma akcje: dodaj do sesji (`@ścieżka`), terminal tutaj, pokaż w Finderze. |
 | **Uruchom** | ⌘U albo ▶: skrypty z `package.json` (pnpm/yarn/npm/bun według lockfile), `cargo run`/`test`, cele `Makefile`, `docker compose up`, Django. Link `localhost` z wyjścia otwiera podgląd. |
 | **Kawa** | ⌘K: komputer nie zaśnie. Drugie ⌘K: także przy zamkniętej klapce. Wyłącza się sama przy przegrzaniu albo baterii ≤15%. Działa na macOS, Windows i Linuksie. |
+| **Język** | Polski albo angielski. Pierwsze uruchomienie bierze język systemu (polski, a każdy inny to angielski), zmienisz go w Opcje → Ogólne. |
 | **Blokada** | ⌘B: terminale widać, ale nic nie wpiszesz, dopóki nie odblokujesz: Touch ID albo hasło na macOS, Windows Hello na Windows, hasło konta na Linuksie. |
 
 ---
@@ -260,6 +261,10 @@ Dane: `~/Library/Application Support/desk/` (macOS) albo `~/.local/share/desk/` 
 `state/`, ustawienia hooków, skrypty `desk-hook.sh` / `desk-statusline.sh` i `tmux.conf`. Hooki opisuje
 [docs/hooks.md](docs/hooks.md). `DESK_SUPPORT_DIR` wskazuje inny folder danych, np. dla drugiej,
 testowej instancji.
+
+Napisy interfejsu są w `src/locales/` (`pl.ts` wyznacza klucze, `en.ts` musi mieć wszystkie), komunikaty
+z Rusta w makrze `tr!` (`src-tauri/src/i18n.rs`). Nowy język: kolejny plik w `src/locales/` i wpis w
+`LANGUAGES` w `src/i18n.ts`.
 
 Release: push tagu `v*` uruchamia `.github/workflows/release.yml`, który buduje wersje na macOS
 (Apple Silicon, `.app` + `.dmg`), Linux (`.deb` + `.AppImage`) i Windows (`setup.exe`) i dołącza je

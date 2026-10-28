@@ -85,7 +85,7 @@ pub fn apply(app: &AppHandle) -> Result<(), String> {
         };
         Some(
             text.parse::<Shortcut>()
-                .map_err(|e| format!("skrót {text}: {e}"))?,
+                .map_err(|e| tr!(format!("skrót {text}: {e}"), format!("shortcut {text}: {e}")))?,
         )
     } else {
         None
@@ -101,7 +101,10 @@ pub fn apply(app: &AppHandle) -> Result<(), String> {
                 // Taken by another app (iTerm's hotkey...): say so.
                 shortcuts
                     .register(new)
-                    .map_err(|e| format!("skrót {}: {e}", new.into_string()))?;
+                    .map_err(|e| {
+                        let key = new.into_string();
+                        tr!(format!("skrót {key}: {e}"), format!("shortcut {key}: {e}"))
+                    })?;
                 *hotkey = Some(new);
             }
         }

@@ -48,7 +48,7 @@ fn gh(args: &[&str]) -> Result<String, String> {
     let out = Command::new("gh")
         .args(args)
         .output()
-        .map_err(|_| "brak gh (GitHub CLI)".to_string())?;
+        .map_err(|_| tr!("brak gh (GitHub CLI)", "no gh (GitHub CLI)").to_string())?;
     if !out.status.success() {
         return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
     }
@@ -108,24 +108,35 @@ fn target() -> Result<PathBuf, String> {
             .ancestors()
             .find(|p| p.extension().is_some_and(|e| e == "app"))
             .map(Path::to_path_buf)
-            .ok_or_else(|| "desk nie działa z pakietu .app".to_string());
+            .ok_or_else(|| {
+                tr!("desk nie działa z pakietu .app", "desk does not run from an .app bundle")
+                    .to_string()
+            });
     }
-    appimage().ok_or_else(|| "desk nie działa z AppImage".to_string())
+    appimage().ok_or_else(|| {
+        tr!("desk nie działa z AppImage", "desk does not run from an AppImage").to_string()
+    })
 }
 
 /// Download `version` and put it in place. Returns what to start once desk
 /// has quit (the new app, or the installer).
 pub fn install(version: &str) -> Result<Vec<String>, String> {
     if parse_version(version).is_none() {
-        return Err(format!("zła wersja {version}"));
+        return Err(tr!(format!("zła wersja {version}"), format!("bad version {version}")));
     }
     let latest = latest()?;
     let tag = format!("v{version}");
     if latest.tag != tag {
-        return Err(format!("najnowsza wersja to {}", latest.tag));
+        return Err(tr!(
+            format!("najnowsza wersja to {}", latest.tag),
+            format!("the latest version is {}", latest.tag)
+        ));
     }
     let asset = asset_for(&latest.assets, appimage().is_some())
-        .ok_or("w tym release nie ma paczki dla tego systemu")?
+        .ok_or(tr!(
+            "w tym release nie ma paczki dla tego systemu",
+            "this release has no package for this system"
+        ))?
         .clone();
     let target = target()?;
     let dir = private_dir()?;
@@ -133,7 +144,7 @@ pub fn install(version: &str) -> Result<Vec<String>, String> {
     gh(&["release", "download", &tag, "--repo", REPO, "--pattern", &asset, "--dir", &dir_s, "--clobber"])?;
     let file = dir.join(&asset);
     if !file.is_file() {
-        return Err(format!("nie pobrałem {asset}"));
+        return Err(tr!(format!("nie pobrałem {asset}"), format!("could not download {asset}")));
     }
     if cfg!(windows) {
         // Passive install (progress only); the installer stays until it has run.

@@ -5,6 +5,7 @@
 
 import { listen } from "@tauri-apps/api/event";
 import { api, type PreviewBounds } from "./api";
+import { t } from "./i18n";
 import { keysIn } from "./keys";
 import { PLATFORM, shortcut } from "./platform";
 import { toast } from "./ui";
@@ -29,16 +30,16 @@ export interface SideContext {
 }
 
 
-const REVEAL = { mac: "Pokaż w Finderze", windows: "Pokaż w Eksploratorze", linux: "Pokaż w menedżerze plików" }[PLATFORM];
+const REVEAL = ({ mac: "side.revealMac", windows: "side.revealWindows", linux: "side.revealLinux" } as const)[PLATFORM];
 
 /** Open a link or a local file in the panel (from a terminal link, ⌘F...). */
 export function preview(link: string): Promise<void> {
-  return Side.current ? Side.current.open(link) : Promise.reject("panel podglądu nie jest gotowy");
+  return Side.current ? Side.current.open(link) : Promise.reject(t("side.notReady"));
 }
 
 /** A project file in the panel (⌘F, ⌥↵). */
 export function previewFile(path: string, file: string): Promise<void> {
-  return Side.current ? Side.current.open(file, path) : Promise.reject("panel podglądu nie jest gotowy");
+  return Side.current ? Side.current.open(file, path) : Promise.reject(t("side.notReady"));
 }
 
 /** A link outside desk: a web page in Brave / Chrome (Options), a file in its default app. */
@@ -80,21 +81,21 @@ export class Side {
     this.el.className = "side";
     this.el.hidden = true;
     this.el.innerHTML = `
-      <div class="splitter" title="Przeciągnij, aby zmienić szerokość"></div>
+      <div class="splitter"></div>
       <div class="side-head">
-        <button data-a="back" title="Wstecz">‹</button>
-        <button data-a="forward" title="Dalej">›</button>
-        <button data-a="reload" title="Odśwież">⟳</button>
-        <input class="side-address" spellcheck="false" placeholder="adres, localhost:5173 albo ścieżka pliku" />
+        <button data-a="back">‹</button>
+        <button data-a="forward">›</button>
+        <button data-a="reload">⟳</button>
+        <input class="side-address" spellcheck="false" />
         <button data-a="login" class="side-login" hidden></button>
-        <button data-a="save" class="side-save" hidden title="Zapisz (${shortcut("⌘S")})">zapisz</button>
-        <button data-a="attach" title="Dodaj do aktywnej sesji (@ścieżka)">@</button>
-        <button data-a="edit" title="Edytuj plik">✎</button>
-        <button data-a="external" title="Otwórz w przeglądarce albo w domyślnym programie">↗</button>
-        <button data-a="files" title="Pliki projektu (${keysIn("⌘F")})">☰</button>
-        <button data-a="close" title="Zamknij podgląd">×</button>
+        <button data-a="save" class="side-save" hidden></button>
+        <button data-a="attach">@</button>
+        <button data-a="edit">✎</button>
+        <button data-a="external">↗</button>
+        <button data-a="files">☰</button>
+        <button data-a="close">×</button>
       </div>
-      <div class="side-body"><div class="side-view"><div class="side-empty dim">Kliknij link w terminalu (⌥-klik: przeglądarka) albo wpisz adres powyżej.</div></div></div>`;
+      <div class="side-body"><div class="side-view"><div class="side-empty dim" data-hint></div></div></div>`;
     this.view = this.el.querySelector(".side-view")!;
     this.address = this.el.querySelector(".side-address")!;
     this.editBtn = this.el.querySelector('[data-a="edit"]')!;
@@ -105,6 +106,7 @@ export class Side {
       edit: (rel) => this.tree.project && void api.openFile(this.tree.project, rel).catch(this.fail),
     });
     this.el.querySelector(".side-body")!.appendChild(this.tree.el);
+    this.relabel();
     let treeShown = true;
     try {
       treeShown = localStorage.getItem(TREE_KEY) !== "0";
@@ -159,10 +161,33 @@ export class Side {
     });
   }
 
+  /** Labels in the current language: at start and when Options change it. */
+  relabel(): void {
+    const titles: [string, string][] = [
+      [".splitter", t("side.resize")],
+      ['[data-a="back"]', t("side.back")],
+      ['[data-a="forward"]', t("side.forward")],
+      ['[data-a="reload"]', t("side.reload")],
+      ['[data-a="save"]', t("side.saveTitle", { keys: shortcut("⌘S") })],
+      ['[data-a="attach"]', t("side.attach")],
+      ['[data-a="edit"]', t("side.edit")],
+      ['[data-a="external"]', t("side.external")],
+      ['[data-a="files"]', t("side.files", { keys: keysIn("⌘F") })],
+      ['[data-a="close"]', t("side.close")],
+    ];
+    for (const [sel, title] of titles) this.el.querySelector<HTMLElement>(sel)!.title = title;
+    this.saveBtn.textContent = t("side.save");
+    this.address.placeholder = t("side.address");
+    const hint = this.view.querySelector<HTMLElement>("[data-hint]");
+    if (hint) hint.textContent = t("side.empty");
+    this.tree.relabel();
+    if (this.isOpen) this.syncButtons();
+  }
+
   private attach(path: string): void {
     const text = mention(this.tree.project, path);
     if (text) this.ctx.insert(text);
-    else toast("Tej ścieżki nie da się bezpiecznie wpisać do terminala (cudzysłów albo znak sterujący w nazwie)");
+    else toast(t("side.unsafePath"));
   }
 
   get isOpen(): boolean {
@@ -278,9 +303,9 @@ export class Side {
       <div class="folder-name">${escapeHtml(name)}</div>
       <div class="dim">${itemsLabel(this.tree.count(rel))}</div>
       <div class="folder-actions">
-        <button data-f="attach">Dodaj do sesji</button>
-        <button data-f="terminal">Terminal tutaj</button>
-        <button data-f="reveal">${REVEAL}</button>
+        <button data-f="attach">${t("side.addToSession")}</button>
+        <button data-f="terminal">${t("side.terminalHere")}</button>
+        <button data-f="reveal">${t(REVEAL)}</button>
       </div></div>`;
     this.address.value = path;
     this.sync();
@@ -296,18 +321,22 @@ export class Side {
     const local = isLocal(this.editing?.path ?? this.address.value);
     this.editBtn.hidden = !!this.folder || !local;
     this.el.querySelector<HTMLElement>('[data-a="attach"]')!.hidden = !this.folder && !local;
-    this.editBtn.textContent = this.editing ? "podgląd" : "✎";
-    this.editBtn.title = this.editing ? "Zapisz i pokaż podgląd" : "Edytuj plik";
+    this.editBtn.textContent = this.editing ? t("side.preview") : "✎";
+    this.editBtn.title = this.editing ? t("side.saveAndPreview") : t("side.edit");
     this.saveBtn.hidden = !this.editing;
     this.saveBtn.classList.toggle("dirty", this.dirty());
     const ext = this.el.querySelector<HTMLElement>('[data-a="external"]')!;
     const web = !local && !this.folder && /^https?:/i.test(this.address.value);
     ext.textContent = web && this.browserName ? `↗ ${this.browserName}` : "↗";
-    ext.title = web ? `Otwórz w ${this.browserName ?? "przeglądarce systemowej"}` : "Otwórz w domyślnym programie";
+    ext.title = web
+      ? this.browserName
+        ? t("side.openIn", { browser: this.browserName })
+        : t("side.openInSystem")
+      : t("side.openDefault");
     const login = this.el.querySelector<HTMLElement>('[data-a="login"]')!;
     login.hidden = !this.login || !web || !!this.editing;
-    login.textContent = `🔑 Zaloguj w ${this.browserName ?? "przeglądarce"} (Bitwarden)`;
-    login.title = "Ta przeglądarka nie obsługuje rozszerzeń: logowanie z menedżerem haseł działa w prawdziwej przeglądarce";
+    login.textContent = this.browserName ? t("side.loginIn", { browser: this.browserName }) : t("side.login");
+    login.title = t("side.loginTitle");
   }
 
   private dirty(): boolean {
@@ -325,7 +354,7 @@ export class Side {
     try {
       text = await api.readText(path);
     } catch (err) {
-      if (!quiet) toast(`Edycja: ${err}`);
+      if (!quiet) toast(t("side.editError", { err: String(err) }));
       return;
     }
     if (this.address.value !== path || this.editing) return; // another file meanwhile
@@ -353,7 +382,7 @@ export class Side {
       this.syncButtons();
       return true;
     } catch (err) {
-      toast(`Zapis: ${err}`);
+      toast(t("side.saveError", { err: String(err) }));
       return false;
     }
   }
@@ -387,7 +416,7 @@ export class Side {
   }
 
   private fail = (err: unknown): void => {
-    if (this.created) return toast(`Podgląd: ${err}`);
+    if (this.created) return toast(t("side.previewError", { err: String(err) }));
     const msg = document.createElement("div");
     msg.className = "side-empty dim";
     msg.textContent = String(err);

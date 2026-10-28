@@ -1,6 +1,7 @@
 // Plan usage per harness for the top bar ("claude 5h 42% · 7d 18%").
 // The numbers come from the agents' own local files (see src-tauri/src/usage.rs).
 import type { Usage } from "./api";
+import { t } from "./i18n";
 
 export function level(percent: number): "" | "warn" | "high" {
   if (percent >= 90) return "high";
@@ -34,9 +35,9 @@ export function usageHtml(list: Usage[], nowMs: number): string {
         .map((w) => `${w.label} ${Math.round(w.usedPercent)}% <span class="reset">↻${shortReset(w.resetsAt, nowMs)}</span>`)
         .join(" · ");
       const title = u.windows
-        .map((w) => `${w.label}: ${w.usedPercent.toFixed(1)}%, reset za ${resetsIn(w.resetsAt, nowMs)}`)
+        .map((w) => t("usage.window", { label: w.label, percent: w.usedPercent.toFixed(1), time: resetsIn(w.resetsAt, nowMs) }))
         .join("\n");
-      return `<span class="usage ${level(worst)}" title="Limit planu ${u.agent}\n${title}">${u.agent} ${parts}</span>`;
+      return `<span class="usage ${level(worst)}" title="${t("usage.limit", { agent: u.agent })}\n${title}">${u.agent} ${parts}</span>`;
     })
     .join("");
 }

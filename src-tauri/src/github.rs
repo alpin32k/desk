@@ -61,17 +61,20 @@ fn valid_repo(full_name: &str) -> bool {
 pub fn clone(parent: &Path, name: &str, repo: &str) -> Result<PathBuf, String> {
     let name = crate::new_project::validate_name(name)?;
     if !valid_repo(repo) {
-        return Err(format!("niepoprawne repo: {repo}"));
+        return Err(tr!(format!("niepoprawne repo: {repo}"), format!("invalid repo: {repo}")));
     }
     if !parent.is_dir() {
-        return Err(format!(
-            "folder nadrzędny nie istnieje: {}",
-            parent.display()
+        return Err(tr!(
+            format!("folder nadrzędny nie istnieje: {}", parent.display()),
+            format!("the parent folder does not exist: {}", parent.display())
         ));
     }
     let dir = parent.join(name);
     if dir.exists() {
-        return Err(format!("{} już istnieje", dir.display()));
+        return Err(tr!(
+            format!("{} już istnieje", dir.display()),
+            format!("{} already exists", dir.display())
+        ));
     }
     let out = gh()
         .args(["repo", "clone", repo])
@@ -96,7 +99,11 @@ fn gh() -> Command {
 
 fn missing(e: std::io::Error) -> String {
     if e.kind() == std::io::ErrorKind::NotFound {
-        "brak GitHub CLI: zainstaluj gh (brew install gh) i zaloguj się: gh auth login".into()
+        tr!(
+            "brak GitHub CLI: zainstaluj gh (brew install gh) i zaloguj się: gh auth login",
+            "no GitHub CLI: install gh (brew install gh) and log in: gh auth login"
+        )
+        .into()
     } else {
         format!("gh: {e}")
     }
@@ -105,7 +112,11 @@ fn missing(e: std::io::Error) -> String {
 fn failure(stderr: &[u8]) -> String {
     let err = String::from_utf8_lossy(stderr).trim().to_string();
     if err.contains("gh auth login") {
-        "gh nie jest zalogowany: uruchom gh auth login".into()
+        tr!(
+            "gh nie jest zalogowany: uruchom gh auth login",
+            "gh is not logged in: run gh auth login"
+        )
+        .into()
     } else {
         err
     }
