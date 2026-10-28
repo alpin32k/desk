@@ -766,6 +766,16 @@ button:hover {
   color: var(--waiting);
 }
 
+.tag.gh {
+  color: var(--dim);
+}
+
+/* A GitHub repo not cloned yet: an empty ring instead of the project color. */
+.dot.gh {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--dim);
+}
+
 .settings {
   padding: 14px 18px;
   gap: 8px;

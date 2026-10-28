@@ -24,6 +24,7 @@ import { Palette } from "./palette";
 import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
 import { keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
 import { DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
+import { repoName } from "./github";
 import { Settings } from "./settings";
 import { applyTheme, terminalTheme, themeById } from "./themes";
 import {
@@ -131,6 +132,9 @@ export class App {
       kill: (path, agent) => void this.killSession(keyOf({ path, agent, instance: 0 })),
       addFolder: () => void this.addFolder(),
       newProject: (agent, name) => void this.newProject(agent, name),
+      repos: () => this.repos(),
+      projectsDir: () => this.layout.projectsDir ?? this.projectsDir,
+      cloneRepo: (repo, agent) => void this.cloneRepo(repo, agent),
       chat: (agent) => void this.openChat(agent),
     });
     this.settings = new Settings({
@@ -868,12 +872,24 @@ export class App {
     const isLocal = (folder: string) => local.has(folder.toLowerCase());
     const req = await newProjectBox(parent, pick, agent, { name, repos: this.repos(), isLocal });
     if (!req) return;
+    if (req.repo) toast(`Klonuję ${req.repo}…`);
+    await this.adoptProject(req.parent, agent, () =>
+      req.repo ? api.cloneProject(req.parent, req.name, req.repo) : api.createProject(req.parent, req.name, req.git),
+    );
+  }
+
+  /** ⌘P on a GitHub repo: clone it into the projects folder and open it. */
+  private async cloneRepo(repo: GithubRepo, agent: string): Promise<void> {
+    const parent = this.layout.projectsDir ?? this.projectsDir;
+    toast(`Klonuję ${repo.fullName}…`);
+    await this.adoptProject(parent, agent, () => api.cloneProject(parent, repoName(repo), repo.fullName));
+  }
+
+  /** Make a project folder in `parent`, remember it and open its tile. */
+  private async adoptProject(parent: string, agent: string, make: () => Promise<string>): Promise<void> {
     try {
-      if (req.repo) toast(`Klonuję ${req.repo}…`);
-      const path = req.repo
-        ? await api.cloneProject(req.parent, req.name, req.repo)
-        : await api.createProject(req.parent, req.name, req.git);
-      this.layout.projectsDir = req.parent;
+      const path = await make();
+      this.layout.projectsDir = parent;
       if (!this.layout.extraFolders.includes(path)) this.layout.extraFolders.push(path);
       this.projectCache = null;
       this.save();
