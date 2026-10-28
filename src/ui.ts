@@ -1,4 +1,6 @@
 // Small UI helpers: confirm dialog and toasts (window.confirm is not available in the webview).
+import type { GithubRepo } from "./api";
+import { matchRepos, repoName } from "./github";
 import { escapeHtml } from "./tile";
 
 export function confirmBox(message: string, okLabel = "Tak"): Promise<boolean> {
@@ -125,13 +127,17 @@ export interface NewProject {
   parent: string;
   name: string;
   git: boolean;
+  /** `owner/name` to clone instead of creating an empty folder. */
+  repo: string | null;
 }
 
-/** Ask for a new project's name and parent folder. */
+/** Ask for a new project's name and parent folder; typing a name also
+ * offers matching GitHub repos to clone. */
 export function newProjectBox(
   defaultParent: string,
   pickFolder: () => Promise<string | null>,
   agent: string,
+  opts: { name?: string; repos: Promise<GithubRepo[]>; isLocal: (name: string) => boolean },
 ): Promise<NewProject | null> {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
@@ -139,22 +145,95 @@ export function newProjectBox(
     overlay.innerHTML = `
       <div class="dialog new-project">
         <h2>Nowy projekt <span class="dim">· ${escapeHtml(agent)}</span></h2>
-        <label class="line">Nazwa <input type="text" data-k="name" spellcheck="false" placeholder="moj-projekt" /></label>
+        <label class="line">Nazwa <input type="text" data-k="name" spellcheck="false" autocomplete="off" placeholder="moj-projekt albo repo z GitHuba" /></label>
+        <div class="gh-list"></div>
         <label class="line">W folderze <input type="text" data-k="parent" spellcheck="false" /><button data-k="pick">Wybierz…</button></label>
-        <label class="line"><input type="checkbox" data-k="git" checked /> git init (branch main)</label>
-        <div class="buttons"><button data-v="0">Anuluj <kbd>esc</kbd></button><button data-v="1">Utwórz i otwórz <kbd>↵</kbd></button></div>
+        <label class="line" data-k="git-line"><input type="checkbox" data-k="git" checked /> git init (branch main)</label>
+        <div class="line gh-chosen" hidden>Klon z GitHuba: <b data-k="repo"></b><button data-k="unpick" title="Pusty folder zamiast klonu">✕</button></div>
+        <div class="buttons"><button data-v="0">Anuluj <kbd>esc</kbd></button><button data-v="1"><span data-k="ok">Utwórz i otwórz</span> <kbd>↵</kbd></button></div>
       </div>`;
-    const name = overlay.querySelector<HTMLInputElement>('[data-k="name"]')!;
-    const parent = overlay.querySelector<HTMLInputElement>('[data-k="parent"]')!;
-    const git = overlay.querySelector<HTMLInputElement>('[data-k="git"]')!;
+    const $ = <T extends HTMLElement>(k: string) => overlay.querySelector<T>(`[data-k="${k}"]`)!;
+    const name = $<HTMLInputElement>("name");
+    const parent = $<HTMLInputElement>("parent");
+    const git = $<HTMLInputElement>("git");
+    const list = overlay.querySelector<HTMLElement>(".gh-list")!;
+    const chosenLine = overlay.querySelector<HTMLElement>(".gh-chosen")!;
     parent.value = defaultParent;
+    name.value = opts.name ?? "";
+
+    let repos: GithubRepo[] | null = null;
+    let error = "";
+    let shown: GithubRepo[] = [];
+    let sel = -1;
+    let chosen: GithubRepo | null = null;
+    const draw = () => {
+      chosenLine.hidden = !chosen;
+      $("git-line").hidden = !!chosen;
+      $("repo").textContent = chosen?.fullName ?? "";
+      $("ok").textContent = chosen ? "Sklonuj i otwórz" : "Utwórz i otwórz";
+      shown = chosen || !repos ? [] : matchRepos(repos, name.value);
+      sel = Math.min(sel, shown.length - 1);
+      const status =
+        chosen || !name.value.trim()
+          ? ""
+          : error
+            ? `<div class="gh-status">GitHub: ${escapeHtml(error)}</div>`
+            : !repos
+              ? `<div class="gh-status">GitHub: wczytuję repozytoria…</div>`
+              : "";
+      list.innerHTML =
+        status +
+        shown
+          .map(
+            (r, i) => `<div class="row ${i === sel ? "sel" : ""}" data-i="${i}">
+              <span class="name">${escapeHtml(r.fullName)}</span>
+              <span class="desc">${escapeHtml(r.description ?? "")}</span>
+              ${opts.isLocal(repoName(r)) ? `<span class="tag">jest lokalnie</span>` : ""}
+              ${r.private ? `<span class="tag">prywatne</span>` : ""}</div>`,
+          )
+          .join("");
+    };
+    const choose = (repo: GithubRepo | null) => {
+      chosen = repo;
+      sel = -1;
+      if (repo) name.value = repoName(repo);
+      draw();
+      name.focus();
+    };
+    opts.repos.then(
+      (r) => {
+        repos = r;
+        draw();
+      },
+      (err) => {
+        error = String(err);
+        draw();
+      },
+    );
+    name.addEventListener("input", () => {
+      sel = -1;
+      draw();
+    });
     const done = (ok: boolean) => {
       window.removeEventListener("keydown", onKey, true);
       overlay.remove();
-      resolve(ok && name.value.trim() ? { parent: parent.value.trim(), name: name.value.trim(), git: git.checked } : null);
+      resolve(
+        ok && name.value.trim()
+          ? { parent: parent.value.trim(), name: name.value.trim(), git: git.checked, repo: chosen?.fullName ?? null }
+          : null,
+      );
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" || e.key === "Enter") {
+      const move = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+      if (move && shown.length && document.activeElement === name) {
+        e.preventDefault();
+        sel = sel + move < -1 ? shown.length - 1 : sel + move >= shown.length ? -1 : sel + move;
+        draw();
+      } else if (e.key === "Enter" && sel >= 0 && shown[sel]) {
+        e.preventDefault();
+        e.stopPropagation();
+        choose(shown[sel]!);
+      } else if (e.key === "Escape" || e.key === "Enter") {
         e.preventDefault();
         e.stopPropagation();
         done(e.key === "Enter");
@@ -162,7 +241,10 @@ export function newProjectBox(
     };
     overlay.addEventListener("click", async (e) => {
       const btn = (e.target as HTMLElement).closest<HTMLElement>("button");
-      if (btn?.dataset.k === "pick") {
+      const row = (e.target as HTMLElement).closest<HTMLElement>(".gh-list [data-i]");
+      if (row) choose(shown[Number(row.dataset.i)] ?? null);
+      else if (btn?.dataset.k === "unpick") choose(null);
+      else if (btn?.dataset.k === "pick") {
         const picked = await pickFolder();
         if (picked) parent.value = picked;
       } else if (btn?.dataset.v !== undefined) done(btn.dataset.v === "1");
@@ -170,6 +252,7 @@ export function newProjectBox(
     });
     window.addEventListener("keydown", onKey, true);
     document.body.appendChild(overlay);
+    draw();
     name.focus();
   });
 }

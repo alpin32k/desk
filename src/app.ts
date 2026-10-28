@@ -8,6 +8,7 @@ import {
   type AgentInfo,
   type CoffeeLevel,
   type CoffeeStatus,
+  type GithubRepo,
   type Layout,
   type Project,
   type PtyExit,
@@ -23,6 +24,7 @@ import { Palette } from "./palette";
 import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
 import { keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
 import { DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
+import { repoName } from "./github";
 import { Settings } from "./settings";
 import { applyTheme, terminalTheme, themeById } from "./themes";
 import {
@@ -46,6 +48,7 @@ const USAGE_MS = 30_000;
 export class App {
   private layout!: Layout;
   private home = "";
+  private projectsDir = "";
   private tiles = new Map<string, Tile>(); // by session key (see sessions.ts)
   private hook = new Map<string, SessionState>(); // by tmux slug
   private running = new Set<string>(); // session keys with a tmux session
@@ -56,6 +59,8 @@ export class App {
   private earlyExits = new Map<number, string>(); // pty-exit that arrived before attach returned
   private missing: { key: string; lane: number }[] = [];
   private creatingProject = false;
+  /** GitHub repos for the new project dialog, fetched at most every few minutes. */
+  private githubRepos: { at: number; list: Promise<GithubRepo[]> } | null = null;
   /** One card per project in the grid; its sessions' tiles sit inside. */
   private cards = new Map<string, HTMLElement>();
   /** Folder of ⌘R conversations (they run there, but sit in a project's card). */
@@ -126,7 +131,10 @@ export class App {
       toggleAutostart: (path, agent) => this.toggleAutostart(keyOf({ path, agent, instance: 0 })),
       kill: (path, agent) => void this.killSession(keyOf({ path, agent, instance: 0 })),
       addFolder: () => void this.addFolder(),
-      newProject: (agent) => void this.newProject(agent),
+      newProject: (agent, name) => void this.newProject(agent, name),
+      repos: () => this.repos(),
+      projectsDir: () => this.layout.projectsDir ?? this.projectsDir,
+      cloneRepo: (repo, agent) => void this.cloneRepo(repo, agent),
       chat: (agent) => void this.openChat(agent),
     });
     this.settings = new Settings({
@@ -246,6 +254,7 @@ export class App {
     this.coffee = await api.coffeeStatus();
     this.agents = await api.listAgents();
     this.home = boot.home;
+    this.projectsDir = boot.projectsDir;
     this.chatPath = await api.chatDir().catch(() => "");
     for (const s of boot.states) this.hook.set(s.slug, s);
     for (const s of boot.sessions) this.running.add(keyOf(s));
@@ -842,27 +851,45 @@ export class App {
     if (!this.settings.isOpen) await this.openTile(picked);
   }
 
-  private async newProject(agent: string): Promise<void> {
+  private async newProject(agent: string, name?: string): Promise<void> {
     if (this.creatingProject) return; // ⌘N again while the dialog is up
     this.creatingProject = true;
     try {
-      await this.createProject(agent);
+      await this.createProject(agent, name);
     } finally {
       this.creatingProject = false;
     }
   }
 
-  private async createProject(agent: string): Promise<void> {
-    const parent = this.layout.projectsDir ?? `${this.home}/Documents/projects`;
+  private async createProject(agent: string, name?: string): Promise<void> {
+    const parent = this.layout.projectsDir ?? this.projectsDir;
     const pick = async () => {
       const p = await openDialog({ directory: true, multiple: false, defaultPath: parent });
       return typeof p === "string" ? p : null;
     };
-    const req = await newProjectBox(parent, pick, agent);
+    let local = new Set<string>();
+    void this.projects().then((ps) => (local = new Set(ps.map((p) => p.name.toLowerCase()))));
+    const isLocal = (folder: string) => local.has(folder.toLowerCase());
+    const req = await newProjectBox(parent, pick, agent, { name, repos: this.repos(), isLocal });
     if (!req) return;
+    if (req.repo) toast(`Klonuję ${req.repo}…`);
+    await this.adoptProject(req.parent, agent, () =>
+      req.repo ? api.cloneProject(req.parent, req.name, req.repo) : api.createProject(req.parent, req.name, req.git),
+    );
+  }
+
+  /** ⌘P on a GitHub repo: clone it into the projects folder and open it. */
+  private async cloneRepo(repo: GithubRepo, agent: string): Promise<void> {
+    const parent = this.layout.projectsDir ?? this.projectsDir;
+    toast(`Klonuję ${repo.fullName}…`);
+    await this.adoptProject(parent, agent, () => api.cloneProject(parent, repoName(repo), repo.fullName));
+  }
+
+  /** Make a project folder in `parent`, remember it and open its tile. */
+  private async adoptProject(parent: string, agent: string, make: () => Promise<string>): Promise<void> {
     try {
-      const path = await api.createProject(req.parent, req.name, req.git);
-      this.layout.projectsDir = req.parent;
+      const path = await make();
+      this.layout.projectsDir = parent;
       if (!this.layout.extraFolders.includes(path)) this.layout.extraFolders.push(path);
       this.projectCache = null;
       this.save();
@@ -870,6 +897,15 @@ export class App {
     } catch (err) {
       toast(`Nowy projekt: ${err}`);
     }
+  }
+
+  private repos(): Promise<GithubRepo[]> {
+    if (!this.githubRepos || Date.now() - this.githubRepos.at > 5 * 60_000) {
+      const list = api.githubRepos();
+      list.catch(() => (this.githubRepos = null)); // try again next time
+      this.githubRepos = { at: Date.now(), list };
+    }
+    return this.githubRepos.list;
   }
 
   private projects(): Promise<Project[]> {

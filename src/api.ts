@@ -86,6 +86,13 @@ export interface AgentInfo {
   builtin: boolean;
 }
 
+/** A GitHub repo the user can clone (`gh` login). */
+export interface GithubRepo {
+  fullName: string;
+  description: string | null;
+  private: boolean;
+}
+
 export interface SessionInfo {
   slug: string;
   path: string;
@@ -108,6 +115,8 @@ export interface Bootstrap {
   sessions: SessionInfo[];
   states: SessionState[];
   home: string;
+  /** Where "new project" suggests creating folders until one is chosen. */
+  projectsDir: string;
   /** macOS or Linux without tmux: sessions end when desk closes. */
   tmuxMissing: boolean;
 }
@@ -157,6 +166,9 @@ export const api = {
   listAgents: () => invoke<AgentInfo[]>("list_agents"),
   createProject: (parent: string, name: string, git: boolean) =>
     invoke<string>("create_project", { parent, name, git }),
+  githubRepos: () => invoke<GithubRepo[]>("github_repos"),
+  cloneProject: (parent: string, name: string, repo: string) =>
+    invoke<string>("clone_project", { parent, name, repo }),
   killSession: (slug: string) => invoke<void>("kill_session", { slug }),
   saveLayout: (layout: Layout) => invoke<void>("save_layout", { layout }),
   tileInfo: (paths: string[]) => invoke<TileInfo[]>("tile_info", { paths }),

@@ -7,6 +7,7 @@ pub mod discovery;
 pub mod dropdown;
 pub mod env;
 pub mod git;
+pub mod github;
 pub mod hooks;
 pub mod layout;
 pub mod lock;
@@ -51,6 +52,8 @@ struct Bootstrap {
     sessions: Vec<tmux::SessionInfo>,
     states: Vec<hooks::SessionState>,
     home: String,
+    /// Where "new project" suggests creating folders until one is chosen.
+    projects_dir: String,
     /// Sessions outlive desk (tmux); false on Windows, where they end with it.
     persistent: bool,
     /// macOS or Linux without tmux: native sessions until it is installed.
@@ -73,6 +76,9 @@ fn bootstrap(app: State<App>) -> Bootstrap {
         tmux_missing: app.sessions.tmux_missing(),
         states: state_watch::read_all(&app.hooks.state_dir),
         home: env::home().display().to_string(),
+        projects_dir: new_project::default_parent(&env::home())
+            .display()
+            .to_string(),
     }
 }
 
@@ -153,6 +159,22 @@ fn list_agents(app: State<App>) -> Vec<agents::AgentInfo> {
 #[tauri::command]
 fn create_project(parent: String, name: String, git: bool) -> Result<String, String> {
     new_project::create(Path::new(&parent), &name, git).map(|p| p.display().to_string())
+}
+
+#[tauri::command]
+async fn github_repos() -> Result<Vec<github::Repo>, String> {
+    tauri::async_runtime::spawn_blocking(github::repos)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn clone_project(parent: String, name: String, repo: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        github::clone(Path::new(&parent), &name, &repo).map(|p| p.display().to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -612,6 +634,8 @@ pub fn run() {
             usage,
             list_agents,
             create_project,
+            github_repos,
+            clone_project,
         ])
         .on_window_event(|window, event| {
             if window.label() != "main" {

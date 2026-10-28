@@ -1,6 +1,7 @@
 // ⌘P project palette: search, Tab picks the agent, Enter opens a tile,
 // ⌘Enter toggles autostart, ⌘⌫ kills a running session.
-import type { AgentInfo, Project } from "./api";
+import type { AgentInfo, GithubRepo, Project } from "./api";
+import { matchRepos, repoName } from "./github";
 import { ago, rows, shortPath, type Row } from "./projects";
 import { escapeHtml } from "./tile";
 import { keysIn } from "./keys";
@@ -18,8 +19,14 @@ export interface PaletteContext {
   toggleAutostart: (path: string, agent: string) => void;
   kill: (path: string, agent: string) => void;
   addFolder: () => void;
-  newProject: (agent: string) => void;
+  /** `name`: what was typed in the palette, as the suggested name. */
+  newProject: (agent: string, name?: string) => void;
   chat: (agent: string) => void;
+  /** GitHub repos to offer when nothing local is called that. */
+  repos: () => Promise<GithubRepo[]>;
+  /** Where a repo picked here gets cloned. */
+  projectsDir: () => string;
+  cloneRepo: (repo: GithubRepo, agent: string) => void;
 }
 
 const MAX_ROWS = 200;
@@ -30,6 +37,9 @@ export class Palette {
   private list!: HTMLElement;
   private all: Project[] = [];
   private shown: Row[] = [];
+  private repos: GithubRepo[] = [];
+  /** GitHub rows, after the local ones. */
+  private remote: GithubRepo[] = [];
   private selected = 0;
   private agent = "claude";
 
@@ -69,6 +79,14 @@ export class Palette {
     document.body.appendChild(this.el);
     this.input.focus();
     this.list.innerHTML = `<div class="empty">Szukam projektów…</div>`;
+    // No gh or no login: just no GitHub rows.
+    this.ctx.repos().then(
+      (r) => {
+        this.repos = r;
+        if (this.all.length) this.refresh();
+      },
+      () => {},
+    );
     this.all = await this.ctx.projects();
     this.refresh();
   }
@@ -85,9 +103,12 @@ export class Palette {
     this.input.placeholder = "Projekt…";
     const r = rows(this.all, q);
     this.shown = r.slice(0, MAX_ROWS);
-    this.selected = Math.min(this.selected, this.shown.length + 2); // three action rows at the end
+    const local = new Set(this.all.map((p) => p.name.toLowerCase()));
+    this.remote = matchRepos(this.repos, q, 5).filter((repo) => !local.has(repoName(repo).toLowerCase()));
+    const n = this.shown.length + this.remote.length;
+    this.selected = Math.min(this.selected, n + 2); // three action rows at the end
     const items = this.shown.map((row, i) => this.rowHtml(row, i));
-    const n = this.shown.length;
+    items.push(...this.remote.map((repo, i) => this.repoHtml(repo, this.shown.length + i)));
     items.push(
       `<div class="row action ${this.selected === n ? "sel" : ""}" data-i="${n}">+ Nowy projekt…</div>`,
       `<div class="row action ${this.selected === n + 1 ? "sel" : ""}" data-i="${n + 1}">+ Dodaj istniejący folder…</div>`,
@@ -122,8 +143,17 @@ export class Palette {
       ${tags}<span class="age">${ago(p.lastActiveMs)}</span></div>`;
   }
 
+  private repoHtml(repo: GithubRepo, i: number): string {
+    const target = `${shortPath(this.ctx.projectsDir(), this.ctx.home())}/${repoName(repo)}`;
+    return `<div class="row ${i === this.selected ? "sel" : ""}" data-i="${i}">
+      <span class="dot gh"></span>
+      <span class="name">${escapeHtml(repo.fullName)}</span>
+      <span class="path">sklonuj do ${escapeHtml(target)}</span>
+      ${repo.private ? `<span class="tag">prywatne</span>` : ""}<span class="tag gh">GitHub</span></div>`;
+  }
+
   private onKey(e: KeyboardEvent): void {
-    const count = this.shown.length + 3;
+    const count = this.shown.length + this.remote.length + 3;
     if (e.key === "Tab") {
       const ids = this.ctx.agents().filter(usable).map((a) => a.id);
       const i = ids.indexOf(this.agent);
@@ -153,10 +183,13 @@ export class Palette {
 
   private activate(): void {
     const row = this.shown[this.selected];
-    const action = this.selected - this.shown.length; // 0 new project, 1 add folder, 2 loose question
+    const repo = this.remote[this.selected - this.shown.length];
+    const action = this.selected - this.shown.length - this.remote.length; // 0 new project, 1 add folder, 2 loose question
+    const query = this.input.value.trim();
     this.close();
     if (row) this.ctx.open(row.project.path, this.agent);
-    else if (action === 0) this.ctx.newProject(this.agent);
+    else if (repo) this.ctx.cloneRepo(repo, this.agent);
+    else if (action === 0) this.ctx.newProject(this.agent, query || undefined);
     else if (action === 1) this.ctx.addFolder();
     else this.ctx.chat(this.agent);
   }
