@@ -6,7 +6,8 @@ import type { AgentInfo, CoffeeStatus, Layout, Project } from "./api";
 import { rows, shortPath } from "./projects";
 import { escapeHtml } from "./tile";
 import { acceleratorFor, DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
-import { acceleratorsOf, BINDINGS, clashWith, FIXED, GROUPS, keysIn, keyText } from "./keys";
+import { LANGUAGES, language, t, type Language } from "./i18n";
+import { acceleratorsOf, bindingLabel, BINDINGS, clashWith, FIXED, groupLabel, GROUPS, keysIn, keyText } from "./keys";
 import { shortcut } from "./platform";
 import { toast } from "./ui";
 
@@ -19,6 +20,7 @@ export interface SettingsContext {
   setTheme: (id: string) => void;
   setBrowser: (id: string) => void;
   setFontSize: (px: number) => void;
+  setLanguage: (id: Language) => void;
   setDropdown: (
     change: Partial<Pick<Layout, "dropdown" | "dropdownHeight" | "dropdownAutohide" | "dropdownHotkey" | "dropdownAnimation">>,
   ) => Promise<void>;
@@ -108,7 +110,7 @@ export class Settings {
     const dropdown = layout.dropdown ? layout.dropdownHotkey || DEFAULT_HOTKEY() : "";
     const clash = id !== "dropdown" && accelerator === dropdown ? "dropdown" : clashWith(id, accelerator);
     if (clash) {
-      toast(`${hotkeyLabel(accelerator)} jest już zajęty: ${clash}`);
+      toast(t("settings.taken", { key: hotkeyLabel(accelerator), what: clash }));
       this.render();
       return;
     }
@@ -125,7 +127,7 @@ export class Settings {
   private keyButton(id: string, label: string, disabled = ""): string {
     const on = this.recording === id;
     return `<button class="key ${on ? "recording" : ""}" data-record="${escapeHtml(id)}" ${disabled}>${
-      on ? "naciśnij…" : escapeHtml(label)
+      on ? t("settings.press") : escapeHtml(label)
     }</button>`;
   }
 
@@ -147,34 +149,37 @@ export class Settings {
     const off = layout.dropdown ? "" : "disabled";
     // Every tab is in the page (the hidden ones too), so every field keeps its listener.
     box.innerHTML = `
-      <div class="settings-head"><h2>Opcje</h2><div class="tabs">${[
-        ["general", "Ogólne"],
-        ["dropdown", "Dropdown"],
-        ["keys", "Skróty"],
+      <div class="settings-head"><h2>${t("settings.title")}</h2><div class="tabs">${[
+        ["general", t("settings.general")],
+        ["dropdown", t("settings.dropdown")],
+        ["keys", t("settings.keys")],
       ]
         .map(([id, label]) => `<button class="tab ${this.tab === id ? "sel" : ""}" data-tab="${id}">${label}</button>`)
         .join("")}</div></div>
       <div class="pane" data-pane="general" ${this.tab === "general" ? "" : "hidden"}>
-      <label class="line"><input type="checkbox" data-k="auto-layout" ${layout.autoLayout ? "checked" : ""}/> Układ automatyczny <span class="dim">(kolumny według otwartych projektów, sesji i rozmiaru okna)</span></label>
-      <label class="line">Kolumny <input type="number" min="1" max="8" value="${layout.lanes.length}" data-k="lanes" ${layout.autoLayout ? "disabled" : ""}/></label>
-      <label class="line"><input type="checkbox" data-k="notify" ${layout.notifications ? "checked" : ""}/> Powiadomienie macOS, gdy sesja czeka na ciebie</label>
-      <label class="line"><input type="checkbox" data-k="tmux-menu" ${layout.tmuxMenu ? "checked" : ""}/> Menu tmuxa pod prawym klikiem w terminalu <span class="dim">(podział, zamiana, zamknięcie panelu)</span></label>
-      <label class="line">Czcionka terminali <input type="number" min="8" max="24" step="0.5" value="${layout.fontSize}" data-k="font" /> px <span class="dim">(${keysIn("⌘= większa, ⌘- mniejsza, ⌘0 zwykła")})</span></label>
-      <label class="line">Strony poza desk (↗, ⌥klik) <select data-k="browser">${[
-        ["auto", "Brave, a gdy go nie ma Chrome"],
+      <label class="line">${t("settings.language")} <select data-k="language">${LANGUAGES.map(
+        (l) => `<option value="${l.id}" ${language() === l.id ? "selected" : ""}>${l.name}</option>`,
+      ).join("")}</select></label>
+      <label class="line"><input type="checkbox" data-k="auto-layout" ${layout.autoLayout ? "checked" : ""}/> ${t("settings.autoLayout")} <span class="dim">${t("settings.autoLayoutHint")}</span></label>
+      <label class="line">${t("settings.lanes")} <input type="number" min="1" max="8" value="${layout.lanes.length}" data-k="lanes" ${layout.autoLayout ? "disabled" : ""}/></label>
+      <label class="line"><input type="checkbox" data-k="notify" ${layout.notifications ? "checked" : ""}/> ${t("settings.notify")}</label>
+      <label class="line"><input type="checkbox" data-k="tmux-menu" ${layout.tmuxMenu ? "checked" : ""}/> ${t("settings.tmuxMenu")} <span class="dim">${t("settings.tmuxMenuHint")}</span></label>
+      <label class="line">${t("settings.font")} <input type="number" min="8" max="24" step="0.5" value="${layout.fontSize}" data-k="font" /> px <span class="dim">(${keysIn(t("settings.fontHint"))})</span></label>
+      <label class="line">${t("settings.browser")} <select data-k="browser">${[
+        ["auto", t("settings.browserAuto")],
         ["brave", "Brave"],
         ["chrome", "Chrome"],
-        ["system", "przeglądarka systemowa"],
+        ["system", t("settings.browserSystem")],
       ]
         .map(([v, label]) => `<option value="${v}" ${(layout.browser || "auto") === v ? "selected" : ""}>${label}</option>`)
         .join("")}</select></label>
-      <h3>Motyw</h3>
+      <h3>${t("settings.theme")}</h3>
       <div class="themes">${THEMES.map(
         (t) => `<button class="theme ${t.id === (layout.theme || DEFAULT_THEME) ? "sel" : ""}" data-theme="${t.id}" style="background:${t.bg};color:${t.fg}">
           <span class="swatches">${[1, 2, 3, 4, 5].map((i) => `<i style="background:${t.ansi[i]}"></i>`).join("")}</span>${escapeHtml(t.name)}</button>`,
       ).join("")}</div>
-      <h3>Start z aplikacją <span class="dim">(${auto.size})</span></h3>
-      <input type="text" class="filter" placeholder="Filtruj projekty…" value="${escapeHtml(this.filter)}" data-k="filter" spellcheck="false" />
+      <h3>${t("settings.autostart")} <span class="dim">(${auto.size})</span></h3>
+      <input type="text" class="filter" placeholder="${t("settings.filter")}" value="${escapeHtml(this.filter)}" data-k="filter" spellcheck="false" />
       <div class="checks">${
         list.length
           ? list
@@ -184,71 +189,71 @@ export class Settings {
                 }/> <b>${escapeHtml(r.project.name)}</b> <span class="dim">${escapeHtml(shortPath(r.project.path, this.ctx.home()))}</span></label>`,
               )
               .join("")
-          : `<div class="dim">Szukam projektów…</div>`
+          : `<div class="dim">${t("common.searchingProjects")}</div>`
       }</div>
-      <h3>Agenci <span class="dim">(Tab w palecie wybiera agenta)</span></h3>
+      <h3>${t("settings.agents")} <span class="dim">${t("settings.agentsHint")}</span></h3>
       <div class="agents">${this.ctx
         .agents()
         .map(
           (a) => `<div class="agent-row"><b>${escapeHtml(a.id)}</b> <span class="dim">${escapeHtml(a.command || "login shell")}</span> ${
             a.installed
-              ? `<span class="tag open">jest</span>`
+              ? `<span class="tag open">${t("settings.agentInstalled")}</span>`
               : a.installable
-                ? `<span class="tag">zainstaluje się przy otwarciu</span>`
-                : `<span class="tag">brak w PATH</span>`
-          }${a.builtin ? "" : ` <button data-rm-agent="${escapeHtml(a.id)}">usuń</button>`}</div>`,
+                ? `<span class="tag">${t("common.installsOnOpen")}</span>`
+                : `<span class="tag">${t("settings.agentMissing")}</span>`
+          }${a.builtin ? "" : ` <button data-rm-agent="${escapeHtml(a.id)}">${t("common.remove")}</button>`}</div>`,
         )
         .join("")}
-        <div class="line"><input type="text" data-k="agent-id" placeholder="nazwa, np. amp" spellcheck="false" /><input type="text" data-k="agent-cmd" placeholder="komenda, np. amp --dangerously-allow-all" spellcheck="false" /><button data-k="agent-add">+ Dodaj agenta</button></div>
+        <div class="line"><input type="text" data-k="agent-id" placeholder="${t("settings.agentId")}" spellcheck="false" /><input type="text" data-k="agent-cmd" placeholder="${t("settings.agentCommand")}" spellcheck="false" /><button data-k="agent-add">${t("settings.addAgent")}</button></div>
       </div>
-      <h3>Dodane foldery</h3>
+      <h3>${t("settings.folders")}</h3>
       <div class="folders">${layout.extraFolders
         .map(
-          (f) => `<div class="folder"><span>${escapeHtml(shortPath(f, this.ctx.home()))}</span><button data-rm="${escapeHtml(f)}">usuń</button></div>`,
+          (f) => `<div class="folder"><span>${escapeHtml(shortPath(f, this.ctx.home()))}</span><button data-rm="${escapeHtml(f)}">${t("common.remove")}</button></div>`,
         )
-        .join("")}<button data-k="add">+ Dodaj folder…</button></div>
-      <h3>Kawa <span class="dim">(${escapeHtml(keyText("coffee"))})</span></h3>
-      <div class="line dim">Wyłącza się sama przy przegrzaniu albo baterii ≤15%. ${
+        .join("")}<button data-k="add">${t("settings.addFolder")}</button></div>
+      <h3>${t("settings.coffee")} <span class="dim">(${escapeHtml(keyText("coffee"))})</span></h3>
+      <div class="line dim">${t("settings.coffeeGuard")} ${
         this.ctx.coffee().helperInstalled
-          ? `Zgoda na tryb z klapką jest zainstalowana (/etc/sudoers.d/desk-pmset, tylko pmset disablesleep). <button data-k="coffee-rm">Usuń zgodę</button>`
-          : "Tryb z zamkniętą klapką zapyta raz o hasło administratora."
+          ? `${t("settings.coffeeHelper")} <button data-k="coffee-rm">${t("settings.coffeeRemove")}</button>`
+          : t("settings.coffeeAsk")
       }</div>
-      <h3>Aktualizacje</h3>
-      <div class="line"><span class="dim">desk <span data-k="version"></span> · sprawdza raz dziennie (przez GitHub CLI, gh)</span> <button data-k="update">Sprawdź teraz</button></div>
+      <h3>${t("settings.updates")}</h3>
+      <div class="line"><span class="dim">desk <span data-k="version"></span> · ${t("settings.updatesHow")}</span> <button data-k="update">${t("settings.checkNow")}</button></div>
       </div>
       <div class="pane" data-pane="dropdown" ${this.tab === "dropdown" ? "" : "hidden"}>
-      <label class="line"><input type="checkbox" data-k="dropdown" ${layout.dropdown ? "checked" : ""}/> ${escapeHtml(hotkey)} wysuwa desk z góry ekranu</label>
-      <p class="dim small">Jak w iTerm: działa w każdej aplikacji, a drugie ${escapeHtml(hotkey)} chowa desk. Skrót zmienisz w zakładce Skróty, a wyłączenie przywraca zwykłe okno.</p>
-      <label class="line">Wysokość <input type="number" min="20" max="100" step="5" value="${layout.dropdownHeight}" data-k="dropdown-height" ${off}/> % ekranu <span class="dim">(albo przeciągnij dolną krawędź, desk ją zapamięta)</span></label>
-      <label class="line">Animacja <input type="number" min="0" max="1000" step="50" value="${layout.dropdownAnimation}" data-k="dropdown-animation" ${off}/> ms <span class="dim">(0 bez animacji)</span></label>
-      <label class="line"><input type="checkbox" data-k="dropdown-autohide" ${layout.dropdownAutohide ? "checked" : ""} ${off}/> Chowaj, gdy klikniesz inną aplikację</label>
+      <label class="line"><input type="checkbox" data-k="dropdown" ${layout.dropdown ? "checked" : ""}/> ${t("settings.dropdownOn", { hotkey: escapeHtml(hotkey) })}</label>
+      <p class="dim small">${t("settings.dropdownAbout", { hotkey: escapeHtml(hotkey) })}</p>
+      <label class="line">${t("settings.height")} <input type="number" min="20" max="100" step="5" value="${layout.dropdownHeight}" data-k="dropdown-height" ${off}/> ${t("settings.heightUnit")} <span class="dim">${t("settings.heightHint")}</span></label>
+      <label class="line">${t("settings.animation")} <input type="number" min="0" max="1000" step="50" value="${layout.dropdownAnimation}" data-k="dropdown-animation" ${off}/> ms <span class="dim">${t("settings.animationHint")}</span></label>
+      <label class="line"><input type="checkbox" data-k="dropdown-autohide" ${layout.dropdownAutohide ? "checked" : ""} ${off}/> ${t("settings.autohide")}</label>
       </div>
       <div class="pane" data-pane="keys" ${this.tab === "keys" ? "" : "hidden"}>
-      <p class="dim small">Kliknij skrót i naciśnij nowy (Esc anuluje), ↺ przywraca domyślny.</p>
-      <div class="shortcut-list"><div class="group">Dropdown</div>${this.keyButton("dropdown", hotkey, off)}<span>wysuwa i chowa desk z góry ekranu, w każdej aplikacji${
-        layout.dropdown ? "" : ` <span class="dim">(wyłączony w zakładce Dropdown)</span>`
+      <p class="dim small">${t("settings.keysAbout")}</p>
+      <div class="shortcut-list"><div class="group">Dropdown</div>${this.keyButton("dropdown", hotkey, off)}<span>${t("settings.dropdownKey")}${
+        layout.dropdown ? "" : ` <span class="dim">${t("settings.dropdownKeyOff")}</span>`
       }${
         layout.dropdownHotkey && layout.dropdownHotkey !== DEFAULT_HOTKEY()
-          ? ` <button class="reset" data-unbind="dropdown" title="domyślny">↺</button>`
+          ? ` <button class="reset" data-unbind="dropdown" title="${t("settings.default")}">↺</button>`
           : ""
       }</span>${GROUPS.map(
         (group) =>
-          `<div class="group">${escapeHtml(group)}</div>` +
+          `<div class="group">${escapeHtml(groupLabel(group))}</div>` +
           BINDINGS.filter((b) => b.group === group)
             .map(
               (b) =>
-                `${this.keyButton(b.id, keyText(b.id) || "brak")}<span>${escapeHtml(b.label)}${
-                  layout.keys[b.id] ? ` <button class="reset" data-unbind="${b.id}" title="domyślny">↺</button>` : ""
+                `${this.keyButton(b.id, keyText(b.id) || t("settings.noKey"))}<span>${escapeHtml(bindingLabel(b.id))}${
+                  layout.keys[b.id] ? ` <button class="reset" data-unbind="${b.id}" title="${t("settings.default")}">↺</button>` : ""
                 }</span>`,
             )
             .join("") +
           FIXED.filter((f) => f.group === group)
-            .map((f) => `<kbd>${escapeHtml(shortcut(f.keys))}</kbd><span>${escapeHtml(f.label)} <span class="dim">(stały)</span></span>`)
+            .map((f) => `<kbd>${escapeHtml(shortcut(f.keys))}</kbd><span>${escapeHtml(t(f.label))} <span class="dim">${t("settings.fixed")}</span></span>`)
             .join(""),
       ).join("")}</div>
-      <p class="dim small">Zwykłe Esc trafia do terminala, więc dalej przerywa Claude.</p>
+      <p class="dim small">${t("settings.escNote")}</p>
       </div>
-      <p class="dim small">Ustawienia: ~/Library/Application Support/desk/layout.json · sesje: tmux -L desk ls</p>`;
+      <p class="dim small">${t("settings.where", { path: "~/Library/Application Support/desk/layout.json", sessions: "tmux -L desk ls" })}</p>`;
 
     box.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((b) =>
       b.addEventListener("click", () => {
@@ -285,10 +290,10 @@ export class Settings {
     box.querySelector<HTMLButtonElement>('[data-k="update"]')!.addEventListener("click", async (e) => {
       const b = e.target as HTMLButtonElement;
       b.disabled = true;
-      b.textContent = "sprawdzam…";
+      b.textContent = t("settings.checking");
       await this.ctx.checkUpdate();
       b.disabled = false;
-      b.textContent = "Sprawdź teraz";
+      b.textContent = t("settings.checkNow");
     });
     box.querySelector<HTMLInputElement>('[data-k="font"]')!.addEventListener("change", (e) => {
       const px = Number((e.target as HTMLInputElement).value);
@@ -323,6 +328,10 @@ export class Settings {
     });
     box.querySelector<HTMLInputElement>('[data-k="dropdown-autohide"]')!.addEventListener("change", (e) => {
       void this.ctx.setDropdown({ dropdownAutohide: (e.target as HTMLInputElement).checked });
+    });
+    box.querySelector<HTMLSelectElement>('[data-k="language"]')!.addEventListener("change", (e) => {
+      this.ctx.setLanguage((e.target as HTMLSelectElement).value as Language);
+      this.render();
     });
     box.querySelector<HTMLSelectElement>('[data-k="browser"]')!.addEventListener("change", (e) => {
       this.ctx.setBrowser((e.target as HTMLSelectElement).value);

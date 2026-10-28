@@ -161,12 +161,21 @@ fn install_then_run(id: &str, install: &str, run: &str) -> String {
     let hint = if need == "npm" { " (Node.js: https://nodejs.org)" } else { "" };
     let say = |text: String| format!("echo {}", shell_quote(&text));
     let script = [
-        say(format!("desk: {id} nie jest zainstalowany. Instaluję: {install}")),
+        say(tr!(
+            format!("desk: {id} nie jest zainstalowany. Instaluję: {install}"),
+            format!("desk: {id} is not installed. Installing: {install}")
+        )),
         format!(
             "command -v {need} >/dev/null 2>&1 || {{ {}; exit 1; }}",
-            say(format!("desk: do instalacji potrzebny jest {need}{hint}"))
+            say(tr!(
+                format!("desk: do instalacji potrzebny jest {need}{hint}"),
+                format!("desk: installing needs {need}{hint}")
+            ))
         ),
-        format!("{install} || {{ {}; exit 1; }}", say("desk: instalacja się nie udała".into())),
+        format!(
+            "{install} || {{ {}; exit 1; }}",
+            say(tr!("desk: instalacja się nie udała", "desk: the install failed").into())
+        ),
         format!("PATH=\"{INSTALL_DIRS}:$PATH\"; export PATH"),
         format!("exec {run}"),
     ]
@@ -208,7 +217,10 @@ fn argv(id: &str, command: &str, hooks_settings: &Path, install: Install) -> Vec
         // Installers add their folder to the user's PATH in the registry.
         Some((_, ps)) => format!(
             "Write-Host {}; {ps}; $env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + \";$HOME\\.local\\bin\"; {run}",
-            ps_quote(&format!("desk: {id} nie jest zainstalowany. Instaluję: {ps}"))
+            ps_quote(&tr!(
+                format!("desk: {id} nie jest zainstalowany. Instaluję: {ps}"),
+                format!("desk: {id} is not installed. Installing: {ps}")
+            ))
         ),
         None => run,
     };

@@ -1,4 +1,5 @@
 import { hotkeyLabel } from "./hotkey";
+import { t, type MessageKey } from "./i18n";
 import { PLATFORM, shortcut, type Platform } from "./platform";
 
 // App shortcuts, named after the Polish actions (⌘P projekty, ⌘Q zamknij, ...);
@@ -36,11 +37,11 @@ export interface KeyLike {
   ctrlKey: boolean;
 }
 
+export type Group = "window" | "tiles" | "terminal" | "palette" | "preview";
+
 export interface Binding {
   id: string;
-  group: string;
-  /** What it does, in Options. */
-  label: string;
+  group: Group;
   action: Action;
   /** Accelerators on macOS ("Super+KeyP"); off macOS Super becomes Control+Shift. */
   mac: string[];
@@ -50,54 +51,63 @@ export interface Binding {
 
 /** Every shortcut that can be changed, in the order Options lists them. */
 export const BINDINGS: Binding[] = [
-  { id: "palette", group: "Okno", label: "projekty (paleta)", action: { type: "palette" }, mac: ["Super+KeyP"] },
-  { id: "new", group: "Okno", label: "nowy projekt (folder + opcjonalnie git init)", action: { type: "new" }, mac: ["Super+KeyN"] },
-  { id: "sub", group: "Okno", label: "druga sesja w tym projekcie", action: { type: "sub" }, mac: ["Super+KeyD"] },
-  { id: "terminal", group: "Okno", label: "terminal (zwykły shell) w projekcie aktywnego kafelka", action: { type: "terminal" }, mac: ["Super+KeyT"] },
-  { id: "files", group: "Okno", label: "pliki projektu", action: { type: "files" }, mac: ["Super+KeyF"] },
-  { id: "run", group: "Okno", label: "uruchom (dev serwer, testy...)", action: { type: "run" }, mac: ["Super+KeyU"] },
-  { id: "chat", group: "Okno", label: "rozmowa (czat bez projektu)", action: { type: "chat" }, mac: ["Super+KeyR"] },
-  { id: "preview", group: "Okno", label: "podgląd obok (pliki, Markdown, diagramy, strony)", action: { type: "preview" }, mac: ["Super+KeyW"] },
-  { id: "coffee", group: "Okno", label: "kawa", action: { type: "coffee" }, mac: ["Super+KeyK"] },
-  { id: "lock", group: "Okno", label: "blokada", action: { type: "lock" }, mac: ["Super+KeyB"] },
-  { id: "settings", group: "Okno", label: "opcje", action: { type: "settings" }, mac: ["Super+KeyO"] },
-  { id: "fullscreen", group: "Kafelki", label: "ekran pełny kafelka", action: { type: "fullscreen" }, mac: ["Super+KeyE", "Super+Enter"] },
-  { id: "exitFullscreen", group: "Kafelki", label: "wyjście z ekranu pełnego", action: { type: "exitFullscreen" }, mac: ["Super+Escape"], other: [] }, // Ctrl+Shift+Esc is the Task Manager
-  { id: "minimize", group: "Kafelki", label: "zwiń kafelek do nagłówka i rozwiń", action: { type: "minimize" }, mac: ["Super+KeyJ"] },
-  { id: "close", group: "Kafelki", label: "zamknij kafelek (sesja zostaje)", action: { type: "close" }, mac: ["Super+KeyQ"] },
-  { id: "kill", group: "Kafelki", label: "zabij sesję", action: { type: "kill" }, mac: ["Super+Shift+KeyQ"], other: ["Control+Shift+Backspace"] },
-  { id: "fontUp", group: "Terminal", label: "czcionka większa", action: { type: "font", step: 1 }, mac: ["Super+Equal"] },
-  { id: "fontDown", group: "Terminal", label: "czcionka mniejsza", action: { type: "font", step: -1 }, mac: ["Super+Minus"] },
-  { id: "fontReset", group: "Terminal", label: "czcionka zwykła", action: { type: "font", step: 0 }, mac: ["Super+Digit0"] },
+  { id: "palette", group: "window", action: { type: "palette" }, mac: ["Super+KeyP"] },
+  { id: "new", group: "window", action: { type: "new" }, mac: ["Super+KeyN"] },
+  { id: "sub", group: "window", action: { type: "sub" }, mac: ["Super+KeyD"] },
+  { id: "terminal", group: "window", action: { type: "terminal" }, mac: ["Super+KeyT"] },
+  { id: "files", group: "window", action: { type: "files" }, mac: ["Super+KeyF"] },
+  { id: "run", group: "window", action: { type: "run" }, mac: ["Super+KeyU"] },
+  { id: "chat", group: "window", action: { type: "chat" }, mac: ["Super+KeyR"] },
+  { id: "preview", group: "window", action: { type: "preview" }, mac: ["Super+KeyW"] },
+  { id: "coffee", group: "window", action: { type: "coffee" }, mac: ["Super+KeyK"] },
+  { id: "lock", group: "window", action: { type: "lock" }, mac: ["Super+KeyB"] },
+  { id: "settings", group: "window", action: { type: "settings" }, mac: ["Super+KeyO"] },
+  { id: "fullscreen", group: "tiles", action: { type: "fullscreen" }, mac: ["Super+KeyE", "Super+Enter"] },
+  { id: "exitFullscreen", group: "tiles", action: { type: "exitFullscreen" }, mac: ["Super+Escape"], other: [] }, // Ctrl+Shift+Esc is the Task Manager
+  { id: "minimize", group: "tiles", action: { type: "minimize" }, mac: ["Super+KeyJ"] },
+  { id: "close", group: "tiles", action: { type: "close" }, mac: ["Super+KeyQ"] },
+  { id: "kill", group: "tiles", action: { type: "kill" }, mac: ["Super+Shift+KeyQ"], other: ["Control+Shift+Backspace"] },
+  { id: "fontUp", group: "terminal", action: { type: "font", step: 1 }, mac: ["Super+Equal"] },
+  { id: "fontDown", group: "terminal", action: { type: "font", step: -1 }, mac: ["Super+Minus"] },
+  { id: "fontReset", group: "terminal", action: { type: "font", step: 0 }, mac: ["Super+Digit0"] },
 ];
 
 /** Shortcuts that stay as they are, written for macOS, by group. */
-export const FIXED: { group: string; keys: string; label: string }[] = [
-  { group: "Kafelki", keys: "⌘1-9", label: "skok do kafelka" },
-  { group: "Terminal", keys: "⌘C / ⌘V", label: "kopiuj zaznaczenie / wklej" },
-  { group: "Paleta", keys: "↵", label: "otwiera" },
-  { group: "Paleta", keys: "⌘↵", label: "włącza lub wyłącza autostart" },
-  { group: "Paleta", keys: "⌘⌫", label: "zabija sesję" },
-  { group: "Paleta", keys: "Tab", label: "wybiera agenta" },
-  { group: "Podgląd", keys: "⌘S", label: "zapisz plik w edytorze" },
+export const FIXED: { group: Group; keys: string; label: MessageKey }[] = [
+  { group: "tiles", keys: "⌘1-9", label: "fixed.focus" },
+  { group: "terminal", keys: "⌘C / ⌘V", label: "fixed.copyPaste" },
+  { group: "palette", keys: "↵", label: "fixed.open" },
+  { group: "palette", keys: "⌘↵", label: "fixed.autostart" },
+  { group: "palette", keys: "⌘⌫", label: "fixed.kill" },
+  { group: "palette", keys: "Tab", label: "fixed.agent" },
+  { group: "preview", keys: "⌘S", label: "fixed.save" },
 ];
 
-export const GROUPS = ["Okno", "Kafelki", "Terminal", "Paleta", "Podgląd"];
+export const GROUPS: Group[] = ["window", "tiles", "terminal", "palette", "preview"];
+
+/** What a binding does, in Options. */
+export function bindingLabel(id: string): string {
+  return t(`key.${id}` as MessageKey);
+}
+
+export function groupLabel(group: Group): string {
+  return t(`group.${group}`);
+}
 
 /** Keys desk or the system already uses, which a binding must not take. */
-const RESERVED: Record<Platform, Record<string, string>> = {
+const RESERVED: Record<Platform, Record<string, MessageKey>> = {
   mac: {
-    "Super+KeyC": "kopiuj",
-    "Super+KeyV": "wklej",
-    "Super+KeyX": "wytnij",
-    "Super+KeyZ": "cofnij",
-    "Super+Shift+KeyZ": "ponów",
-    "Super+KeyH": "ukryj desk",
-    "Super+KeyM": "zwiń okno",
-    "Super+Tab": "przełączanie aplikacji",
+    "Super+KeyC": "reserved.copy",
+    "Super+KeyV": "reserved.paste",
+    "Super+KeyX": "reserved.cut",
+    "Super+KeyZ": "reserved.undo",
+    "Super+Shift+KeyZ": "reserved.redo",
+    "Super+KeyH": "reserved.hide",
+    "Super+KeyM": "reserved.minimize",
+    "Super+Tab": "reserved.switchApps",
   },
-  windows: { "Control+Shift+KeyC": "kopiuj", "Control+Shift+KeyV": "wklej", "Control+Shift+Escape": "Menedżer zadań" },
-  linux: { "Control+Shift+KeyC": "kopiuj", "Control+Shift+KeyV": "wklej" },
+  windows: { "Control+Shift+KeyC": "reserved.copy", "Control+Shift+KeyV": "reserved.paste", "Control+Shift+Escape": "reserved.taskManager" },
+  linux: { "Control+Shift+KeyC": "reserved.copy", "Control+Shift+KeyV": "reserved.paste" },
 };
 
 let custom: Record<string, string> = {};
@@ -126,11 +136,11 @@ export function keyText(id: string, platform: Platform = PLATFORM): string {
 /** The binding (or reserved key) a new shortcut would clash with, if any. */
 export function clashWith(id: string, accelerator: string, platform: Platform = PLATFORM): string | null {
   const reserved = RESERVED[platform][accelerator];
-  if (reserved) return reserved;
+  if (reserved) return t(reserved);
   const focus = platform === "mac" ? /^Super\+Digit[1-9]$/ : /^Control\+Shift\+Digit[1-9]$/;
-  if (focus.test(accelerator)) return "skok do kafelka";
+  if (focus.test(accelerator)) return t("fixed.focus");
   const other = BINDINGS.find((b) => b.id !== id && acceleratorsOf(b, platform).includes(accelerator));
-  return other ? other.label : null;
+  return other ? bindingLabel(other.id) : null;
 }
 
 const SYMBOLS: Record<string, string> = {
@@ -172,29 +182,13 @@ export function actionFor(e: KeyLike, platform: Platform = PLATFORM): Action | n
   return BINDINGS.find((b) => acceleratorsOf(b, platform).includes(acc))?.action ?? null;
 }
 
-/** Footer hints: binding id and short label. */
-const HINTS: [string, string][] = [
-  ["palette", "projekty"],
-  ["new", "nowy projekt"],
-  ["sub", "druga sesja"],
-  ["terminal", "terminal"],
-  ["files", "pliki"],
-  ["run", "uruchom"],
-  ["chat", "rozmowa"],
-  ["preview", "podgląd"],
-  ["close", "zamknij"],
-  ["kill", "zabij"],
-  ["focus", "skok"],
-  ["fullscreen", "ekran"],
-  ["minimize", "zwiń"],
-  ["coffee", "kawa"],
-  ["lock", "blokada"],
-  ["settings", "opcje"],
-];
+/** Footer hints, by binding id (their labels are "hint.<id>"). */
+const HINTS = ["palette", "new", "sub", "terminal", "files", "run", "chat", "preview", "close", "kill", "focus", "fullscreen", "minimize", "coffee", "lock", "settings"];
 
 /** Footer hints for the user's platform and shortcuts (the first key of each). */
 export function hints(platform: Platform = PLATFORM): [string, string][] {
-  return HINTS.map(([id, label]) => {
+  return HINTS.map((id) => {
+    const label = t(`hint.${id}` as MessageKey);
     if (id === "focus") return [shortcut("⌘1-9", platform), label];
     const b = BINDINGS.find((x) => x.id === id)!;
     return [hotkeyLabel(acceleratorsOf(b, platform)[0], platform), label];

@@ -1,5 +1,6 @@
 // The side panel's file tree: built from the project's file list
 // (`git ls-files` or a walk), filtered by name.
+import { tn } from "./i18n";
 
 export interface TreeNode {
   name: string;
@@ -76,11 +77,7 @@ export function ancestors(path: string): string[] {
   return parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join("/"));
 }
 
-/** "1 element", "3 elementy", "12 elementów". */
+/** "1 element", "3 elementy", "12 elementów" ("3 items" in English). */
 export function itemsLabel(n: number): string {
-  const tens = n % 100;
-  const ones = n % 10;
-  if (n === 1) return "1 element";
-  if (ones >= 2 && ones <= 4 && (tens < 12 || tens > 14)) return `${n} elementy`;
-  return `${n} elementów`;
+  return tn("side.items", n);
 }

@@ -7,13 +7,16 @@ use std::process::Command;
 pub fn validate_name(name: &str) -> Result<&str, String> {
     let name = name.trim();
     if name.is_empty() || name == "." || name == ".." || name.starts_with('.') {
-        return Err("podaj nazwę projektu".into());
+        return Err(tr!("podaj nazwę projektu", "give the project a name").into());
     }
     if let Some(c) = name
         .chars()
         .find(|c| !(c.is_alphanumeric() || matches!(c, '.' | '_' | '-' | ' ')))
     {
-        return Err(format!("niedozwolony znak w nazwie: {c:?}"));
+        return Err(tr!(
+            format!("niedozwolony znak w nazwie: {c:?}"),
+            format!("character not allowed in the name: {c:?}")
+        ));
     }
     Ok(name)
 }
@@ -57,14 +60,17 @@ fn on_disk(base: &Path, rel: &str) -> Option<PathBuf> {
 pub fn create(parent: &Path, name: &str, git: bool) -> Result<PathBuf, String> {
     let name = validate_name(name)?;
     if !parent.is_dir() {
-        return Err(format!(
-            "folder nadrzędny nie istnieje: {}",
-            parent.display()
+        return Err(tr!(
+            format!("folder nadrzędny nie istnieje: {}", parent.display()),
+            format!("the parent folder does not exist: {}", parent.display())
         ));
     }
     let dir = parent.join(name);
     if dir.exists() {
-        return Err(format!("{} już istnieje", dir.display()));
+        return Err(tr!(
+            format!("{} już istnieje", dir.display()),
+            format!("{} already exists", dir.display())
+        ));
     }
     std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
     if git {

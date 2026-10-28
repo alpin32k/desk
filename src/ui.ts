@@ -1,16 +1,17 @@
 // Small UI helpers: confirm dialog and toasts (window.confirm is not available in the webview).
 import type { GithubRepo } from "./api";
 import { matchRepos, repoName } from "./github";
+import { t } from "./i18n";
 import { escapeHtml } from "./tile";
 
-export function confirmBox(message: string, okLabel = "Tak"): Promise<boolean> {
+export function confirmBox(message: string, okLabel = t("common.yes")): Promise<boolean> {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "overlay";
     overlay.innerHTML = `
       <div class="dialog confirm">
         <p>${escapeHtml(message)}</p>
-        <div class="buttons"><button data-v="0">Anuluj <kbd>esc</kbd></button><button data-v="1" class="danger">${escapeHtml(okLabel)} <kbd>↵</kbd></button></div>
+        <div class="buttons"><button data-v="0">${t("common.cancel")} <kbd>esc</kbd></button><button data-v="1" class="danger">${escapeHtml(okLabel)} <kbd>↵</kbd></button></div>
       </div>`;
     const done = (v: boolean) => {
       window.removeEventListener("keydown", onKey, true);
@@ -59,9 +60,9 @@ export function pickBox(title: string, items: string[], opts: PickOptions = {}):
       <div class="dialog palette pick">
         <input type="text" spellcheck="false" autocomplete="off" />
         <div class="list"></div>
-        <footer><span class="dim"></span><kbd>↵</kbd> wybierz ${
+        <footer><span class="dim"></span><kbd>↵</kbd> ${t("pick.choose")} ${
           opts.altHint ? `<kbd>⌥↵</kbd> ${escapeHtml(opts.altHint)} ` : ""
-        }<kbd>esc</kbd> zamknij</footer>
+        }<kbd>esc</kbd> ${t("common.close")}</footer>
       </div>`;
     const input = overlay.querySelector("input")!;
     const list = overlay.querySelector<HTMLElement>(".list")!;
@@ -78,7 +79,7 @@ export function pickBox(title: string, items: string[], opts: PickOptions = {}):
         .map(
           (i, n) =>
             `<div class="row ${n === sel ? "sel" : ""}" data-i="${n}"><span class="name">${escapeHtml(i)}</span>${
-              i === opts.current ? `<span class="dim">obecny</span>` : ""
+              i === opts.current ? `<span class="dim">${t("pick.current")}</span>` : ""
             }${opts.note ? `<span class="dim">${escapeHtml(opts.note(i))}</span>` : ""}</div>`,
         )
         .join("");
@@ -144,13 +145,13 @@ export function newProjectBox(
     overlay.className = "overlay";
     overlay.innerHTML = `
       <div class="dialog new-project">
-        <h2>Nowy projekt <span class="dim">· ${escapeHtml(agent)}</span></h2>
-        <label class="line">Nazwa <input type="text" data-k="name" spellcheck="false" autocomplete="off" placeholder="moj-projekt albo repo z GitHuba" /></label>
+        <h2>${t("newProject.title")} <span class="dim">· ${escapeHtml(agent)}</span></h2>
+        <label class="line">${t("newProject.name")} <input type="text" data-k="name" spellcheck="false" autocomplete="off" placeholder="${t("newProject.namePlaceholder")}" /></label>
         <div class="gh-list"></div>
-        <label class="line">W folderze <input type="text" data-k="parent" spellcheck="false" /><button data-k="pick">Wybierz…</button></label>
-        <label class="line" data-k="git-line"><input type="checkbox" data-k="git" checked /> git init (branch main)</label>
-        <div class="line gh-chosen" hidden>Klon z GitHuba: <b data-k="repo"></b><button data-k="unpick" title="Pusty folder zamiast klonu">✕</button></div>
-        <div class="buttons"><button data-v="0">Anuluj <kbd>esc</kbd></button><button data-v="1"><span data-k="ok">Utwórz i otwórz</span> <kbd>↵</kbd></button></div>
+        <label class="line">${t("newProject.parent")} <input type="text" data-k="parent" spellcheck="false" /><button data-k="pick">${t("newProject.pick")}</button></label>
+        <label class="line" data-k="git-line"><input type="checkbox" data-k="git" checked /> ${t("newProject.git")}</label>
+        <div class="line gh-chosen" hidden>${t("newProject.clone")} <b data-k="repo"></b><button data-k="unpick" title="${t("newProject.unpick")}">✕</button></div>
+        <div class="buttons"><button data-v="0">${t("common.cancel")} <kbd>esc</kbd></button><button data-v="1"><span data-k="ok">${t("newProject.create")}</span> <kbd>↵</kbd></button></div>
       </div>`;
     const $ = <T extends HTMLElement>(k: string) => overlay.querySelector<T>(`[data-k="${k}"]`)!;
     const name = $<HTMLInputElement>("name");
@@ -170,7 +171,7 @@ export function newProjectBox(
       chosenLine.hidden = !chosen;
       $("git-line").hidden = !!chosen;
       $("repo").textContent = chosen?.fullName ?? "";
-      $("ok").textContent = chosen ? "Sklonuj i otwórz" : "Utwórz i otwórz";
+      $("ok").textContent = chosen ? t("newProject.cloneOpen") : t("newProject.create");
       shown = chosen || !repos ? [] : matchRepos(repos, name.value);
       sel = Math.min(sel, shown.length - 1);
       const status =
@@ -179,7 +180,7 @@ export function newProjectBox(
           : error
             ? `<div class="gh-status">GitHub: ${escapeHtml(error)}</div>`
             : !repos
-              ? `<div class="gh-status">GitHub: wczytuję repozytoria…</div>`
+              ? `<div class="gh-status">GitHub: ${t("newProject.loadingRepos")}</div>`
               : "";
       list.innerHTML =
         status +
@@ -188,8 +189,8 @@ export function newProjectBox(
             (r, i) => `<div class="row ${i === sel ? "sel" : ""}" data-i="${i}">
               <span class="name">${escapeHtml(r.fullName)}</span>
               <span class="desc">${escapeHtml(r.description ?? "")}</span>
-              ${opts.isLocal(repoName(r)) ? `<span class="tag">jest lokalnie</span>` : ""}
-              ${r.private ? `<span class="tag">prywatne</span>` : ""}</div>`,
+              ${opts.isLocal(repoName(r)) ? `<span class="tag">${t("newProject.local")}</span>` : ""}
+              ${r.private ? `<span class="tag">${t("common.private")}</span>` : ""}</div>`,
           )
           .join("");
     };

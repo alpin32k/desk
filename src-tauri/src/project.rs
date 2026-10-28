@@ -83,7 +83,10 @@ pub fn inside(root: &Path, rel: &str) -> Result<PathBuf, String> {
     if full.starts_with(&root) && full.is_file() {
         Ok(full)
     } else {
-        Err(format!("{rel} nie jest plikiem tego projektu"))
+        Err(tr!(
+            format!("{rel} nie jest plikiem tego projektu"),
+            format!("{rel} is not a file of this project")
+        ))
     }
 }
 
@@ -128,7 +131,10 @@ pub fn open_path_in_editor(file: &Path) -> Result<(), String> {
         ]
         .into_iter()
         .find_map(crate::agents::which)
-        .ok_or("nie znalazłem edytora tekstu (np. VS Code, gedit, kate)")?;
+        .ok_or(tr!(
+            "nie znalazłem edytora tekstu (np. VS Code, gedit, kate)",
+            "found no text editor (e.g. VS Code, gedit, kate)"
+        ))?;
         std::process::Command::new(editor)
     };
     cmd.arg(&file)
@@ -186,7 +192,7 @@ pub fn search(root: &Path, query: &str) -> Vec<String> {
 /// Show a file or folder in Finder / Explorer / the file manager.
 pub fn reveal(path: &Path) -> Result<(), String> {
     if !path.is_absolute() || !crate::preview::local_path(path) || !path.exists() {
-        return Err(format!("nie ma {}", path.display()));
+        return Err(tr!(format!("nie ma {}", path.display()), format!("no {}", path.display())));
     }
     #[cfg(target_os = "macos")]
     let mut cmd = {

@@ -4,6 +4,7 @@ import { Channel } from "@tauri-apps/api/core";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { mayWrite } from "./clip";
+import { t, type MessageKey } from "./i18n";
 import { toast } from "./ui";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -47,12 +48,21 @@ export function displayState(hook: HookState | undefined): TileState {
   return hook ?? "starting";
 }
 
-const STATE_LABEL: Record<TileState, string> = {
-  working: "pracuje",
-  waiting: "czeka na ciebie",
-  idle: "bezczynna",
-  shell: "shell",
-  starting: "start",
+function stateLabel(state: TileState): string {
+  return t(`state.${state}`);
+}
+
+/** Tooltips of the header's buttons, by data-a. */
+const BUTTON_TITLES: Record<string, MessageKey> = {
+  color: "tile.color",
+  sub: "tile.sub",
+  terminal: "tile.terminal",
+  run: "tile.run",
+  rename: "tile.rename",
+  minimize: "tile.minimize",
+  fullscreen: "tile.fullscreen",
+  close: "tile.close",
+  kill: "tile.kill",
 };
 
 let webglBudget = 12; // WebKit caps live WebGL contexts; the rest use the DOM renderer.
@@ -112,28 +122,29 @@ export class Tile {
     this.el = document.createElement("section");
     this.el.className = "tile state-starting";
     this.el.dataset.key = this.key;
-    this.el.innerHTML = keysIn(`
+    this.el.innerHTML = `
       <header draggable="true">
-        <span class="dot" data-a="color" title="Kolor projektu (kliknij, aby zmienić)"></span>
+        <span class="dot" data-a="color"></span>
         <span class="badge"></span>
         <span class="title"></span>
         <span class="peek"></span>
         <span class="actions">
-          <button data-a="sub" title="Druga sesja w tym projekcie (⌘D)">+</button>
-          <button data-a="terminal" title="Terminal w tym projekcie (⌘T)">›_</button>
-          <button data-a="run" title="Uruchom w tym projekcie, np. dev serwer (⌘U)">▶</button>
-          <button data-a="rename" title="Nazwij kafelek (albo prawy klik na tytule)">✎</button>
-          <button data-a="minimize" title="Zwiń: zostaje nagłówek z ostatnią linią (⌘J)">–</button>
-          <button data-a="fullscreen" title="Ekran pełny (⌘E)">⤢</button>
-          <button data-a="close" title="Zamknij kafelek, sesja zostaje (⌘Q)">×</button>
-          <button data-a="kill" title="Zabij sesję (⌘⇧Q)">⏻</button>
+          <button data-a="sub">+</button>
+          <button data-a="terminal">›_</button>
+          <button data-a="run">▶</button>
+          <button data-a="rename">✎</button>
+          <button data-a="minimize">–</button>
+          <button data-a="fullscreen">⤢</button>
+          <button data-a="close">×</button>
+          <button data-a="kill">⏻</button>
         </span>
       </header>
-      <div class="term"></div>`);
+      <div class="term"></div>`;
     this.badge = this.el.querySelector(".badge")!;
     this.title = this.el.querySelector(".title")!;
     this.body = this.el.querySelector(".term")!;
     this.peek = this.el.querySelector(".peek")!;
+    this.setTitles();
 
     const header = this.el.querySelector("header")!;
     header.addEventListener("dragstart", (e) => {
@@ -174,10 +185,10 @@ export class Tile {
         readText: () => "",
         writeText: (_sel, text) => {
           if (!mayWrite(text, this.lastInput, Date.now())) {
-            if (text) toast(`${this.name}: program chciał zmienić schowek bez Twojej akcji, zablokowano`);
+            if (text) toast(t("tile.clipboardBlocked", { name: this.name }));
             return;
           }
-          return writeText(text).then(() => toast("Skopiowano do schowka"));
+          return writeText(text).then(() => toast(t("tile.copied")));
         },
       }),
     );
@@ -304,7 +315,7 @@ export class Tile {
     try {
       this.ptyId = await api.ptyAttach(this.slug, this.term.cols, this.term.rows, ch);
     } catch (err) {
-      this.term.write(`\r\n\x1b[31mNie udało się podłączyć do sesji: ${err}\x1b[0m\r\n⌘Q zamyka kafelek.\r\n`);
+      this.term.write(`\r\n\x1b[31m${t("tile.attachFailed", { err: String(err) })}\x1b[0m\r\n${t("tile.attachFailedHint")}\r\n`);
       return;
     }
     if (this.disposed) void api.ptyClose(this.ptyId);
@@ -347,7 +358,7 @@ export class Tile {
     return {
       label: this.label(),
       name: this.name,
-      state: this.agent === "claude" ? STATE_LABEL[this.state] : "",
+      state: this.agent === "claude" ? stateLabel(this.state) : "",
     };
   }
 
@@ -389,7 +400,7 @@ export class Tile {
     this.el.classList.toggle("minimized", on);
     const btn = this.el.querySelector<HTMLElement>('[data-a="minimize"]')!;
     btn.textContent = on ? "▢" : "–";
-    btn.title = keysIn(on ? "Rozwiń (⌘J)" : "Zwiń: zostaje nagłówek z ostatnią linią (⌘J)");
+    this.setTitles();
     if (on) this.queuePeek();
     else {
       this.peek.textContent = "";
@@ -424,6 +435,19 @@ export class Tile {
     }
   }
 
+  /** Header tooltips and state in the current language (Options changed it). */
+  relabel(): void {
+    this.setTitles();
+    this.render();
+  }
+
+  private setTitles(): void {
+    for (const [a, key] of Object.entries(BUTTON_TITLES)) {
+      const title = a === "minimize" && this.minimized ? t("tile.expand") : t(key);
+      this.el.querySelector<HTMLElement>(`[data-a="${a}"]`)!.title = keysIn(title);
+    }
+  }
+
   private render(): void {
     this.el.className = this.el.className.replace(/\bstate-\S+/, `state-${this.state}`);
     this.badge.textContent = this.index > 0 && this.index < 10 ? String(this.index) : "";
@@ -434,10 +458,10 @@ export class Tile {
         : `<span class="${this.customName ? "named" : "agent"}">${escapeHtml(this.label())}</span>`,
       this.grouped ? "" : `<b>${escapeHtml(this.name)}</b>`,
       this.branch && !this.grouped
-        ? `<span class="branch" data-a="branch" title="Zmień branch">${escapeHtml(this.branch)}</span>`
+        ? `<span class="branch" data-a="branch" title="${t("common.changeBranch")}">${escapeHtml(this.branch)}</span>`
         : "",
       // Only Claude Code reports working/waiting/idle through desk's hooks.
-      this.agent === "claude" ? `<span class="state">${STATE_LABEL[this.state]}</span>` : "",
+      this.agent === "claude" ? `<span class="state">${stateLabel(this.state)}</span>` : "",
     ].filter(Boolean);
     if (!this.renaming) this.title.innerHTML = parts.join(`<span class="sep"> · </span>`);
     this.title.title = `${this.agent} · ${this.path}`;
@@ -459,7 +483,7 @@ export class Tile {
     const input = document.createElement("input");
     input.className = "rename";
     input.spellcheck = false;
-    input.placeholder = "nazwa kafelka, np. logi API";
+    input.placeholder = t("tile.namePlaceholder");
     input.value = this.customName ?? "";
     // Selecting text in the field must not start fullscreen or a drag.
     for (const type of ["click", "dblclick", "mousedown"]) input.addEventListener(type, (e) => e.stopPropagation());
@@ -486,7 +510,7 @@ export class Tile {
   private label(): string {
     if (this.customName) return this.customName;
     if (this.detail) return `▶ ${this.detail}`;
-    if (this.chat) return this.instance > 0 ? `rozmowa #${this.instance + 1}` : "rozmowa";
+    if (this.chat) return this.instance > 0 ? t("tile.chatN", { n: this.instance + 1 }) : t("tile.chat");
     return agentLabel(this);
   }
 

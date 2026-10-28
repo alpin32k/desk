@@ -2,6 +2,9 @@
 
 ## Niewydane
 
+- **desk po angielsku.** Opcje → Ogólne → Język przełącza interfejs między polskim a angielskim od
+  razu, łącznie z podpowiedziami, skrótami i komunikatami błędów. Pierwsze uruchomienie bierze język
+  systemu (polski albo, przy każdym innym, angielski). Dotychczasowe ustawienia zostają po polsku.
 - **Klon z GitHuba w „Nowym projekcie”.** Wpisujesz nazwę, a pod polem pojawiają się pasujące repo, do
   których masz dostęp przez `gh` (twoje, współdzielone i z organizacji). Wybór strzałkami i ↵ albo
   kliknięciem zamienia „git init” na „Sklonuj i otwórz”; nazwę folderu można zmienić. Tekst wpisany

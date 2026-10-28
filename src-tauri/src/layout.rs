@@ -58,6 +58,9 @@ pub struct Layout {
     /// A right click in a terminal opens tmux's menu (split, swap, kill...)
     /// when the program in it does not take the mouse.
     pub tmux_menu: bool,
+    /// Interface language, "pl" or "en" (src/i18n.ts). Empty until the first
+    /// launch takes the system's; layouts from before it stay Polish.
+    pub language: String,
 }
 
 impl Default for Layout {
@@ -87,6 +90,7 @@ impl Default for Layout {
             dropdown_animation: 200,
             keys: Default::default(),
             tmux_menu: false,
+            language: String::new(),
         }
     }
 }
@@ -116,7 +120,12 @@ pub fn load(path: &Path) -> Layout {
         return Layout::default();
     };
     match serde_json::from_str::<Layout>(&text) {
-        Ok(l) => l.normalized(),
+        Ok(mut l) => {
+            if l.language.is_empty() {
+                l.language = "pl".into(); // saved before languages: desk spoke Polish
+            }
+            l.normalized()
+        }
         Err(_) => {
             let _ = std::fs::rename(path, path.with_extension("json.bak"));
             Layout::default()
@@ -157,6 +166,7 @@ mod tests {
             extra_folders: vec!["/x".into()],
             notifications: false,
             colors: [("/a".to_string(), 3)].into(),
+            language: "en".into(),
             ..Layout::default()
         };
         save(&p, &l).unwrap();
@@ -188,5 +198,12 @@ mod tests {
         assert!(l.notifications);
         assert_eq!(l.dropdown, cfg!(target_os = "macos"));
         assert_eq!((l.dropdown_height, l.dropdown_autohide), (50, true));
+        assert_eq!(l.language, "pl");
+    }
+
+    #[test]
+    fn first_launch_has_no_language_yet() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert_eq!(load(&tmp.path().join("layout.json")).language, "");
     }
 }

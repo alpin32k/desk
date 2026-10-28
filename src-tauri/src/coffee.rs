@@ -99,7 +99,10 @@ impl Coffee {
         if level != Level::Off
             && let Some(reason) = guard_reason(thermal_hot(), battery())
         {
-            return Err(format!("Nie włączam: {reason}"));
+            return Err(tr!(
+                format!("Nie włączam: {reason}"),
+                format!("Not turning on: {reason}")
+            ));
         }
         #[cfg(target_os = "macos")]
         {
@@ -201,11 +204,11 @@ pub fn spawn_guard(app: AppHandle) {
 /// pressure, or the battery is low and discharging.
 pub fn guard_reason(hot: bool, battery: Option<Battery>) -> Option<String> {
     if hot {
-        return Some("komputer jest za gorący".into());
+        return Some(tr!("komputer jest za gorący", "the computer is too hot").into());
     }
     match battery {
         Some(b) if !b.charging && b.percent <= LOW_BATTERY_PERCENT => {
-            Some(format!("bateria {}%", b.percent))
+            Some(tr!(format!("bateria {}%", b.percent), format!("battery {}%", b.percent)))
         }
         _ => None,
     }
@@ -382,7 +385,10 @@ pub fn sudoers_rule(user: &str) -> Result<String, String> {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
         && !user.starts_with('-');
     if !ok {
-        return Err(format!("nieobsługiwana nazwa użytkownika: {user:?}"));
+        return Err(tr!(
+            format!("nieobsługiwana nazwa użytkownika: {user:?}"),
+            format!("unsupported user name: {user:?}")
+        ));
     }
     Ok(format!(
         "{user} ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0\n"
@@ -402,7 +408,8 @@ pub fn install_script(rule: &str) -> String {
 
 #[cfg(target_os = "macos")]
 fn install_helper() -> Result<(), String> {
-    let user = std::env::var("USER").map_err(|_| "brak zmiennej USER".to_string())?;
+    let user = std::env::var("USER")
+        .map_err(|_| tr!("brak zmiennej USER", "no USER variable").to_string())?;
     run_admin(&install_script(&sudoers_rule(&user)?))
 }
 
@@ -453,9 +460,14 @@ fn spawn_watchdog(stop_file: &Path) -> Result<(), String> {
 /// Run a fixed shell command as root; macOS shows its own password dialog.
 #[cfg(target_os = "macos")]
 fn run_admin(script: &str) -> Result<(), String> {
+    let prompt = tr!(
+        "desk: jednorazowa zgoda na tryb kawy z zamkniętą klapką (pmset disablesleep). Później desk nie będzie już pytać.",
+        "desk: one-time permission for coffee with the lid closed (pmset disablesleep). desk will not ask again."
+    );
     let apple = format!(
-        "do shell script {} with administrator privileges with prompt \"desk: jednorazowa zgoda na tryb kawy z zamkniętą klapką (pmset disablesleep). Później desk nie będzie już pytać.\"",
-        applescript_quote(script)
+        "do shell script {} with administrator privileges with prompt {}",
+        applescript_quote(script),
+        applescript_quote(prompt)
     );
     let out = Command::new("/usr/bin/osascript")
         .args(["-e", &apple])
@@ -548,7 +560,10 @@ mod win_lid {
             None => {
                 let out = powercfg(&["/query", "SCHEME_CURRENT", "SUB_BUTTONS", "LIDACTION"])?;
                 let now =
-                    parse_lid_actions(&out).ok_or("powercfg: nie odczytałem działania pokrywy")?;
+                    parse_lid_actions(&out).ok_or(tr!(
+                        "powercfg: nie odczytałem działania pokrywy",
+                        "powercfg: could not read the lid action"
+                    ))?;
                 std::fs::write(file, format!("{} {}", now.0, now.1)).map_err(|e| e.to_string())?;
                 now
             }

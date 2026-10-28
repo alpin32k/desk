@@ -86,27 +86,44 @@ pub fn parse(link: &str) -> Result<Target, String> {
         None => link,
     };
     let url = if link.starts_with('/') || (cfg!(windows) && Path::new(link).is_absolute()) {
-        Url::from_file_path(link).map_err(|_| format!("zła ścieżka: {link}"))?
+        Url::from_file_path(link)
+            .map_err(|_| tr!(format!("zła ścieżka: {link}"), format!("bad path: {link}")))?
     } else {
         Url::parse(link).map_err(|e| format!("{link}: {e}"))?
     };
     match url.scheme() {
         "http" | "https" => Ok(Target::Web(url)),
         "file" => {
-            let path = url.to_file_path().map_err(|_| "zła ścieżka".to_string())?;
+            let path = url
+                .to_file_path()
+                .map_err(|_| tr!("zła ścieżka", "bad path").to_string())?;
             if !local_path(&path) {
-                return Err(format!("tylko pliki na tym komputerze: {}", path.display()));
+                return Err(tr!(
+                    format!("tylko pliki na tym komputerze: {}", path.display()),
+                    format!("only files on this computer: {}", path.display())
+                ));
             }
             let path = path
                 .canonicalize()
-                .map_err(|_| format!("nie ma pliku {}", path.display()))?;
+                .map_err(|_| {
+                    tr!(
+                        format!("nie ma pliku {}", path.display()),
+                        format!("no file {}", path.display())
+                    )
+                })?;
             if path.is_file() {
                 Ok(Target::File(path))
             } else {
-                Err(format!("to nie plik: {}", path.display()))
+                Err(tr!(
+                    format!("to nie plik: {}", path.display()),
+                    format!("not a file: {}", path.display())
+                ))
             }
         }
-        other => Err(format!("nieobsługiwany adres ({other}:)")),
+        other => Err(tr!(
+            format!("nieobsługiwany adres ({other}:)"),
+            format!("unsupported address ({other}:)")
+        )),
     }
 }
 
@@ -126,24 +143,30 @@ pub fn local_path(path: &Path) -> bool {
 
 /// `deskpreview://localhost/<token>/<file>`, registering the file's folder.
 fn file_url(path: &Path) -> Result<Url, String> {
-    let dir = path.parent().ok_or("brak folderu")?.to_path_buf();
+    let dir = path.parent().ok_or(tr!("brak folderu", "no folder"))?.to_path_buf();
     let home = crate::env::home();
     // Canonical on both sides (Windows canonical paths start with \\?\).
     let canon = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
     if canon(&home).starts_with(canon(&dir)) {
-        return Err(format!(
-            "podgląd pliku z {} odsłoniłby cały folder; przenieś go do podfolderu",
-            dir.display()
+        return Err(tr!(
+            format!(
+                "podgląd pliku z {} odsłoniłby cały folder; przenieś go do podfolderu",
+                dir.display()
+            ),
+            format!(
+                "previewing a file from {} would expose the whole folder; move it to a subfolder",
+                dir.display()
+            )
         ));
     }
     let name = path
         .file_name()
-        .ok_or("brak nazwy pliku")?
+        .ok_or(tr!("brak nazwy pliku", "no file name"))?
         .to_string_lossy();
     let token = token_for(&ROOTS, dir);
     let mut url = Url::parse(&format!("{SCHEME}://localhost/")).map_err(|e| e.to_string())?;
     url.path_segments_mut()
-        .map_err(|_| "zły adres")?
+        .map_err(|_| tr!("zły adres", "bad address"))?
         .push(&token)
         .push(&name);
     Ok(url)
@@ -153,12 +176,12 @@ fn file_url(path: &Path) -> Result<Url, String> {
 fn doc_url(path: &Path) -> Result<Url, String> {
     let name = path
         .file_name()
-        .ok_or("brak nazwy pliku")?
+        .ok_or(tr!("brak nazwy pliku", "no file name"))?
         .to_string_lossy();
     let token = token_for(&DOCS, path.to_path_buf());
     let mut url = Url::parse(&format!("{SCHEME}://localhost/")).map_err(|e| e.to_string())?;
     url.path_segments_mut()
-        .map_err(|_| "zły adres")?
+        .map_err(|_| tr!("zły adres", "bad address"))?
         .push("doc")
         .push(&token)
         .push(&name);
@@ -187,7 +210,10 @@ fn local_url(path: &Path) -> Result<Url, String> {
     if mime(path).is_some() {
         return file_url(path);
     }
-    Err(format!("nie umiem pokazać tego pliku: {}", path.display()))
+    Err(tr!(
+        format!("nie umiem pokazać tego pliku: {}", path.display()),
+        format!("cannot show this file: {}", path.display())
+    ))
 }
 
 /// Protocol handler: a file inside a registered folder, nothing outside it.
@@ -318,7 +344,7 @@ pub fn open(app: &AppHandle, link: &str, bounds: Bounds) -> Result<String, Strin
         let _ = w.show();
         return Ok(display(&url));
     }
-    let window = app.get_window("main").ok_or("brak głównego okna")?;
+    let window = app.get_window("main").ok_or(tr!("brak głównego okna", "no main window"))?;
     let local = url.scheme() == SCHEME;
     let handle = app.clone();
     let signal = app.clone();
@@ -378,12 +404,17 @@ pub fn close(app: &AppHandle) {
 }
 
 pub fn navigate(app: &AppHandle, action: &str) -> Result<(), String> {
-    let w = app.get_webview(LABEL).ok_or("podgląd jest zamknięty")?;
+    let w = app.get_webview(LABEL).ok_or(tr!("podgląd jest zamknięty", "the preview is closed"))?;
     let js = match action {
         "back" => "history.back()",
         "forward" => "history.forward()",
         "reload" => "location.reload()",
-        _ => return Err(format!("nieznana akcja {action}")),
+        _ => {
+            return Err(tr!(
+                format!("nieznana akcja {action}"),
+                format!("unknown action {action}")
+            ))
+        }
     };
     w.eval(js).map_err(|e| e.to_string())
 }
@@ -436,7 +467,12 @@ fn document_type(path: &Path) -> bool {
 fn editable(path: &Path) -> Result<PathBuf, String> {
     let path = path
         .canonicalize()
-        .map_err(|_| format!("nie ma pliku {}", path.display()))?;
+        .map_err(|_| {
+            tr!(
+                format!("nie ma pliku {}", path.display()),
+                format!("no file {}", path.display())
+            )
+        })?;
     let opened = DOCS
         .lock()
         .unwrap()
@@ -451,7 +487,10 @@ fn editable(path: &Path) -> Result<PathBuf, String> {
     if (opened || in_folder) && Doc::of(&path).is_some() {
         Ok(path)
     } else {
-        Err(format!("tego pliku nie edytuję w desk: {}", path.display()))
+        Err(tr!(
+            format!("tego pliku nie edytuję w desk: {}", path.display()),
+            format!("desk does not edit this file: {}", path.display())
+        ))
     }
 }
 

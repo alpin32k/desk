@@ -4,6 +4,7 @@
 import { api } from "./api";
 import { ancestors, buildTree, filterPaths, findNode, type TreeNode } from "./filetree";
 export { itemsLabel } from "./filetree";
+import { t } from "./i18n";
 import { escapeHtml } from "./tile";
 
 export interface TreeEvents {
@@ -33,10 +34,11 @@ export class FileTree {
     this.el = document.createElement("div");
     this.el.className = "side-tree";
     this.el.innerHTML = `
-      <input class="tree-filter" spellcheck="false" placeholder="Filtruj albo ? szukaj w plikach" />
+      <input class="tree-filter" spellcheck="false" />
       <div class="tree-list"></div>`;
     this.filter = this.el.querySelector(".tree-filter")!;
     this.list = this.el.querySelector(".tree-list")!;
+    this.filter.placeholder = t("tree.filter");
     this.filter.addEventListener("input", () => this.onFilter());
     this.filter.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
@@ -147,14 +149,20 @@ export class FileTree {
     this.render();
   }
 
+  /** Labels in the current language (Options changed it). */
+  relabel(): void {
+    this.filter.placeholder = t("tree.filter");
+    this.render();
+  }
+
   private render(): void {
     const q = this.filter.value;
     if (!this.project) {
-      this.list.innerHTML = `<div class="tree-empty dim">Wybierz kafelek projektu.</div>`;
+      this.list.innerHTML = `<div class="tree-empty dim">${t("tree.pickTile")}</div>`;
       return;
     }
-    if (q.trim() && !q.startsWith("?")) return this.flat(filterPaths(this.files, q), "brak pasujących plików");
-    if (q.startsWith("?")) return this.flat(this.found ?? [], this.found ? "nic nie znaleziono" : "szukam…");
+    if (q.trim() && !q.startsWith("?")) return this.flat(filterPaths(this.files, q), t("tree.noMatch"));
+    if (q.startsWith("?")) return this.flat(this.found ?? [], this.found ? t("tree.nothingFound") : t("tree.searching"));
     const rows: string[] = [];
     const walk = (nodes: TreeNode[], depth: number) => {
       for (const n of nodes) {
@@ -163,7 +171,7 @@ export class FileTree {
       }
     };
     walk(this.root.children, 0);
-    this.list.innerHTML = rows.join("") || `<div class="tree-empty dim">${this.files.length ? "" : "wczytuję…"}</div>`;
+    this.list.innerHTML = rows.join("") || `<div class="tree-empty dim">${this.files.length ? "" : t("tree.loading")}</div>`;
   }
 
   private flat(paths: string[], empty: string): void {
