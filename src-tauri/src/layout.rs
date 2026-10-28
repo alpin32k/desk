@@ -27,7 +27,8 @@ pub struct Layout {
     /// Card a session sits in when it is not its own project's, by key (none are
     /// set now; ⌘R conversations used to join the active card).
     pub cards: std::collections::BTreeMap<String, String>,
-    /// Where "new project" creates folders; None = ~/Documents/projects or ~.
+    /// Where "new project" creates folders; None = a usual folder such as
+    /// ~/Projects if one exists, else ~ (new_project::default_parent).
     pub projects_dir: Option<String>,
     /// Columns follow what is open and the window size; off = `lanes` as set by hand.
     pub auto_layout: bool,

@@ -49,6 +49,8 @@ struct Bootstrap {
     sessions: Vec<tmux::SessionInfo>,
     states: Vec<hooks::SessionState>,
     home: String,
+    /// Where "new project" suggests creating folders until one is chosen.
+    projects_dir: String,
     /// Sessions outlive desk (tmux); false on Windows, where they end with it.
     persistent: bool,
     /// macOS or Linux without tmux: native sessions until it is installed.
@@ -71,6 +73,9 @@ fn bootstrap(app: State<App>) -> Bootstrap {
         tmux_missing: app.sessions.tmux_missing(),
         states: state_watch::read_all(&app.hooks.state_dir),
         home: env::home().display().to_string(),
+        projects_dir: new_project::default_parent(&env::home())
+            .display()
+            .to_string(),
     }
 }
 

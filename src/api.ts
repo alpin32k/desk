@@ -115,6 +115,8 @@ export interface Bootstrap {
   sessions: SessionInfo[];
   states: SessionState[];
   home: string;
+  /** Where "new project" suggests creating folders until one is chosen. */
+  projectsDir: string;
   /** macOS or Linux without tmux: sessions end when desk closes. */
   tmuxMissing: boolean;
 }

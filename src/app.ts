@@ -47,6 +47,7 @@ const USAGE_MS = 30_000;
 export class App {
   private layout!: Layout;
   private home = "";
+  private projectsDir = "";
   private tiles = new Map<string, Tile>(); // by session key (see sessions.ts)
   private hook = new Map<string, SessionState>(); // by tmux slug
   private running = new Set<string>(); // session keys with a tmux session
@@ -247,6 +248,7 @@ export class App {
     this.coffee = await api.coffeeStatus();
     this.agents = await api.listAgents();
     this.home = boot.home;
+    this.projectsDir = boot.projectsDir;
     this.chatPath = await api.chatDir().catch(() => "");
     for (const s of boot.states) this.hook.set(s.slug, s);
     for (const s of boot.sessions) this.running.add(keyOf(s));
@@ -854,7 +856,7 @@ export class App {
   }
 
   private async createProject(agent: string, name?: string): Promise<void> {
-    const parent = this.layout.projectsDir ?? `${this.home}/Documents/projects`;
+    const parent = this.layout.projectsDir ?? this.projectsDir;
     const pick = async () => {
       const p = await openDialog({ directory: true, multiple: false, defaultPath: parent });
       return typeof p === "string" ? p : null;

@@ -6,6 +6,10 @@
   których masz dostęp przez `gh` (twoje, współdzielone i z organizacji). Wybór strzałkami i ↵ albo
   kliknięciem zamienia „git init” na „Sklonuj i otwórz”; nazwę folderu można zmienić. Tekst wpisany
   w ⌘P przed „+ Nowy projekt…” trafia od razu do pola nazwy.
+- **„Nowy projekt” proponuje folder, który istnieje.** Zamiast na sztywno `~/Documents/projects`
+  desk bierze pierwszy istniejący z typowych miejsc (`~/Projects`, `~/Developer`, `~/Code`, …,
+  pisany tak jak na dysku), a gdy żadnego nie ma, folder domowy. Po pierwszym projekcie dalej
+  pamięta ostatnio wybrany folder.
 - **Wyjście z dropdownu jednym kliknięciem.** W miejscu świateł okna jest „▭ okno”: desk wraca do
   zwykłego okna tam, gdzie było przed pierwszym ⌘`. Skrót zostaje włączony, więc kolejne ⌘` znowu
   wysuwa dropdown.

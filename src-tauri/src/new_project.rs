@@ -18,6 +18,41 @@ pub fn validate_name(name: &str) -> Result<&str, String> {
     Ok(name)
 }
 
+/// Where new projects go until one is created: the first existing folder from
+/// a list of usual places (spelled as on disk), else the home folder.
+pub fn default_parent(home: &Path) -> PathBuf {
+    const USUAL: [&str; 9] = [
+        "Projects",
+        "Developer",
+        "Code",
+        "dev",
+        "src",
+        "repos",
+        "workspace",
+        "Documents/Projects",
+        "Documents/GitHub",
+    ];
+    USUAL
+        .iter()
+        .find_map(|rel| on_disk(home, rel))
+        .unwrap_or_else(|| home.to_path_buf())
+}
+
+/// `base/rel` matched case-insensitively one component at a time, so
+/// "Projects" finds `~/projects` and returns it as spelled on disk.
+fn on_disk(base: &Path, rel: &str) -> Option<PathBuf> {
+    rel.split('/').try_fold(base.to_path_buf(), |dir, part| {
+        std::fs::read_dir(&dir)
+            .ok()?
+            .flatten()
+            .find(|e| {
+                e.file_name().to_string_lossy().eq_ignore_ascii_case(part)
+                    && e.path().is_dir()
+            })
+            .map(|e| dir.join(e.file_name()))
+    })
+}
+
 /// `parent/name`, created empty, optionally as a git repo on `main`.
 pub fn create(parent: &Path, name: &str, git: bool) -> Result<PathBuf, String> {
     let name = validate_name(name)?;
@@ -58,6 +93,20 @@ mod tests {
         assert!(validate_name("a/b").is_err());
         assert!(validate_name("a;rm").is_err());
         assert_eq!(validate_name("Nowy projekt"), Ok("Nowy projekt"));
+    }
+
+    #[test]
+    fn default_parent_finds_a_usual_folder_as_spelled_on_disk() {
+        let home = tempfile::tempdir().unwrap();
+        assert_eq!(default_parent(home.path()), home.path());
+        std::fs::create_dir_all(home.path().join("Documents/github")).unwrap();
+        assert_eq!(default_parent(home.path()), home.path().join("Documents/github"));
+        std::fs::create_dir(home.path().join("projects")).unwrap();
+        assert_eq!(default_parent(home.path()), home.path().join("projects"));
+        // A file with the name does not count.
+        let other = tempfile::tempdir().unwrap();
+        std::fs::write(other.path().join("Projects"), "").unwrap();
+        assert_eq!(default_parent(other.path()), other.path());
     }
 
     #[test]
