@@ -230,7 +230,10 @@ fn pin(window: &WebviewWindow) {
 /// The button in place of the traffic lights: back to the ordinary window.
 /// The shortcut stays on and brings the dropdown down again.
 pub fn leave(app: &AppHandle) {
-    if app.state::<Dropdown>().sliding.load(Ordering::SeqCst) {
+    // Locked, the window stays as the lock holds it.
+    if app.state::<Dropdown>().sliding.load(Ordering::SeqCst)
+        || app.state::<crate::lock::Lock>().is_locked()
+    {
         return;
     }
     if let Some(window) = app.get_webview_window("main") {
