@@ -277,6 +277,12 @@ fn dropdown_apply(handle: AppHandle) -> Result<(), String> {
     dropdown::apply(&handle)
 }
 
+/// The button in place of the traffic lights: from the dropdown back to the window.
+#[tauri::command]
+fn dropdown_leave(handle: AppHandle) {
+    dropdown::leave(&handle);
+}
+
 #[tauri::command]
 fn is_locked(lock: State<lock::Lock>) -> bool {
     lock.is_locked()
@@ -580,6 +586,7 @@ pub fn run() {
             unlock_desk,
             is_locked,
             dropdown_apply,
+            dropdown_leave,
             open_preview,
             preview_bounds,
             preview_visible,
@@ -604,6 +611,9 @@ pub fn run() {
                 && let tauri::WindowEvent::Resized(size) = event
             {
                 dropdown::resized(window.app_handle(), *size);
+            }
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Moved(_)) {
+                dropdown::moved(window.app_handle());
             }
             if !window.state::<lock::Lock>().is_locked() || window.label() != "main" {
                 return;
@@ -741,17 +751,20 @@ mod acl_tests {
     }
 
     /// dropdown_apply registers a global shortcut (a key taken from every
-    /// app): the ACL lets only desk's own page ask for it.
+    /// app) and dropdown_leave moves the window: the ACL lets only desk's own
+    /// page ask for them.
     #[test]
     fn only_the_main_window_can_set_the_dropdown_shortcut() {
         let denied = |r: Result<String, String>| r.is_err_and(|e| e.contains("not allowed"));
-        // Past the ACL (this mock app has no handler for it, so "not found").
-        let main = call("main", LOCAL, "dropdown_apply");
-        assert!(main.as_ref().is_err_and(|e| e.contains("not found")), "{main:?}");
-        assert!(denied(call_panel(LOCAL, "dropdown_apply")));
-        for url in UNTRUSTED {
-            assert!(denied(call("preview", url, "dropdown_apply")), "{url}");
-            assert!(denied(call_panel(url, "dropdown_apply")), "panel {url}");
+        for cmd in ["dropdown_apply", "dropdown_leave"] {
+            // Past the ACL (this mock app has no handler for it, so "not found").
+            let main = call("main", LOCAL, cmd);
+            assert!(main.as_ref().is_err_and(|e| e.contains("not found")), "{cmd}: {main:?}");
+            assert!(denied(call_panel(LOCAL, cmd)), "{cmd}");
+            for url in UNTRUSTED {
+                assert!(denied(call("preview", url, cmd)), "{cmd} {url}");
+                assert!(denied(call_panel(url, cmd)), "{cmd} panel {url}");
+            }
         }
     }
 }

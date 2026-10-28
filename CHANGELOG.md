@@ -2,6 +2,11 @@
 
 ## Niewydane
 
+- **Wyjście z dropdownu jednym kliknięciem.** W miejscu świateł okna jest „▭ okno”: desk wraca do
+  zwykłego okna tam, gdzie było przed pierwszym ⌘`. Skrót zostaje włączony, więc kolejne ⌘` znowu
+  wysuwa dropdown.
+- **Dropdown trzyma się górnej krawędzi.** Nie da się go przeciągnąć. Wysokość zmienia się dolną
+  krawędzią, a przeciągnięcie górnej albo bocznej też zostawia go na górze, na całą szerokość.
 - **Zakładki nad kafelkiem na pełnym ekranie (⌘E).** Wąski pasek pokazuje otwarte sesje w kolejności
   ⌘1–9: kropka stanu, projekt, rodzaj sesji i skrót. Bieżąca ma kolor projektu, a klik w inną
   przełącza na nią. Przy jednej sesji paska nie ma.

@@ -42,6 +42,7 @@
     "allow-unlock-desk",
     "allow-is-locked",
     "allow-dropdown-apply",
+    "allow-dropdown-leave",
     "allow-open-preview",
     "allow-preview-bounds",
     "allow-preview-visible",

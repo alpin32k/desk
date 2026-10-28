@@ -175,6 +175,8 @@ export const api = {
   isLocked: () => invoke<boolean>("is_locked"),
   /** Register or drop ⌘` and refit the dropped-down window, as layout.json says. */
   dropdownApply: () => invoke<void>("dropdown_apply"),
+  /** From the dropdown back to the ordinary window; the shortcut stays on. */
+  dropdownLeave: () => invoke<void>("dropdown_leave"),
   /** Show a link in the side panel at `bounds`; resolves to what its address bar shows. */
   openPreview: (url: string, bounds: PreviewBounds) => invoke<string>("open_preview", { url, bounds }),
   previewBounds: (bounds: PreviewBounds) => invoke<void>("preview_bounds", { bounds }),
