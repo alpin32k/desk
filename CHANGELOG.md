@@ -1,6 +1,6 @@
 # Zmiany
 
-## Niewydane
+## 0.1.17 (2026-10-28)
 
 - **desk po angielsku.** Opcje → Ogólne → Język przełącza interfejs między polskim a angielskim od
   razu, łącznie z podpowiedziami, skrótami i komunikatami błędów. Pierwsze uruchomienie bierze język
