@@ -4,8 +4,9 @@
 //! the focus back to the app you were in. While dropped down the window spans
 //! the screen's width under the menu bar, floats above other apps, follows you
 //! to every Space and hides when another app takes the focus (Options can turn
-//! that off). Its height is kept when you drag its edge. Turning the shortcut
-//! off puts the window back where it was.
+//! that off). Its height is kept when you drag its edge; it cannot be moved
+//! off the top. The button in place of the traffic lights, or turning the
+//! shortcut off, puts the window back where it was.
 //!
 //! On macOS desk turns into an accessory app while docked, like iTerm's
 //! hotkey window: the menu bar keeps the menus of the app you were in, and
@@ -175,23 +176,65 @@ pub fn blurred(app: &AppHandle) {
 /// You dragged the docked window's edge: the page keeps the new height
 /// ("dropdown-height", percent of the screen) for the next time.
 pub fn resized(app: &AppHandle, size: PhysicalSize<u32>) {
-    let dropdown = app.state::<Dropdown>();
-    if !dropdown.docked()
-        || dropdown.sliding.load(Ordering::SeqCst)
-        || app.state::<crate::lock::Lock>().is_locked()
-    {
-        return;
-    }
-    let Some(window) = app.get_webview_window("main") else {
+    let Some(window) = held(app) else {
         return;
     };
+    pin(&window);
     let Some(screen) = window.current_monitor().ok().flatten() else {
         return;
     };
     let area = screen.work_area().size.height.max(1);
     let pct = (f64::from(size.height) * 100.0 / f64::from(area)).round() as u32;
-    if pct.clamp(20, 100) != dropdown.options().dropdown_height {
+    if pct.clamp(20, 100) != app.state::<Dropdown>().options().dropdown_height {
         let _ = app.emit("dropdown-height", pct.clamp(20, 100));
+    }
+}
+
+/// The docked window was moved (a drag, or its top or side edge).
+pub fn moved(app: &AppHandle) {
+    if let Some(window) = held(app) {
+        pin(&window);
+    }
+}
+
+/// The docked window, while it rests (not sliding, desk not locked).
+fn held(app: &AppHandle) -> Option<WebviewWindow> {
+    let dropdown = app.state::<Dropdown>();
+    if !dropdown.docked()
+        || dropdown.sliding.load(Ordering::SeqCst)
+        || app.state::<crate::lock::Lock>().is_locked()
+    {
+        return None;
+    }
+    app.get_webview_window("main")
+}
+
+/// Keep the docked window at the top of its screen, full width: only its
+/// bottom edge changes how tall it is (dragging the top one ends the same).
+fn pin(window: &WebviewWindow) {
+    let Some(screen) = window.current_monitor().ok().flatten() else {
+        return;
+    };
+    let area = screen.work_area();
+    let (Ok(at), Ok(size)) = (window.outer_position(), window.inner_size()) else {
+        return;
+    };
+    if at != area.position {
+        let _ = window.set_position(area.position);
+    }
+    if size.width != area.size.width {
+        let _ = window.set_size(PhysicalSize::new(area.size.width, size.height));
+    }
+}
+
+/// The button in place of the traffic lights: back to the ordinary window.
+/// The shortcut stays on and brings the dropdown down again.
+pub fn leave(app: &AppHandle) {
+    if app.state::<Dropdown>().sliding.load(Ordering::SeqCst) {
+        return;
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        undock(app, &window);
     }
 }
 
@@ -354,6 +397,9 @@ fn dropdown_window(window: &WebviewWindow, on: bool) {
         let mut behavior = ns.collectionBehavior();
         behavior.set(B::FullScreenAuxiliary, on);
         ns.setCollectionBehavior(behavior);
+        // Docked it stays at the top: no drag moves it (dropdown::pin
+        // catches its edges).
+        ns.setMovable(!on);
         for button in [
             NSWindowButton::CloseButton,
             NSWindowButton::MiniaturizeButton,

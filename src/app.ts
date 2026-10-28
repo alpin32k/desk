@@ -238,6 +238,7 @@ export class App {
       const t = (e.target as HTMLElement).closest<HTMLElement>("[data-top]")?.dataset.top;
       if (t === "browser") this.side.browse();
       if (t === "update") void this.installUpdate();
+      if (t === "leave") void api.dropdownLeave();
     });
     const boot = await api.bootstrap();
     this.coffee = await api.coffeeStatus();
@@ -924,15 +925,20 @@ export class App {
     const states = [...this.tiles.values()].map((t) => t.state);
     const count = (s: string) => states.filter((x) => x === s).length;
     const waiting = count("waiting");
-    // Docked: no traffic lights, so the bar says how to put desk away.
-    const hide = this.docked
-      ? `<span class="dim" data-tauri-drag-region> · </span><span class="dropdown-hint" data-tauri-drag-region title="Skrót zmienisz w Opcje → Skróty"><kbd>${escapeHtml(
-          hotkeyLabel(this.layout.dropdownHotkey || DEFAULT_HOTKEY()),
-        )}</kbd> chowa</span>`
+    // Docked: the window stays at the top (no drag), and in place of the
+    // traffic lights the bar says how to put desk away or leave the dropdown.
+    const drag = this.docked ? "" : " data-tauri-drag-region";
+    this.top.toggleAttribute("data-tauri-drag-region", !this.docked);
+    const hotkey = escapeHtml(hotkeyLabel(this.layout.dropdownHotkey || DEFAULT_HOTKEY()));
+    const leave = this.docked
+      ? `<button class="top-btn leave" data-top="leave" title="Zwykłe okno zamiast dropdownu; ${hotkey} znowu go wysunie">▭ okno</button>`
       : "";
-    this.top.innerHTML = `<span class="brand" data-tauri-drag-region>desk</span>${hide}<span class="dim" data-tauri-drag-region> · ${this.tiles.size} sessions</span>${
-      waiting ? `<span class="waiting-pill" data-tauri-drag-region>${waiting} czeka</span>` : ""
-    }<span class="spacer" data-tauri-drag-region></span>${this.updateHtml()}${usageHtml(this.usage, Date.now())}<button class="top-btn" data-top="browser" title="Przeglądarka w panelu obok (${keysIn("⌘W")}); ↗ otwiera stronę w Brave albo Chrome">🌐 przeglądarka</button>${this.coffeeHtml()}`;
+    const hide = this.docked
+      ? `<span class="dim"> · </span><span class="dropdown-hint" title="Skrót zmienisz w Opcje → Skróty"><kbd>${hotkey}</kbd> chowa</span>`
+      : "";
+    this.top.innerHTML = `${leave}<span class="brand"${drag}>desk</span>${hide}<span class="dim"${drag}> · ${this.tiles.size} sessions</span>${
+      waiting ? `<span class="waiting-pill"${drag}>${waiting} czeka</span>` : ""
+    }<span class="spacer"${drag}></span>${this.updateHtml()}${usageHtml(this.usage, Date.now())}<button class="top-btn" data-top="browser" title="Przeglądarka w panelu obok (${keysIn("⌘W")}); ↗ otwiera stronę w Brave albo Chrome">🌐 przeglądarka</button>${this.coffeeHtml()}`;
     this.footer.innerHTML =
       `<span class="hints">${hints()
         .map(([k, label]) => `<span><kbd>${k}</kbd> ${escapeHtml(label)}</span>`)
