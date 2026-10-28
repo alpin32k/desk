@@ -6,6 +6,9 @@
   których masz dostęp przez `gh` (twoje, współdzielone i z organizacji). Wybór strzałkami i ↵ albo
   kliknięciem zamienia „git init” na „Sklonuj i otwórz”; nazwę folderu można zmienić. Tekst wpisany
   w ⌘P przed „+ Nowy projekt…” trafia od razu do pola nazwy.
+- **Repo z GitHuba w ⌘P.** Pod lokalnymi wynikami pojawiają się pasujące repo, których nie masz
+  lokalnie (pusta kropka, znacznik „GitHub”, obok folder docelowy). ↵ klonuje je do folderu projektów
+  i od razu otwiera kafelek z wybranym agentem.
 - **„Nowy projekt” proponuje folder, który istnieje.** Zamiast na sztywno `~/Documents/projects`
   desk bierze pierwszy istniejący z typowych miejsc (`~/Projects`, `~/Developer`, `~/Code`, …,
   pisany tak jak na dysku), a gdy żadnego nie ma, folder domowy. Po pierwszym projekcie dalej
