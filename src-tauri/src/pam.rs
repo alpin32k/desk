@@ -87,11 +87,12 @@ fn user_name() -> Option<CString> {
 
 /// Whether `password` is this user's account password.
 pub fn check_password(password: &str) -> Result<(), String> {
-    let user = user_name().ok_or("nie znam nazwy użytkownika")?;
-    let password = CString::new(password).map_err(|_| "złe hasło")?;
+    let user = user_name().ok_or(tr!("nie znam nazwy użytkownika", "unknown user name"))?;
+    let password = CString::new(password).map_err(|_| tr!("złe hasło", "wrong password"))?;
     // SAFETY: the symbols have the libpam signatures declared above.
     unsafe {
-        let lib = libloading::Library::new("libpam.so.0").map_err(|e| format!("brak PAM: {e}"))?;
+        let lib = libloading::Library::new("libpam.so.0")
+            .map_err(|e| tr!(format!("brak PAM: {e}"), format!("no PAM: {e}")))?;
         let start: libloading::Symbol<Start> =
             lib.get(b"pam_start\0").map_err(|e| e.to_string())?;
         let authenticate: libloading::Symbol<Call> =
@@ -124,7 +125,7 @@ pub fn check_password(password: &str) -> Result<(), String> {
         if rc == PAM_SUCCESS {
             Ok(())
         } else {
-            Err("złe hasło".into())
+            Err(tr!("złe hasło", "wrong password").into())
         }
     }
 }

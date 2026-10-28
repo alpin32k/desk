@@ -67,7 +67,7 @@ impl Dropdown {
         crate::layout::load(&self.layout_path)
     }
 
-    fn docked(&self) -> bool {
+    pub(crate) fn docked(&self) -> bool {
         self.normal.lock().unwrap().is_some()
     }
 }
@@ -85,7 +85,7 @@ pub fn apply(app: &AppHandle) -> Result<(), String> {
         };
         Some(
             text.parse::<Shortcut>()
-                .map_err(|e| format!("skrót {text}: {e}"))?,
+                .map_err(|e| tr!(format!("skrót {text}: {e}"), format!("shortcut {text}: {e}")))?,
         )
     } else {
         None
@@ -101,7 +101,10 @@ pub fn apply(app: &AppHandle) -> Result<(), String> {
                 // Taken by another app (iTerm's hotkey...): say so.
                 shortcuts
                     .register(new)
-                    .map_err(|e| format!("skrót {}: {e}", new.into_string()))?;
+                    .map_err(|e| {
+                        let key = new.into_string();
+                        tr!(format!("skrót {key}: {e}"), format!("shortcut {key}: {e}"))
+                    })?;
                 *hotkey = Some(new);
             }
         }
@@ -230,7 +233,10 @@ fn pin(window: &WebviewWindow) {
 /// The button in place of the traffic lights: back to the ordinary window.
 /// The shortcut stays on and brings the dropdown down again.
 pub fn leave(app: &AppHandle) {
-    if app.state::<Dropdown>().sliding.load(Ordering::SeqCst) {
+    // Locked, the window stays as the lock holds it.
+    if app.state::<Dropdown>().sliding.load(Ordering::SeqCst)
+        || app.state::<crate::lock::Lock>().is_locked()
+    {
         return;
     }
     if let Some(window) = app.get_webview_window("main") {

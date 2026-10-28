@@ -16,6 +16,7 @@ import {
   type Update,
   type Usage,
 } from "./api";
+import { detectLanguage, isLanguage, setLanguage, t, type Language } from "./i18n";
 import { actionFor, hints, keysIn, setCustomKeys, type Action } from "./keys";
 import { PLATFORM, shortcut } from "./platform";
 import { Side } from "./side";
@@ -109,9 +110,9 @@ export class App {
     this.side = new Side(() => this.layout && this.render(), {
       project: () => (this.active ? this.projectOf(this.active) : null),
       insert: (text) => {
-        const t = this.tiles.get(this.active ?? "");
-        if (t) t.type(text);
-        else toast("Najpierw wybierz sesję, do której dodać ścieżkę");
+        const tile = this.tiles.get(this.active ?? "");
+        if (tile) tile.type(text);
+        else toast(t("app.pickSessionFirst"));
       },
       terminal: (path) => void this.openTerminal(path),
       browser: () => this.layout?.browser ?? "auto",
@@ -152,6 +153,12 @@ export class App {
       },
       checkUpdate: () => this.checkUpdate(true),
       setFontSize: (px) => this.setFontSize(px),
+      setLanguage: (id) => {
+        this.layout.language = id;
+        setLanguage(id);
+        this.save();
+        this.relabel();
+      },
       setBrowser: (id) => {
         this.layout.browser = id;
         this.save();
@@ -205,7 +212,7 @@ export class App {
       coffee: () => this.coffee,
       uninstallCoffee: async () => {
         this.coffee = await api.coffeeUninstall().catch((err) => {
-          toast(`Kawa: ${err}`);
+          toast(t("coffee.error", { err: String(err) }));
           return this.coffee;
         });
         this.renderChrome();
@@ -227,6 +234,8 @@ export class App {
     await listen<SessionState>("session-state", (e) => this.onHookState(e.payload));
     await listen<PtyExit>("pty-exit", (e) => void this.onPtyExit(e.payload));
     await listen<CoffeeStatus>("coffee", (e) => this.onCoffeeStopped(e.payload));
+    // macOS: desk catches ⌘Q / ⌘⇧Q itself, before its menu (Quit) and the Apple menu (Log Out).
+    await listen<"close" | "kill">("shortcut", (e) => this.onShortcut(e.payload));
     // Docked at the top of the screen: no traffic lights to make room for.
     await listen<boolean>("dropdown", (e) => {
       this.docked = e.payload;
@@ -249,6 +258,11 @@ export class App {
       if (t === "leave") void api.dropdownLeave();
     });
     const boot = await api.bootstrap();
+    // First launch: the system's language, kept from now on.
+    const saved = boot.layout.language ?? "";
+    const language: Language = isLanguage(saved) ? saved : detectLanguage();
+    setLanguage(language);
+    this.side.relabel();
     this.coffee = await api.coffeeStatus();
     this.agents = await api.listAgents();
     this.home = boot.home;
@@ -258,7 +272,7 @@ export class App {
     for (const s of boot.sessions) this.running.add(keyOf(s));
     if (boot.tmuxMissing) {
       const install = PLATFORM === "mac" ? "brew install tmux" : "sudo apt install tmux";
-      toast(`Brak tmux: sesje zamkną się razem z desk. Zainstaluj go (${install}) i uruchom desk ponownie.`, 15000);
+      toast(t("app.noTmux", { install }), 15000);
     }
 
     this.layout = {
@@ -281,9 +295,11 @@ export class App {
       dropdownAnimation: boot.layout.dropdownAnimation ?? 200,
       keys: boot.layout.keys ?? {},
       tmuxMenu: boot.layout.tmuxMenu ?? false,
+      language,
       lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length),
     };
     setCustomKeys(this.layout.keys);
+    if (language !== boot.layout.language) this.save();
     this.applyTheme();
     // Another app (iTerm's hotkey window...) may hold ⌘` already.
     if (this.layout.dropdown) void api.dropdownApply().catch((err) => toast(`Dropdown: ${err}`, 10000));
@@ -349,7 +365,7 @@ export class App {
       this.tiles.set(key, tile);
       return tile;
     } catch (err) {
-      toast(`Nie udało się otworzyć ${spec.agent} w ${spec.path}: ${err}`);
+      toast(t("app.openFailed", { agent: spec.agent, path: spec.path, err: String(err) }));
       return null;
     }
   }
@@ -406,7 +422,7 @@ export class App {
     const choice = (await pickBox(`Branch · ${name}`, branches, { current }))?.value;
     if (!choice || choice === current) return;
     if (tiles.some((t) => t.state === "working")) {
-      const ok = await confirmBox(`W ${name} sesja właśnie pracuje. Zmienić branch na ${choice}?`, "Zmień");
+      const ok = await confirmBox(t("app.busyBranch", { name, branch: choice }), t("app.switch"));
       if (!ok) return;
     }
     try {
@@ -422,9 +438,9 @@ export class App {
   private async runInProject(path: string): Promise<void> {
     const name = path.split(/[\\/]/).filter(Boolean).pop() ?? path;
     const targets = await api.runTargets(path);
-    if (!targets.length) return toast(`${name}: nie znalazłem nic do uruchomienia (package.json, Cargo.toml, Makefile...)`);
+    if (!targets.length) return toast(t("app.nothingToRun", { name }));
     const source = new Map(targets.map((t) => [t.command, t.source]));
-    const picked = await pickBox(`Uruchom · ${name}`, [...source.keys()], { note: (c) => source.get(c) ?? "" });
+    const picked = await pickBox(t("common.runPick", { name }), [...source.keys()], { note: (c) => source.get(c) ?? "" });
     if (!picked) return;
     const taken = [...(await api.listSessions()), ...this.tiles.values()];
     const key = keyOf({ path, agent: "run", instance: nextInstance(taken, path, "run") });
@@ -467,8 +483,8 @@ export class App {
 
   async killSession(key: string): Promise<void> {
     const spec = parseKey(key);
-    const name = spec.path.split(/[\\/]/).pop();
-    if (!(await confirmBox(`Zabić sesję ${spec.agent} w „${name}”? Bieżąca rozmowa zostanie przerwana.`, "Zabij"))) return;
+    const name = spec.path.split(/[\\/]/).pop() ?? spec.path;
+    if (!(await confirmBox(t("app.killConfirm", { agent: spec.agent, name }), t("app.kill")))) return;
     const tile = this.tiles.get(key);
     if (tile) this.closeTile(key);
     const slug = tile?.slug ?? (await api.listSessions()).find((s) => keyOf(s) === key)?.slug;
@@ -529,7 +545,7 @@ export class App {
     } else {
       this.running.delete(tile.key);
       this.closeTile(tile.key);
-      toast(`Sesja ${tile.name} zakończona`);
+      toast(t("app.sessionEnded", { name: tile.name }));
     }
   }
 
@@ -696,10 +712,11 @@ export class App {
     card.innerHTML = keysIn(`
       <header class="card-head" draggable="true">
         <span class="dot"></span><span class="card-title"></span>
-        <span class="actions"><button data-a="sub" title="Kolejna sesja w tym projekcie (⌘D)">+</button><button data-a="terminal" title="Terminal w tym projekcie (⌘T)">›_</button><button data-a="run" title="Uruchom w tym projekcie, np. dev serwer (⌘U)">▶</button></span>
+        <span class="actions"><button data-a="sub">+</button><button data-a="terminal">›_</button><button data-a="run">▶</button></span>
       </header>
       <div class="card-body"></div>`);
     const head = card.querySelector<HTMLElement>(".card-head")!;
+    cardTitles(head);
     const first = () => {
       const tiles = [...this.tiles.values()].filter((t) => this.projectOf(t.key) === project);
       return tiles.find((t) => t.path === project) ?? tiles[0];
@@ -736,7 +753,7 @@ export class App {
       const name = own?.name ?? project.split(/[\\/]/).filter(Boolean).pop() ?? project;
       const parts = [
         `<b>${escapeHtml(name)}</b>`,
-        own?.branch ? `<span class="branch" data-a="branch" title="Zmień branch">${escapeHtml(own.branch)}</span>` : "",
+        own?.branch ? `<span class="branch" data-a="branch" title="${t("common.changeBranch")}">${escapeHtml(own.branch)}</span>` : "",
         `<span class="dim">${sessionsLabel(tiles.length)}</span>`,
       ].filter(Boolean);
       const title = card.querySelector<HTMLElement>(".card-title")!;
@@ -745,10 +762,19 @@ export class App {
     }
   }
 
+  /** Labels built once (side panel, tiles, cards, lanes) in the language Options just set. */
+  private relabel(): void {
+    this.side.relabel();
+    for (const tile of this.tiles.values()) tile.relabel();
+    for (const card of this.cards.values()) cardTitles(card.querySelector<HTMLElement>(".card-head")!);
+    this.grid.querySelectorAll(".lane .hint").forEach((h) => (h.textContent = laneHint()));
+    this.render();
+  }
+
   private laneEl(): HTMLElement {
     const lane = document.createElement("div");
     lane.className = "lane";
-    lane.innerHTML = `<div class="lane-head"></div><div class="lane-body"><div class="hint">${keysIn("⌘P")} — otwórz projekt</div></div>`;
+    lane.innerHTML = `<div class="lane-head"></div><div class="lane-body"><div class="hint">${laneHint()}</div></div>`;
     const body = lane.querySelector<HTMLElement>(".lane-body")!;
     body.addEventListener("dragover", (e) => {
       if (!e.dataTransfer?.types.includes("text/x-desk-key")) return;
@@ -818,7 +844,7 @@ export class App {
     for (const m of this.missing) {
       if (!L.contains(lanes, m.key)) lanes[Math.min(Math.max(m.lane, 0), lanes.length - 1)].push(m.key);
     }
-    return api.saveLayout({ ...this.layout, lanes }).catch((err) => toast(`Zapis układu: ${err}`));
+    return api.saveLayout({ ...this.layout, lanes }).catch((err) => toast(t("app.saveLayoutError", { err: String(err) })));
   }
 
   /** Save right away (Rust reads custom agents from the file) and refresh the agent list. */
@@ -870,7 +896,7 @@ export class App {
     const isLocal = (folder: string) => local.has(folder.toLowerCase());
     const req = await newProjectBox(parent, pick, agent, { name, repos: this.repos(), isLocal });
     if (!req) return;
-    if (req.repo) toast(`Klonuję ${req.repo}…`);
+    if (req.repo) toast(t("app.cloning", { repo: req.repo }));
     await this.adoptProject(req.parent, agent, () =>
       req.repo ? api.cloneProject(req.parent, req.name, req.repo) : api.createProject(req.parent, req.name, req.git),
     );
@@ -879,7 +905,7 @@ export class App {
   /** ⌘P on a GitHub repo: clone it into the projects folder and open it. */
   private async cloneRepo(repo: GithubRepo, agent: string): Promise<void> {
     const parent = this.layout.projectsDir ?? this.projectsDir;
-    toast(`Klonuję ${repo.fullName}…`);
+    toast(t("app.cloning", { repo: repo.fullName }));
     await this.adoptProject(parent, agent, () => api.cloneProject(parent, repoName(repo), repo.fullName));
   }
 
@@ -893,7 +919,7 @@ export class App {
       this.save();
       await this.openTile(keyOf({ path, agent, instance: 0 }));
     } catch (err) {
-      toast(`Nowy projekt: ${err}`);
+      toast(t("app.newProjectError", { err: String(err) }));
     }
   }
 
@@ -909,7 +935,7 @@ export class App {
   private projects(): Promise<Project[]> {
     if (!this.projectCache) {
       this.projectCache = api.listProjects(this.layout.extraFolders).catch((err) => {
-        toast(`Wykrywanie projektów: ${err}`);
+        toast(t("app.discoveryError", { err: String(err) }));
         this.projectCache = null;
         return [];
       });
@@ -952,7 +978,7 @@ export class App {
     tile.update({ state: displayState(s.state) });
     this.renderChrome();
     if (s.state === "waiting" && before !== "waiting" && this.layout.notifications && !document.hasFocus()) {
-      sendNotification({ title: `${tile.name} czeka na ciebie`, body: s.message ?? "Claude potrzebuje odpowiedzi" });
+      sendNotification({ title: t("app.waitingNotice", { name: tile.name }), body: s.message ?? t("app.waitingBody") });
     }
   }
 
@@ -967,14 +993,14 @@ export class App {
     this.top.toggleAttribute("data-tauri-drag-region", !this.docked);
     const hotkey = escapeHtml(hotkeyLabel(this.layout.dropdownHotkey || DEFAULT_HOTKEY()));
     const leave = this.docked
-      ? `<button class="top-btn leave" data-top="leave" title="Zwykłe okno zamiast dropdownu; ${hotkey} znowu go wysunie">▭ okno</button>`
+      ? `<button class="top-btn leave" data-top="leave" title="${t("top.leaveTitle", { hotkey })}">${t("top.leave")}</button>`
       : "";
     const hide = this.docked
-      ? `<span class="dim"> · </span><span class="dropdown-hint" title="Skrót zmienisz w Opcje → Skróty"><kbd>${hotkey}</kbd> chowa</span>`
+      ? `<span class="dim"> · </span><span class="dropdown-hint" title="${t("top.hideTitle")}"><kbd>${hotkey}</kbd> ${t("top.hide")}</span>`
       : "";
     this.top.innerHTML = `${leave}<span class="brand"${drag}>desk</span>${hide}<span class="dim"${drag}> · ${this.tiles.size} sessions</span>${
-      waiting ? `<span class="waiting-pill"${drag}>${waiting} czeka</span>` : ""
-    }<span class="spacer"${drag}></span>${this.updateHtml()}${usageHtml(this.usage, Date.now())}<button class="top-btn" data-top="browser" title="Przeglądarka w panelu obok (${keysIn("⌘W")}); ↗ otwiera stronę w Brave albo Chrome">🌐 przeglądarka</button>${this.coffeeHtml()}`;
+      waiting ? `<span class="waiting-pill"${drag}>${t("top.waiting", { n: waiting })}</span>` : ""
+    }<span class="spacer"${drag}></span>${this.updateHtml()}${usageHtml(this.usage, Date.now())}<button class="top-btn" data-top="browser" title="${t("top.browserTitle", { keys: keysIn("⌘W") })}">${t("top.browser")}</button>${this.coffeeHtml()}`;
     this.footer.innerHTML =
       `<span class="hints">${hints()
         .map(([k, label]) => `<span><kbd>${k}</kbd> ${escapeHtml(label)}</span>`)
@@ -1005,20 +1031,20 @@ export class App {
     try {
       u = await api.updateCheck();
     } catch (err) {
-      if (manual) toast(`Aktualizacje: ${err}`);
+      if (manual) toast(t("update.checkError", { err: String(err) }));
       return;
     }
     const news = u !== null && u.version !== this.update?.version;
     this.update = u;
     this.renderChrome();
-    if (news) toast(`Jest nowa wersja desk ${u!.version}. Kliknij ↑ ${u!.version} u góry.`);
-    else if (manual) toast(u ? `Nowa wersja ${u.version} czeka: ↑ u góry.` : `Masz najnowszą wersję desk ${await getVersion()}.`);
+    if (news) toast(t("update.news", { version: u!.version }));
+    else if (manual) toast(u ? t("update.waiting", { version: u.version }) : t("update.latest", { version: await getVersion() }));
   }
 
   private updateHtml(): string {
     const u = this.update;
     if (!u) return "";
-    const title = u.installable ? "Zainstaluj nową wersję desk" : "Otwórz stronę nowej wersji desk";
+    const title = u.installable ? t("update.installTitle") : t("update.openTitle");
     return `<button class="top-btn update" data-top="update" title="${title}">↑ ${escapeHtml(u.version)}</button>`;
   }
 
@@ -1026,17 +1052,17 @@ export class App {
     const u = this.update;
     if (!u) return;
     if (!u.installable) {
-      return void api.openExternal(u.url, this.layout.browser).catch((err) => toast(`Aktualizacja: ${err}`));
+      return void api.openExternal(u.url, this.layout.browser).catch((err) => toast(t("update.error", { err: String(err) })));
     }
     const sessions =
-      PLATFORM === "windows" ? "Sesje w tym oknie zostaną zakończone." : "Sesje działają dalej w tmux i wrócą po ponownym uruchomieniu.";
-    if (!(await confirmBox(`Zainstalować desk ${u.version}? desk pobierze nową wersję, zamknie się i uruchomi ponownie. ${sessions}`, "Zainstaluj")))
+      PLATFORM === "windows" ? t("update.sessionsEnd") : t("update.sessionsStay");
+    if (!(await confirmBox(t("update.confirm", { version: u.version, sessions }), t("update.install"))))
       return;
-    toast(`Pobieram desk ${u.version}…`);
+    toast(t("update.downloading", { version: u.version }));
     try {
       await api.updateInstall(u.version);
     } catch (err) {
-      toast(`Aktualizacja: ${err}`);
+      toast(t("update.error", { err: String(err) }));
     }
   }
 
@@ -1047,7 +1073,7 @@ export class App {
     try {
       this.coffee = await api.coffeeSet(next[this.coffee.level]);
     } catch (err) {
-      toast(`Kawa: ${err}`);
+      toast(t("coffee.error", { err: String(err) }));
       if (next[this.coffee.level] === "lid") this.coffee = await api.coffeeSet("off").catch(() => this.coffee);
     }
     this.renderChrome();
@@ -1057,7 +1083,7 @@ export class App {
     try {
       this.coffee = await api.coffeeRestore();
     } catch (err) {
-      toast(`Usypianie: ${err}`);
+      toast(t("coffee.sleepError", { err: String(err) }));
     }
     this.renderChrome();
   }
@@ -1066,7 +1092,7 @@ export class App {
     this.coffee = s;
     this.renderChrome();
     if (s.stoppedBecause) {
-      const msg = `Kawa wyłączona: ${s.stoppedBecause}`;
+      const msg = t("coffee.stopped", { reason: s.stoppedBecause });
       toast(msg);
       sendNotification({ title: "desk", body: msg });
     }
@@ -1074,18 +1100,15 @@ export class App {
 
   private coffeeHtml(): string {
     const c = this.coffee;
-    const label = { off: "☕", awake: "☕ kawa", lid: "☕ kawa · klapka" }[c.level];
+    const label = { off: "☕", awake: t("coffee.awake"), lid: t("coffee.lid") }[c.level];
     const title = {
-      off: "Kawa wyłączona (⌘K). Kliknij: nie usypiaj komputera, dopóki desk działa.",
-      awake:
-        PLATFORM === "mac" && !c.helperInstalled
-          ? "Kawa: komputer nie zaśnie. Kliknij: także przy zamkniętej klapce (macOS raz zapyta o hasło)."
-          : "Kawa: komputer nie zaśnie. Kliknij: także przy zamkniętej klapce.",
-      lid: "Kawa z zamkniętą klapką. Wyłącza się sama przy przegrzaniu lub baterii ≤15%. Kliknij: wyłącz.",
+      off: t("coffee.offTitle"),
+      awake: PLATFORM === "mac" && !c.helperInstalled ? t("coffee.awakeTitleAsk") : t("coffee.awakeTitle"),
+      lid: t("coffee.lidTitle"),
     }[c.level];
     const stray =
       c.sleepDisabled && c.level !== "lid"
-        ? `<button class="coffee warn" data-coffee="restore" title="Usypianie po zamknięciu klapki jest wyłączone w systemie, np. po restarcie w trakcie kawy. Kliknij, aby przywrócić.">sen wyłączony · przywróć</button>`
+        ? `<button class="coffee warn" data-coffee="restore" title="${t("coffee.strayTitle")}">${t("coffee.stray")}</button>`
         : "";
     return `${stray}<button class="coffee ${c.level}" data-coffee="cycle" title="${keysIn(title)}">${label}</button>`;
   }
@@ -1096,7 +1119,7 @@ export class App {
     try {
       await api.lockDesk();
     } catch (err) {
-      toast(`Blokada: ${err}`);
+      toast(t("lock.error", { err: String(err) }));
       return;
     }
     this.palette.close();
@@ -1112,9 +1135,9 @@ export class App {
     this.lockEl = document.createElement("div");
     this.lockEl.className = "lock-screen";
     // Linux checks the account password typed here; macOS and Windows show their own dialog.
-    const how = { mac: "Touch ID / hasło", windows: "Windows Hello", linux: "hasło konta" }[PLATFORM];
-    const field = PLATFORM === "linux" ? `<input type="password" class="lock-password" placeholder="hasło konta" autocomplete="current-password" />` : "";
-    this.lockEl.innerHTML = `<div class="lock-box">🔒 desk zablokowany ${field}<button data-unlock>Odblokuj · ${how} <kbd>↵</kbd></button></div>`;
+    const how = { mac: t("lock.touchId"), windows: "Windows Hello", linux: t("lock.password") }[PLATFORM];
+    const field = PLATFORM === "linux" ? `<input type="password" class="lock-password" placeholder="${t("lock.password")}" autocomplete="current-password" />` : "";
+    this.lockEl.innerHTML = `<div class="lock-box">${t("lock.locked")} ${field}<button data-unlock>${t("lock.unlock")} · ${how} <kbd>↵</kbd></button></div>`;
     this.lockEl.addEventListener("click", (e) => {
       if ((e.target as HTMLElement).closest("[data-unlock]")) void this.unlock();
     });
@@ -1127,7 +1150,7 @@ export class App {
     try {
       await api.unlockDesk(field ? field.value : undefined);
     } catch (err) {
-      toast(`Nie odblokowano: ${err}`);
+      toast(t("lock.failed", { err: String(err) }));
       if (field) {
         field.value = "";
         field.focus();
@@ -1158,12 +1181,21 @@ export class App {
     if (this.settings.isRecording) return; // the dropdown's new shortcut
     const action = actionFor(e);
     if (!action) return;
-    // In a text field ⌘Z / ⌘⇧Z (Ctrl+Shift+Z) are undo and redo, not close and kill.
-    if ((action.type === "close" || action.type === "kill") && isTextField(e.target)) return;
     const overlay = document.querySelector(".overlay") !== null;
     if (overlay && !["palette", "new", "settings", "close"].includes(action.type)) return; // e.g. ⌘↵ in the palette
     e.preventDefault();
     e.stopPropagation();
+    this.run(action);
+  }
+
+  /** ⌘Q / ⌘⇧Q from desk's key monitor, under the same rules as a key press. */
+  private onShortcut(type: "close" | "kill"): void {
+    if (this.locked || this.settings.isRecording) return;
+    // The monitor reports the keys: Options may have bound ⌘Q to another action.
+    const action = actionFor({ key: "q", metaKey: true, shiftKey: type === "kill", altKey: false, ctrlKey: false });
+    if (!action) return;
+    const overlay = document.querySelector(".overlay") !== null;
+    if (overlay && !["palette", "new", "settings", "close"].includes(action.type)) return;
     this.run(action);
   }
 
@@ -1217,12 +1249,12 @@ export class App {
         this.side.showFiles();
         break;
       case "run": {
-        const t = this.tiles.get(this.active ?? "");
-        if (!t) {
-          toast("Najpierw wybierz kafelek projektu");
+        const tile = this.tiles.get(this.active ?? "");
+        if (!tile) {
+          toast(t("app.pickTileFirst"));
           break;
         }
-        void this.runInProject(t.path);
+        void this.runInProject(tile.path);
         break;
       }
       case "focus":
@@ -1239,6 +1271,20 @@ export class App {
         break;
     }
   }
+}
+
+/** The card header buttons' tooltips, in the current language. */
+function cardTitles(head: HTMLElement): void {
+  const titles: [string, string][] = [
+    ["sub", t("card.sub")],
+    ["terminal", t("tile.terminal")],
+    ["run", t("tile.run")],
+  ];
+  for (const [a, title] of titles) head.querySelector<HTMLElement>(`[data-a="${a}"]`)!.title = keysIn(title);
+}
+
+function laneHint(): string {
+  return t("lane.hint", { keys: keysIn("⌘P") });
 }
 
 /** The lane's project cards, without the one being dragged. */
@@ -1265,18 +1311,6 @@ async function ensureNotificationPermission(): Promise<void> {
 }
 
 /** The lock screen's password field (Linux): the one input that works while locked. */
-/**
- * Where typing edits text: inputs, text areas, the panel's editor. Not a
- * terminal: xterm takes keys through a hidden textarea, and there ⌘Z closes.
- */
-function isTextField(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    !target.closest(".xterm") &&
-    (target.matches("input, textarea") || target.isContentEditable)
-  );
-}
-
 function isLockField(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && target.classList.contains("lock-password");
 }

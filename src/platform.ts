@@ -11,13 +11,13 @@ export function detect(ua: string): Platform {
 
 export const PLATFORM: Platform = detect(typeof navigator === "undefined" ? "" : navigator.userAgent);
 
-/** Shortcut text written for macOS ("⌘P", "⌘⇧Z") as the user's platform types it. */
+/** Shortcut text written for macOS ("⌘P", "⌘⇧Q") as the user's platform types it. */
 export function shortcut(mac: string, platform: Platform = PLATFORM): string {
   if (platform === "mac") return mac;
-  return mac.replace("⌘⇧Z", "Ctrl⇧⌫").replace("⌘⌫", "Ctrl⌫").replace("⌘↵", "Ctrl↵").replace(/⌘/g, "Ctrl⇧");
+  return mac.replace("⌘⇧Q", "Ctrl⇧⌫").replace("⌘⌫", "Ctrl⌫").replace("⌘↵", "Ctrl↵").replace(/⌘/g, "Ctrl⇧");
 }
 
 /** Every ⌘-shortcut inside a longer text, e.g. a tooltip. */
 export function shortcuts(text: string, platform: Platform = PLATFORM): string {
-  return platform === "mac" ? text : text.replace(/⌘⇧Z|⌘⌫|⌘↵|⌘[^\s)]*/g, (m) => shortcut(m, platform));
+  return platform === "mac" ? text : text.replace(/⌘⇧Q|⌘⌫|⌘↵|⌘[^\s)]*/g, (m) => shortcut(m, platform));
 }

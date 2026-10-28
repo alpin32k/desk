@@ -2,6 +2,9 @@
 
 ## Niewydane
 
+- **desk po angielsku.** Opcje → Ogólne → Język przełącza interfejs między polskim a angielskim od
+  razu, łącznie z podpowiedziami, skrótami i komunikatami błędów. Pierwsze uruchomienie bierze język
+  systemu (polski albo, przy każdym innym, angielski). Dotychczasowe ustawienia zostają po polsku.
 - **Klon z GitHuba w „Nowym projekcie”.** Wpisujesz nazwę, a pod polem pojawiają się pasujące repo, do
   których masz dostęp przez `gh` (twoje, współdzielone i z organizacji). Wybór strzałkami i ↵ albo
   kliknięciem zamienia „git init” na „Sklonuj i otwórz”; nazwę folderu można zmienić. Tekst wpisany
@@ -13,15 +16,21 @@
   desk bierze pierwszy istniejący z typowych miejsc (`~/Projects`, `~/Developer`, `~/Code`, …,
   pisany tak jak na dysku), a gdy żadnego nie ma, folder domowy. Po pierwszym projekcie dalej
   pamięta ostatnio wybrany folder.
+
+## 0.1.16 (2026-10-28)
+
 - **Wyjście z dropdownu jednym kliknięciem.** W miejscu świateł okna jest „▭ okno”: desk wraca do
   zwykłego okna tam, gdzie było przed pierwszym ⌘`. Skrót zostaje włączony, więc kolejne ⌘` znowu
   wysuwa dropdown.
 - **Dropdown trzyma się górnej krawędzi.** Nie da się go przeciągnąć. Wysokość zmienia się dolną
   krawędzią, a przeciągnięcie górnej albo bocznej też zostawia go na górze, na całą szerokość.
+
+## 0.1.15 (2026-10-27)
+
 - **Zakładki nad kafelkiem na pełnym ekranie (⌘E).** Wąski pasek pokazuje otwarte sesje w kolejności
   ⌘1–9: kropka stanu, projekt, rodzaj sesji i skrót. Bieżąca ma kolor projektu, a klik w inną
   przełącza na nią. Przy jednej sesji paska nie ma.
-- **Zamknięcie sesji na pełnym ekranie nie wychodzi z niego.** Po ⌘Z (albo ⇧⌘Z, albo gdy sesja się
+- **Zamknięcie sesji na pełnym ekranie nie wychodzi z niego.** Po ⌘Q (albo ⌘⇧Q, albo gdy sesja się
   skończy) ekran dostaje sąsiednia sesja, jak po zamknięciu zakładki.
 - **Dropdown z góry ekranu (⌘`), jak w iTerm.** Skrót działa w każdej aplikacji: desk zjeżdża
   z animacją z góry ekranu, na którym jest kursor, na całą szerokość pod paskiem menu i nad
@@ -32,7 +41,7 @@
   desk znika z Docka i z ⌘Tab.
 - **Opcje mają trzy zakładki:** Ogólne (dotychczasowe ustawienia), Dropdown i Skróty.
 - **Każdy skrót desk można zmienić** w Opcje → Skróty: kliknij skrót i naciśnij nowy, ↺ wraca do
-  domyślnego. Zajęty skrót (inna akcja, ⌘C / ⌘V, ⌘Q...) desk odrzuca z komunikatem. Nowe skróty
+  domyślnego. Zajęty skrót (inna akcja, ⌘C / ⌘V, ⌘Z...) desk odrzuca z komunikatem. Nowe skróty
   widać od razu w dolnym pasku i podpowiedziach. Stałe zostają ⌘1–9, kopiuj / wklej, klawisze
   palety i ⌘S w edytorze.
 - W Opcje → Dropdown: wysokość, czas animacji (0 bez animacji), chowanie przy utracie fokusu
@@ -41,12 +50,21 @@
   domyślny skrót to Ctrl+` i jest wyłączony. W czasie blokady skrót nic nie robi.
 - Esc zamyka Opcje także wtedy, gdy fokus jest w terminalu.
 - Dolny pasek: skróty, które się nie mieszczą, znikają w całości, a liczniki sesji zostają.
+- README z nowymi zrzutami: podgląd, dropdown, pełny ekran z zakładkami, skróty i motywy.
 - **Prawy klik w terminalu nie otwiera już menu.** Wyskakiwały dwa naraz: menu tmuxa (podział,
   zamiana, zamknięcie panelu) i systemowe (Wytnij, Pisownia, Mowa). Kafelki układa desk, więc
   oba zniknęły. Programy, które obsługują mysz (vim, htop), dalej dostają prawy klik. Działające
   sesje dostają nowe ustawienie przy starcie desk. Menu tmuxa można włączyć z powrotem w Opcje →
   Ogólne („Menu tmuxa pod prawym klikiem w terminalu”). Włączone zostaje otwarte po puszczeniu
   przycisku i przy ruchu myszy, a pozycję wybiera się kliknięciem.
+
+## 0.1.13 (2026-10-27)
+
+- **Zamykanie kafelka to ⌘Q, a zabijanie sesji ⌘⇧Q** (Ctrl⇧Q i Ctrl⇧⌫ na Windows i Linux).
+  ⌘Z znów cofa w polach tekstowych. ⌘Q nie zamyka już desk: do tego służy menu desk › Quit desk.
+  desk przechwytuje ⌘⇧Q, zanim zrobi to macOS, więc skrót nie wylogowuje z systemu.
+- **Okno pamięta swoje miejsce.** Otwiera się na tym samym monitorze, w tym samym miejscu
+  i rozmiarze. Gdy tego monitora nie ma, okno otwiera się domyślnie.
 
 ## 0.1.12 (2026-10-27)
 

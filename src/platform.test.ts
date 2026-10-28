@@ -9,7 +9,7 @@ describe("platform", () => {
   });
 
   it("rewrites shortcuts inside text", () => {
-    expect(shortcuts("Druga sesja (⌘D), zabij (⌘⇧Z)", "windows")).toBe("Druga sesja (Ctrl⇧D), zabij (Ctrl⇧⌫)");
+    expect(shortcuts("Druga sesja (⌘D), zabij (⌘⇧Q)", "windows")).toBe("Druga sesja (Ctrl⇧D), zabij (Ctrl⇧⌫)");
     expect(shortcuts("Druga sesja (⌘D)", "mac")).toBe("Druga sesja (⌘D)");
   });
 });

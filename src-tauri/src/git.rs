@@ -77,7 +77,7 @@ pub fn parse_refs(out: &str) -> Vec<String> {
 /// be overwritten, so nothing is lost. Only names from `branches` are accepted.
 pub fn switch(work_tree: &Path, branch: &str) -> Result<(), String> {
     if branch.starts_with('-') || !branches(work_tree)?.iter().any(|b| b == branch) {
-        return Err(format!("nie ma brancha {branch}"));
+        return Err(tr!(format!("nie ma brancha {branch}"), format!("no branch {branch}")));
     }
     git(work_tree, &["switch", "--end-of-options", branch]).map(|_| ())
 }

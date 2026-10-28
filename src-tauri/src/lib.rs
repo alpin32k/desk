@@ -1,3 +1,6 @@
+// First: its tr! macro is used by the modules below.
+#[macro_use]
+pub mod i18n;
 pub mod agents;
 pub mod backend;
 pub mod browser;
@@ -11,6 +14,8 @@ pub mod github;
 pub mod hooks;
 pub mod layout;
 pub mod lock;
+#[cfg(target_os = "macos")]
+mod mac_keys;
 pub mod native;
 pub mod new_project;
 #[cfg(target_os = "linux")]
@@ -20,6 +25,7 @@ pub mod project;
 pub mod pty;
 pub mod state_watch;
 pub mod tmux;
+mod window_place;
 pub mod update;
 pub mod usage;
 
@@ -27,7 +33,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::ipc::{Channel, Response};
-use tauri::menu::{Menu, PredefinedMenuItem, Submenu};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Manager, RunEvent, State};
 
 /// Coffee state lives in its own managed value so the guard thread can reach it.
@@ -66,8 +72,10 @@ struct TileInfo {
 
 #[tauri::command]
 fn bootstrap(app: State<App>) -> Bootstrap {
+    let layout = layout::load(&app.layout_path);
+    i18n::set(&layout.language);
     Bootstrap {
-        layout: layout::load(&app.layout_path),
+        layout,
         sessions: app.sessions.list(),
         persistent: app.sessions.persistent(),
         tmux_missing: app.sessions.tmux_missing(),
@@ -114,7 +122,10 @@ fn open_session(
             .iter()
             .any(|t| t.command == command)
         {
-            return Err(format!("{path} nie definiuje polecenia „{command}”"));
+            return Err(tr!(
+                format!("{path} nie definiuje polecenia „{command}”"),
+                format!("{path} does not define the command “{command}”")
+            ));
         }
         command
     } else {
@@ -201,7 +212,7 @@ fn pty_write(
     data: String,
 ) -> Result<(), String> {
     if lock.is_locked() {
-        return Err("desk jest zablokowany".into());
+        return Err(tr!("desk jest zablokowany", "desk is locked").into());
     }
     app.sessions.write(id, data.as_bytes())
 }
@@ -325,6 +336,7 @@ fn save_layout(app: State<App>, layout: layout::Layout) -> Result<(), String> {
     if app.tmux_menu.swap(layout.tmux_menu, Ordering::Relaxed) != layout.tmux_menu {
         app.sessions.reload_config(layout.tmux_menu);
     }
+    i18n::set(&layout.language);
     layout::save(&app.layout_path, &layout).map_err(|e| e.to_string())
 }
 
@@ -366,7 +378,7 @@ async fn update_install(handle: AppHandle, version: String) -> Result<(), String
         .await
         .map_err(|e| e.to_string())??;
     let mut cmd = if cfg!(windows) {
-        let (exe, args) = start.split_first().ok_or("nic do uruchomienia")?;
+        let (exe, args) = start.split_first().ok_or(tr!("nic do uruchomienia", "nothing to run"))?;
         let mut c = std::process::Command::new(exe);
         c.args(args);
         c
@@ -490,7 +502,8 @@ pub(crate) fn menu(app: &AppHandle, locked: bool) -> tauri::Result<Menu<tauri::W
             &PredefinedMenuItem::hide(app, None)?,
             &PredefinedMenuItem::hide_others(app, None)?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, None)?,
+            // No ⌘Q: that closes a tile (see mac_keys.rs).
+            &MenuItem::with_id(app, "quit", "Quit desk", true, None::<&str>)?,
         ],
     )?;
     let edit = Submenu::with_items(
@@ -542,7 +555,11 @@ pub fn run() {
     // A menu only on macOS: on Windows and Linux it is a bar in the window whose
     // Edit > Copy (Ctrl+C) would take Ctrl+C away from the terminals.
     let builder = if cfg!(target_os = "macos") {
-        builder.menu(|app| menu(app, false))
+        builder.menu(|app| menu(app, false)).on_menu_event(|app, event| {
+            if event.id() == "quit" {
+                app.exit(0);
+            }
+        })
     } else {
         builder
     };
@@ -551,6 +568,7 @@ pub fn run() {
             let support = env::support_dir();
             let sessions = backend::Backend::new(app.handle(), &support)?;
             let saved = layout::load(&support.join("layout.json"));
+            i18n::set(&saved.language);
             let ids: Vec<String> = agents::list(&saved.agents)
                 .into_iter()
                 .map(|a| a.id)
@@ -561,6 +579,11 @@ pub fn run() {
             let hooks = hooks::install(&support)?;
             let watcher = state_watch::watch(app.handle().clone(), &hooks.state_dir).ok();
             app.manage(lock::Lock::default());
+            #[cfg(target_os = "macos")]
+            mac_keys::install(app.handle());
+            if let Some(w) = app.get_webview_window("main") {
+                window_place::restore(&w, &window_place::file(&support));
+            }
             app.manage(AppCoffee(coffee::Coffee::new(&support)));
             coffee::spawn_guard(app.handle().clone());
             app.manage(App {
@@ -625,21 +648,23 @@ pub fn run() {
             clone_project,
         ])
         .on_window_event(|window, event| {
-            if window.label() == "main"
-                && matches!(event, tauri::WindowEvent::Focused(false))
-                && !window.state::<lock::Lock>().is_locked()
-            {
+            if window.label() != "main" {
+                return;
+            }
+            if matches!(event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_)) {
+                window_place::save_soon(window.app_handle(), window_place::file(&env::support_dir()));
+            }
+            let locked = window.state::<lock::Lock>().is_locked();
+            if matches!(event, tauri::WindowEvent::Focused(false)) && !locked {
                 dropdown::blurred(window.app_handle());
             }
-            if window.label() == "main"
-                && let tauri::WindowEvent::Resized(size) = event
-            {
+            if let tauri::WindowEvent::Resized(size) = event {
                 dropdown::resized(window.app_handle(), *size);
             }
-            if window.label() == "main" && matches!(event, tauri::WindowEvent::Moved(_)) {
+            if matches!(event, tauri::WindowEvent::Moved(_)) {
                 dropdown::moved(window.app_handle());
             }
-            if !window.state::<lock::Lock>().is_locked() || window.label() != "main" {
+            if !locked {
                 return;
             }
             match event {

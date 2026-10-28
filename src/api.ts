@@ -49,6 +49,8 @@ export interface Layout {
   keys: Record<string, string>;
   /** A right click in a terminal opens tmux's menu (split, swap, kill...). */
   tmuxMenu: boolean;
+  /** Interface language, "pl" or "en" (i18n.ts); "" until the first launch picks one. */
+  language: string;
 }
 
 /** A newer desk release. */

@@ -2,6 +2,7 @@
 // ⌘Enter toggles autostart, ⌘⌫ kills a running session.
 import type { AgentInfo, GithubRepo, Project } from "./api";
 import { matchRepos, repoName } from "./github";
+import { t } from "./i18n";
 import { ago, rows, shortPath, type Row } from "./projects";
 import { escapeHtml } from "./tile";
 import { keysIn } from "./keys";
@@ -58,7 +59,7 @@ export class Palette {
       <div class="dialog palette">
         <input type="text" spellcheck="false" autocomplete="off" />
         <div class="list"></div>
-        <footer><span class="agent-pick"></span><kbd>↵</kbd> otwórz <kbd>${shortcut("⌘↵")}</kbd> start z aplikacją <kbd>${shortcut("⌘⌫")}</kbd> zabij sesję <kbd>esc</kbd> zamknij</footer>
+        <footer><span class="agent-pick"></span><kbd>↵</kbd> ${t("palette.open")} <kbd>${shortcut("⌘↵")}</kbd> ${t("palette.autostart")} <kbd>${shortcut("⌘⌫")}</kbd> ${t("palette.kill")} <kbd>esc</kbd> ${t("common.close")}</footer>
       </div>`;
     this.input = this.el.querySelector("input")!;
     this.list = this.el.querySelector(".list")!;
@@ -78,7 +79,7 @@ export class Palette {
     });
     document.body.appendChild(this.el);
     this.input.focus();
-    this.list.innerHTML = `<div class="empty">Szukam projektów…</div>`;
+    this.list.innerHTML = `<div class="empty">${t("common.searchingProjects")}</div>`;
     // No gh or no login: just no GitHub rows.
     this.ctx.repos().then(
       (r) => {
@@ -100,7 +101,7 @@ export class Palette {
   refresh(): void {
     if (!this.el) return;
     const q = this.input.value;
-    this.input.placeholder = "Projekt…";
+    this.input.placeholder = t("palette.placeholder");
     const r = rows(this.all, q);
     this.shown = r.slice(0, MAX_ROWS);
     const local = new Set(this.all.map((p) => p.name.toLowerCase()));
@@ -110,16 +111,16 @@ export class Palette {
     const items = this.shown.map((row, i) => this.rowHtml(row, i));
     items.push(...this.remote.map((repo, i) => this.repoHtml(repo, this.shown.length + i)));
     items.push(
-      `<div class="row action ${this.selected === n ? "sel" : ""}" data-i="${n}">+ Nowy projekt…</div>`,
-      `<div class="row action ${this.selected === n + 1 ? "sel" : ""}" data-i="${n + 1}">+ Dodaj istniejący folder…</div>`,
-      `<div class="row action ${this.selected === n + 2 ? "sel" : ""}" data-i="${n + 2}">+ Rozmowa: zwykły czat o czymkolwiek, bez projektu (${keysIn("⌘R")})</div>`,
+      `<div class="row action ${this.selected === n ? "sel" : ""}" data-i="${n}">${t("palette.newProject")}</div>`,
+      `<div class="row action ${this.selected === n + 1 ? "sel" : ""}" data-i="${n + 1}">${t("palette.addFolder")}</div>`,
+      `<div class="row action ${this.selected === n + 2 ? "sel" : ""}" data-i="${n + 2}">${t("palette.chat", { keys: keysIn("⌘R") })}</div>`,
     );
     const agents = this.ctx.agents().filter(usable);
     if (!agents.some((a) => a.id === this.agent)) this.agent = agents[0]?.id ?? "claude";
     this.el.querySelector(".agent-pick")!.innerHTML = `<kbd>⇥</kbd> agent: ${agents
       .map(
         (a) =>
-          `<span class="${a.id === this.agent ? "on" : ""}"${a.installed ? "" : ` title="zainstaluje się przy otwarciu"`}>${escapeHtml(a.id)}${a.installed ? "" : " ↓"}</span>`,
+          `<span class="${a.id === this.agent ? "on" : ""}"${a.installed ? "" : ` title="${t("common.installsOnOpen")}"`}>${escapeHtml(a.id)}${a.installed ? "" : " ↓"}</span>`,
       )
       .join(" ")}`;
     this.list.innerHTML = items.join("");
@@ -130,9 +131,9 @@ export class Palette {
     const p = row.project;
     const open = this.ctx.isOpen(p.path, this.agent);
     const tags = [
-      open ? `<span class="tag open">otwarty</span>` : "",
-      !open && this.ctx.isRunning(p.path, this.agent) ? `<span class="tag run">w tle</span>` : "",
-      this.ctx.isAutostart(p.path, this.agent) ? `<span class="tag auto">★ start</span>` : "",
+      open ? `<span class="tag open">${t("palette.tagOpen")}</span>` : "",
+      !open && this.ctx.isRunning(p.path, this.agent) ? `<span class="tag run">${t("palette.tagRunning")}</span>` : "",
+      this.ctx.isAutostart(p.path, this.agent) ? `<span class="tag auto">${t("palette.tagAutostart")}</span>` : "",
     ].join("");
     const name = row.parent && !this.input.value.trim() ? `<span class="wt">↳</span> ${escapeHtml(p.name)}` : escapeHtml(p.name);
     const parent = row.parent ? `<span class="dim"> · worktree ${escapeHtml(row.parent.name)}</span>` : "";
@@ -148,8 +149,8 @@ export class Palette {
     return `<div class="row ${i === this.selected ? "sel" : ""}" data-i="${i}">
       <span class="dot gh"></span>
       <span class="name">${escapeHtml(repo.fullName)}</span>
-      <span class="path">sklonuj do ${escapeHtml(target)}</span>
-      ${repo.private ? `<span class="tag">prywatne</span>` : ""}<span class="tag gh">GitHub</span></div>`;
+      <span class="path">${t("palette.cloneTo", { path: escapeHtml(target) })}</span>
+      ${repo.private ? `<span class="tag">${t("common.private")}</span>` : ""}<span class="tag gh">GitHub</span></div>`;
   }
 
   private onKey(e: KeyboardEvent): void {
