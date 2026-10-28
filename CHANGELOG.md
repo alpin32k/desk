@@ -1,6 +1,6 @@
 # Zmiany
 
-## Niewydane
+## 0.1.16 (2026-10-28)
 
 - **Wyjście z dropdownu jednym kliknięciem.** W miejscu świateł okna jest „▭ okno”: desk wraca do
   zwykłego okna tam, gdzie było przed pierwszym ⌘`. Skrót zostaje włączony, więc kolejne ⌘` znowu
