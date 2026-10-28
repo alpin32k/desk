@@ -2,6 +2,10 @@
 
 ## 0.1.16 (2026-10-28)
 
+- **Klon z GitHuba w „Nowym projekcie”.** Wpisujesz nazwę, a pod polem pojawiają się pasujące repo, do
+  których masz dostęp przez `gh` (twoje, współdzielone i z organizacji). Wybór strzałkami i ↵ albo
+  kliknięciem zamienia „git init” na „Sklonuj i otwórz”; nazwę folderu można zmienić. Tekst wpisany
+  w ⌘P przed „+ Nowy projekt…” trafia od razu do pola nazwy.
 - **Wyjście z dropdownu jednym kliknięciem.** W miejscu świateł okna jest „▭ okno”: desk wraca do
   zwykłego okna tam, gdzie było przed pierwszym ⌘`. Skrót zostaje włączony, więc kolejne ⌘` znowu
   wysuwa dropdown.

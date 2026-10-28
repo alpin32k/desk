@@ -18,7 +18,8 @@ export interface PaletteContext {
   toggleAutostart: (path: string, agent: string) => void;
   kill: (path: string, agent: string) => void;
   addFolder: () => void;
-  newProject: (agent: string) => void;
+  /** `name`: what was typed in the palette, as the suggested name. */
+  newProject: (agent: string, name?: string) => void;
   chat: (agent: string) => void;
 }
 
@@ -154,9 +155,10 @@ export class Palette {
   private activate(): void {
     const row = this.shown[this.selected];
     const action = this.selected - this.shown.length; // 0 new project, 1 add folder, 2 loose question
+    const query = this.input.value.trim();
     this.close();
     if (row) this.ctx.open(row.project.path, this.agent);
-    else if (action === 0) this.ctx.newProject(this.agent);
+    else if (action === 0) this.ctx.newProject(this.agent, query || undefined);
     else if (action === 1) this.ctx.addFolder();
     else this.ctx.chat(this.agent);
   }

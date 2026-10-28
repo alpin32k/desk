@@ -925,6 +925,50 @@ button:hover {
   flex: 1;
 }
 
+.new-project .gh-list:empty {
+  display: none;
+}
+
+.new-project .gh-list {
+  margin: -4px 0 0 44px;
+  border: 1px solid var(--line-hi);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.new-project .gh-list .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.new-project .gh-list .row.sel {
+  background: color-mix(in srgb, var(--accent) 15%, var(--panel));
+}
+
+.new-project .gh-list .desc {
+  flex: 1;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.new-project .gh-status {
+  padding: 3px 8px;
+  color: var(--dim);
+}
+
+.new-project .gh-chosen button {
+  padding: 0 6px;
+}
+
+.new-project [hidden] {
+  display: none;
+}
+
 .new-project .buttons {
   display: flex;
   justify-content: flex-end;

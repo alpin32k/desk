@@ -45,6 +45,8 @@ const COMMANDS: &[&str] = &[
     "usage",
     "list_agents",
     "create_project",
+    "github_repos",
+    "clone_project",
 ];
 
 fn main() {

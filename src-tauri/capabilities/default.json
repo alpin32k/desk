@@ -54,6 +54,8 @@
     "allow-chat-dir",
     "allow-usage",
     "allow-list-agents",
-    "allow-create-project"
+    "allow-create-project",
+    "allow-github-repos",
+    "allow-clone-project"
   ]
 }
