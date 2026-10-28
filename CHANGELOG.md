@@ -2,6 +2,11 @@
 
 ## Niewydane
 
+- **Wyjście z dropdownu jednym kliknięciem.** W miejscu świateł okna jest „▭ okno”: desk wraca do
+  zwykłego okna tam, gdzie było przed pierwszym ⌘`. Skrót zostaje włączony, więc kolejne ⌘` znowu
+  wysuwa dropdown.
+- **Dropdown trzyma się górnej krawędzi.** Nie da się go przeciągnąć. Wysokość zmienia się dolną
+  krawędzią, a przeciągnięcie górnej albo bocznej też zostawia go na górze, na całą szerokość.
 - **Dropdown z góry ekranu (⌘`), jak w iTerm.** Skrót działa w każdej aplikacji: desk zjeżdża
   z animacją z góry ekranu, na którym jest kursor, na całą szerokość pod paskiem menu i nad
   innymi oknami, na każdym biurku (Space). Drugie ⌘` chowa go w górę i oddaje fokus poprzedniej
