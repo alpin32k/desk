@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mention, normalize, rendered } from "./address";
+import { dropped, mention, normalize, rendered } from "./address";
 
 describe("address bar", () => {
   it("turns what was typed into a link", () => {
@@ -27,5 +27,15 @@ describe("address bar", () => {
     expect(mention("/p", "/p/a\nrm -rf ~\n.md")).toBe("");
     expect(mention("/p", "/p/\x1b[201~x")).toBe("");
     expect(mention("/p", '/p/a" b.md')).toBe("");
+  });
+
+  it("types dropped files as escaped paths", () => {
+    expect(dropped(["/Users/me/shot.png"])).toBe("/Users/me/shot.png ");
+    expect(dropped(["/Users/me/Zrzut ekranu (2).png", "/tmp/a&b.txt"])).toBe(
+      "/Users/me/Zrzut\\ ekranu\\ \\(2\\).png /tmp/a\\&b.txt ",
+    );
+    expect(dropped(["/Users/me/żółw.jpg"])).toBe("/Users/me/żółw.jpg ");
+    expect(dropped(["/tmp/a\nrm -rf ~\n.png"])).toBe("");
+    expect(dropped([])).toBe("");
   });
 });

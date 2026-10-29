@@ -120,6 +120,7 @@ export const pl = {
   "usage.window": "{label}: {percent}%, reset za {time}",
 
   // app
+  "app.dropUnsupported": "Tu nie da się upuścić pliku: wklej jego ścieżkę",
   "app.pickSessionFirst": "Najpierw wybierz sesję, do której dodać ścieżkę",
   "app.pickTileFirst": "Najpierw wybierz kafelek projektu",
   "app.noTmux": "Brak tmux: sesje zamkną się razem z desk. Zainstaluj go ({install}) i uruchom desk ponownie.",

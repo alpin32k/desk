@@ -47,6 +47,7 @@ const COMMANDS: &[&str] = &[
     "create_project",
     "github_repos",
     "clone_project",
+    "dropped_paths",
 ];
 
 fn main() {

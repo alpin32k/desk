@@ -7,6 +7,7 @@ pub mod browser;
 pub mod claude_projects;
 pub mod coffee;
 pub mod discovery;
+pub mod drag;
 pub mod dropdown;
 pub mod env;
 pub mod git;
@@ -398,6 +399,11 @@ async fn update_install(handle: AppHandle, version: String) -> Result<(), String
 }
 
 #[tauri::command]
+fn dropped_paths() -> Vec<String> {
+    drag::paths()
+}
+
+#[tauri::command]
 fn reveal_path(path: String) -> Result<(), String> {
     project::reveal(Path::new(&path))
 }
@@ -646,6 +652,7 @@ pub fn run() {
             create_project,
             github_repos,
             clone_project,
+            dropped_paths,
         ])
         .on_window_event(|window, event| {
             if window.label() != "main" {

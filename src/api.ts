@@ -177,6 +177,8 @@ export const api = {
   ptyAttach: (slug: string, cols: number, rows: number, onData: Channel<ArrayBuffer>) =>
     invoke<number>("pty_attach", { slug, cols, rows, onData }),
   ptyWrite: (id: number, data: string) => invoke<void>("pty_write", { id, data }),
+  /** Where the files of the last drag are (macOS; empty elsewhere). */
+  droppedPaths: () => invoke<string[]>("dropped_paths"),
   ptyResize: (id: number, cols: number, rows: number) => invoke<void>("pty_resize", { id, cols, rows }),
   ptyClose: (id: number) => invoke<void>("pty_close", { id }),
   coffeeStatus: () => invoke<CoffeeStatus>("coffee_status"),

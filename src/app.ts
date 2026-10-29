@@ -24,6 +24,7 @@ import * as L from "./lanes";
 import { Palette } from "./palette";
 import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
 import { keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
+import { dropped } from "./address";
 import { DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
 import { repoName } from "./github";
 import { Settings } from "./settings";
@@ -309,6 +310,19 @@ export class App {
     for (const type of ["paste", "drop", "keypress", "input"]) {
       window.addEventListener(type, (e) => this.locked && !isLockField(e.target) && (e.preventDefault(), e.stopPropagation()), true);
     }
+    // A file dropped where nothing takes it would replace desk with the file
+    // (WebKit opens it), leaving no way back: take every file drop here.
+    window.addEventListener("dragover", (e) => {
+      if (e.defaultPrevented || !e.dataTransfer?.types.includes("Files")) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = this.tileAt(e.target) ? "copy" : "none";
+    });
+    window.addEventListener("drop", (e) => {
+      if (e.defaultPrevented || !e.dataTransfer?.types.includes("Files")) return;
+      e.preventDefault();
+      const tile = this.tileAt(e.target);
+      if (tile) void this.dropFiles(tile);
+    });
     if (await api.isLocked()) this.showLock();
     let resizeTimer: number | undefined;
     window.addEventListener("resize", () => {
@@ -769,6 +783,21 @@ export class App {
     for (const card of this.cards.values()) cardTitles(card.querySelector<HTMLElement>(".card-head")!);
     this.grid.querySelectorAll(".lane .hint").forEach((h) => (h.textContent = laneHint()));
     this.render();
+  }
+
+  private tileAt(target: EventTarget | null): Tile | undefined {
+    const key = (target as HTMLElement | null)?.closest?.<HTMLElement>(".tile[data-key]")?.dataset.key;
+    return key ? this.tiles.get(key) : undefined;
+  }
+
+  /** Files dropped on a terminal: their paths typed into it, as Terminal and iTerm do. */
+  private async dropFiles(tile: Tile): Promise<void> {
+    const paths = await api.droppedPaths().catch(() => []);
+    if (!paths.length) return toast(t("app.dropUnsupported"));
+    const text = dropped(paths);
+    if (!text) return toast(t("side.unsafePath"));
+    this.setActive(tile.key, true);
+    tile.paste(text);
   }
 
   private laneEl(): HTMLElement {
