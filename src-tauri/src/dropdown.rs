@@ -19,9 +19,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use tauri::{
-    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewWindow,
-};
+use crate::window_place::{self as place, Place};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, WebviewWindow};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
 /// One step of the slide, about two frames.
@@ -42,11 +41,13 @@ pub const DEFAULT_HOTKEY: &str = if cfg!(target_os = "macos") {
 /// (tauri.conf.json has the usual one).
 const DOCKED_MIN: LogicalSize<f64> = LogicalSize::new(400.0, 120.0);
 const NORMAL_MIN: LogicalSize<f64> = LogicalSize::new(800.0, 500.0);
+/// A place for the window when it cannot say where it is.
+const SOMEWHERE: Place = Place { x: 0.0, y: 0.0, width: 1600.0, height: 1000.0 };
 
 pub struct Dropdown {
     layout_path: PathBuf,
     /// The window's place before it first dropped down; Some while docked.
-    normal: Mutex<Option<(PhysicalPosition<i32>, PhysicalSize<u32>)>>,
+    normal: Mutex<Option<Place>>,
     /// A slide is running; presses in the meantime are dropped.
     sliding: AtomicBool,
     /// The shortcut registered now.
@@ -117,9 +118,7 @@ pub fn apply(app: &AppHandle) -> Result<(), String> {
     }
     if options.dropdown {
         if window.is_visible().unwrap_or(false) {
-            let (at, size) = frame(app, &window, options.dropdown_height);
-            let _ = window.set_position(at);
-            let _ = window.set_size(size);
+            place::put(&window, frame(&window, options.dropdown_height));
         }
     } else {
         undock(app, &window);
@@ -178,16 +177,17 @@ pub fn blurred(app: &AppHandle) {
 
 /// You dragged the docked window's edge: the page keeps the new height
 /// ("dropdown-height", percent of the screen) for the next time.
-pub fn resized(app: &AppHandle, size: PhysicalSize<u32>) {
+pub fn resized(app: &AppHandle) {
     let Some(window) = held(app) else {
         return;
     };
     pin(&window);
-    let Some(screen) = window.current_monitor().ok().flatten() else {
+    let (Some(screen), Some(at)) = (window.current_monitor().ok().flatten(), place::here(&window))
+    else {
         return;
     };
-    let area = screen.work_area().size.height.max(1);
-    let pct = (f64::from(size.height) * 100.0 / f64::from(area)).round() as u32;
+    let area = place::work_area(&screen).height.max(1.0);
+    let pct = (at.height * 100.0 / area).round() as u32;
     if pct.clamp(20, 100) != app.state::<Dropdown>().options().dropdown_height {
         let _ = app.emit("dropdown-height", pct.clamp(20, 100));
     }
@@ -218,15 +218,13 @@ fn pin(window: &WebviewWindow) {
     let Some(screen) = window.current_monitor().ok().flatten() else {
         return;
     };
-    let area = screen.work_area();
-    let (Ok(at), Ok(size)) = (window.outer_position(), window.inner_size()) else {
+    let area = place::work_area(&screen);
+    let Some(at) = place::here(window) else {
         return;
     };
-    if at != area.position {
-        let _ = window.set_position(area.position);
-    }
-    if size.width != area.size.width {
-        let _ = window.set_size(PhysicalSize::new(area.size.width, size.height));
+    let off = |a: f64, b: f64| (a - b).abs() > 0.5;
+    if off(at.x, area.x) || off(at.y, area.y) || off(at.width, area.width) {
+        place::put(window, Place { height: at.height, ..area });
     }
 }
 
@@ -246,25 +244,24 @@ pub fn leave(app: &AppHandle) {
 
 /// Where the dropdown goes: the top of the work area (under the menu bar) of
 /// the screen with the mouse, full width, `height` percent tall.
-fn frame(
-    app: &AppHandle,
-    window: &WebviewWindow,
-    height: u32,
-) -> (PhysicalPosition<i32>, PhysicalSize<u32>) {
-    let screen = app
-        .cursor_position()
-        .ok()
-        .and_then(|p| app.monitor_from_point(p.x, p.y).ok().flatten())
+fn frame(window: &WebviewWindow, height: u32) -> Place {
+    let monitors = window.available_monitors().unwrap_or_default();
+    let screens: Vec<Place> = monitors.iter().map(place::screen).collect();
+    let screen = place::cursor(window)
+        .and_then(|at| place::under(&screens, at))
+        .map(|i| monitors[i].clone())
         .or_else(|| window.current_monitor().ok().flatten())
         .or_else(|| window.primary_monitor().ok().flatten());
-    let Some(screen) = screen else {
-        let size = window.inner_size().unwrap_or_default();
-        return (PhysicalPosition::new(0, 0), size);
-    };
-    let area = screen.work_area();
-    let pct = height.clamp(20, 100);
-    let size = PhysicalSize::new(area.size.width, area.size.height * pct / 100);
-    (area.position, size)
+    match screen {
+        Some(screen) => fit(place::work_area(&screen), height),
+        None => Place { x: 0.0, y: 0.0, ..place::here(window).unwrap_or(SOMEWHERE) },
+    }
+}
+
+/// The top `height` percent of `area`.
+fn fit(area: Place, height: u32) -> Place {
+    let pct = f64::from(height.clamp(20, 100));
+    Place { height: (area.height * pct / 100.0).floor(), ..area }
 }
 
 fn slide_down(app: &AppHandle, window: WebviewWindow) {
@@ -277,26 +274,23 @@ fn slide_down(app: &AppHandle, window: WebviewWindow) {
         let mut normal = dropdown.normal.lock().unwrap();
         let docking = normal.is_none();
         if docking {
-            let at = window.outer_position().unwrap_or_default();
-            let size = window.inner_size().unwrap_or_default();
-            *normal = Some((at, size));
+            *normal = Some(place::here(&window).unwrap_or(SOMEWHERE));
             float(app, &window, true);
         }
         docking
     };
     let duration = Duration::from_millis(options.dropdown_animation.into());
-    let (at, size) = frame(app, &window, options.dropdown_height);
-    let above = PhysicalPosition::new(at.x, at.y - size.height as i32);
+    let to = frame(&window, options.dropdown_height);
+    let above = to.y - to.height;
     let _ = window.unminimize();
-    let _ = window.set_position(above);
-    let _ = window.set_size(size);
+    place::put(&window, Place { y: above, ..to });
     #[cfg(target_os = "macos")]
     let _ = app.show();
     let _ = window.show();
     let _ = window.set_focus();
     let app = app.clone();
     std::thread::spawn(move || {
-        slide(&window, above, at, duration);
+        slide(&window, to.x, above, to.y, duration);
         // Becoming an accessory app (the first time down) deactivates desk a
         // moment after it took the focus: take it again while still sliding,
         // or losing it would send the dropdown straight back up.
@@ -319,31 +313,27 @@ fn slide_up(app: &AppHandle, window: WebviewWindow) {
     let duration = Duration::from_millis(dropdown.options().dropdown_animation.into());
     let app = app.clone();
     std::thread::spawn(move || {
-        let at = window.outer_position().unwrap_or_default();
-        let height = window.outer_size().unwrap_or_default().height as i32;
-        slide(&window, at, PhysicalPosition::new(at.x, at.y - height), duration);
+        let Some(at) = place::here(&window) else {
+            app.state::<Dropdown>().sliding.store(false, Ordering::SeqCst);
+            return;
+        };
+        slide(&window, at.x, at.y, at.y - at.height, duration);
         // Hiding the app hands the focus back to the one you were in.
         #[cfg(target_os = "macos")]
         let _ = app.hide();
         #[cfg(not(target_os = "macos"))]
         let _ = window.hide();
-        let _ = window.set_position(at);
+        place::move_to(&window, at.x, at.y);
         app.state::<Dropdown>().sliding.store(false, Ordering::SeqCst);
     });
 }
 
-/// Move the window from `from` to `to` in `duration` (none: at once), fast
-/// at first and slowing down.
-fn slide(
-    window: &WebviewWindow,
-    from: PhysicalPosition<i32>,
-    to: PhysicalPosition<i32>,
-    duration: Duration,
-) {
+/// Move the window at `x` from `from` to `to` down the screen in `duration`
+/// (none: at once), fast at first and slowing down.
+fn slide(window: &WebviewWindow, x: f64, from: f64, to: f64, duration: Duration) {
     let steps = (duration.as_millis() / FRAME.as_millis()).max(1) as u32;
     for step in 1..=steps {
-        let y = f64::from(from.y) + f64::from(to.y - from.y) * ease(step, steps);
-        let _ = window.set_position(PhysicalPosition::new(to.x, y.round() as i32));
+        place::move_to(window, x, from + (to - from) * ease(step, steps));
         if step < steps {
             std::thread::sleep(duration / steps);
         }
@@ -358,12 +348,11 @@ fn ease(step: u32, steps: u32) -> f64 {
 
 /// Back to the window desk had before the first ⌘`.
 fn undock(app: &AppHandle, window: &WebviewWindow) {
-    let Some((at, size)) = app.state::<Dropdown>().normal.lock().unwrap().take() else {
+    let Some(normal) = app.state::<Dropdown>().normal.lock().unwrap().take() else {
         return;
     };
     float(app, window, false);
-    let _ = window.set_position(at);
-    let _ = window.set_size(size);
+    place::put(window, normal);
     #[cfg(target_os = "macos")]
     let _ = app.show();
     let _ = window.show();
@@ -506,6 +495,14 @@ mod tests {
         assert_eq!(ease(10, 10), 1.0);
         assert!(ease(1, 10) > 0.25, "first step covers a quarter");
         assert!(ease(5, 10) - ease(4, 10) > ease(10, 10) - ease(9, 10));
+    }
+
+    #[test]
+    fn the_dropdown_fills_the_top_of_the_work_area() {
+        let area = Place { x: 1512.0, y: -303.0, width: 2560.0, height: 1440.0 };
+        assert_eq!(fit(area, 50), Place { height: 720.0, ..area });
+        assert_eq!(fit(area, 5), Place { height: 288.0, ..area });
+        assert_eq!(fit(area, 150), area);
     }
 
     #[test]

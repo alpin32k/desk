@@ -658,8 +658,8 @@ pub fn run() {
             if matches!(event, tauri::WindowEvent::Focused(false)) && !locked {
                 dropdown::blurred(window.app_handle());
             }
-            if let tauri::WindowEvent::Resized(size) = event {
-                dropdown::resized(window.app_handle(), *size);
+            if matches!(event, tauri::WindowEvent::Resized(_)) {
+                dropdown::resized(window.app_handle());
             }
             if matches!(event, tauri::WindowEvent::Moved(_)) {
                 dropdown::moved(window.app_handle());

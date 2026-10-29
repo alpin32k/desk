@@ -3,13 +3,14 @@
 //! a Retina laptop next to a non-Retina monitor.) On macOS the place is in
 //! points, the coordinates all screens share; elsewhere in physical pixels,
 //! which there are the shared ones. A place on no connected monitor is left
-//! alone, and the window opens where it would anyway.
+//! alone, and the window opens where it would anyway. The dropdown
+//! (dropdown.rs) places the window in the same units.
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::{AppHandle, Manager, Monitor, WebviewWindow};
+use tauri::{AppHandle, Manager, Monitor, PhysicalPosition, PhysicalSize, WebviewWindow};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Place {
@@ -39,12 +40,30 @@ pub fn restore(window: &WebviewWindow, file: &Path) {
     if !on_a_screen(&place, &screens) {
         return;
     }
+    put(window, place);
+}
+
+/// Move the window there and give it this size, in that order: a resize
+/// still on the way from a screen with another scale reaches the page after
+/// the move, read with the new scale, and leaves it half (or twice) the
+/// window. The top left corner stays where it was put.
+pub(crate) fn put(window: &WebviewWindow, place: Place) {
+    move_to(window, place.x, place.y);
     if cfg!(target_os = "macos") {
         let _ = window.set_size(tauri::LogicalSize::new(place.width, place.height));
-        let _ = window.set_position(tauri::LogicalPosition::new(place.x, place.y));
     } else {
         let _ = window.set_size(tauri::PhysicalSize::new(place.width as u32, place.height as u32));
-        let _ = window.set_position(tauri::PhysicalPosition::new(place.x as i32, place.y as i32));
+    }
+}
+
+/// Move the window's top left corner there. (Physical pixels on macOS would
+/// be read with the scale of the screen the window is on now, not the one
+/// it goes to: on the way from a Retina screen to another they halve.)
+pub(crate) fn move_to(window: &WebviewWindow, x: f64, y: f64) {
+    if cfg!(target_os = "macos") {
+        let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+    } else {
+        let _ = window.set_position(tauri::PhysicalPosition::new(x.round() as i32, y.round() as i32));
     }
 }
 
@@ -80,6 +99,11 @@ fn read(window: &WebviewWindow) -> Option<Place> {
     if window.is_minimized().unwrap_or(false) || window.is_fullscreen().unwrap_or(false) {
         return None;
     }
+    here(window)
+}
+
+/// Where the window is now and how big.
+pub(crate) fn here(window: &WebviewWindow) -> Option<Place> {
     let pos = window.outer_position().ok()?;
     let size = window.inner_size().ok()?;
     if cfg!(target_os = "macos") {
@@ -98,19 +122,46 @@ fn read(window: &WebviewWindow) -> Option<Place> {
 }
 
 /// A monitor's rectangle in the same units as `Place`.
-fn screen(m: &Monitor) -> Place {
+pub(crate) fn screen(m: &Monitor) -> Place {
+    shared(m, *m.position(), *m.size())
+}
+
+/// The part of a monitor windows go in (without the menu bar, the Dock or
+/// the taskbar), in the same units as `Place`.
+pub(crate) fn work_area(m: &Monitor) -> Place {
+    let area = m.work_area();
+    shared(m, area.position, area.size)
+}
+
+/// Each monitor gives its pixels in its own scale; on macOS only its points
+/// line up with the other screens'.
+fn shared(m: &Monitor, pos: PhysicalPosition<i32>, size: PhysicalSize<u32>) -> Place {
     if cfg!(target_os = "macos") {
-        let pos = m.position().to_logical::<f64>(m.scale_factor());
-        let size = m.size().to_logical::<f64>(m.scale_factor());
+        let pos = pos.to_logical::<f64>(m.scale_factor());
+        let size = size.to_logical::<f64>(m.scale_factor());
         Place { x: pos.x, y: pos.y, width: size.width, height: size.height }
     } else {
-        Place {
-            x: m.position().x as f64,
-            y: m.position().y as f64,
-            width: m.size().width as f64,
-            height: m.size().height as f64,
-        }
+        Place { x: pos.x as f64, y: pos.y as f64, width: size.width as f64, height: size.height as f64 }
     }
+}
+
+/// The mouse, in the same units as `Place`. (On macOS tao gives its points
+/// times the main screen's scale.)
+pub(crate) fn cursor(window: &WebviewWindow) -> Option<(f64, f64)> {
+    let at = window.cursor_position().ok()?;
+    if cfg!(target_os = "macos") {
+        let scale = window.primary_monitor().ok().flatten()?.scale_factor();
+        Some((at.x / scale, at.y / scale))
+    } else {
+        Some((at.x, at.y))
+    }
+}
+
+/// The first of `screens` the point is on.
+pub(crate) fn under(screens: &[Place], (x, y): (f64, f64)) -> Option<usize> {
+    screens
+        .iter()
+        .position(|s| x >= s.x && x < s.x + s.width && y >= s.y && y < s.y + s.height)
 }
 
 /// Enough of the window's top edge is on some screen to grab it there.
@@ -151,6 +202,19 @@ mod tests {
         assert!(!on_a_screen(&Place { y: -100.0, ..on_monitor }, &[LAPTOP]));
         assert!(!on_a_screen(&Place { x: 1490.0, y: 100.0, ..on_monitor }, &[LAPTOP]));
         assert!(!on_a_screen(&Place { width: 10.0, ..on_monitor }, &screens));
+    }
+
+    #[test]
+    fn finds_the_screen_under_the_mouse() {
+        // A Retina laptop with a non-Retina monitor to its right, reaching
+        // above it.
+        let right = Place { x: 1512.0, y: -303.0, width: 2560.0, height: 1440.0 };
+        let screens = [LAPTOP, right];
+        assert_eq!(under(&screens, (1000.0, 500.0)), Some(0));
+        assert_eq!(under(&screens, (1512.0, -100.0)), Some(1));
+        assert_eq!(under(&screens, (4000.0, 1100.0)), Some(1));
+        // Under the laptop, where the monitor does not reach.
+        assert_eq!(under(&screens, (1000.0, 1000.0)), None);
     }
 
     #[test]
