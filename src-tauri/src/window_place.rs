@@ -39,12 +39,30 @@ pub fn restore(window: &WebviewWindow, file: &Path) {
     if !on_a_screen(&place, &screens) {
         return;
     }
+    put(window, place);
+}
+
+/// Move the window there and give it this size, in that order: a resize
+/// still on the way from a screen with another scale reaches the page after
+/// the move, read with the new scale, and leaves it half (or twice) the
+/// window. The top left corner stays where it was put.
+pub(crate) fn put(window: &WebviewWindow, place: Place) {
+    move_to(window, place.x, place.y);
     if cfg!(target_os = "macos") {
         let _ = window.set_size(tauri::LogicalSize::new(place.width, place.height));
-        let _ = window.set_position(tauri::LogicalPosition::new(place.x, place.y));
     } else {
         let _ = window.set_size(tauri::PhysicalSize::new(place.width as u32, place.height as u32));
-        let _ = window.set_position(tauri::PhysicalPosition::new(place.x as i32, place.y as i32));
+    }
+}
+
+/// Move the window's top left corner there. (Physical pixels on macOS would
+/// be read with the scale of the screen the window is on now, not the one
+/// it goes to: on the way from a Retina screen to another they halve.)
+pub(crate) fn move_to(window: &WebviewWindow, x: f64, y: f64) {
+    if cfg!(target_os = "macos") {
+        let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+    } else {
+        let _ = window.set_position(tauri::PhysicalPosition::new(x.round() as i32, y.round() as i32));
     }
 }
 

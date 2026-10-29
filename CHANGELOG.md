@@ -1,5 +1,11 @@
 # Zmiany
 
+## Niewydane
+
+- **Strona wypełnia okno od startu, także przy dwóch ekranach.** Gdy desk ruszał na monitorze bez
+  Retiny, a zapamiętane okno leżało na Retinie (albo odwrotnie), strona zajmowała połowę okna
+  (albo wychodziła poza nie) aż do pierwszej zmiany rozmiaru.
+
 ## 0.1.17 (2026-10-28)
 
 - **desk po angielsku.** Opcje → Ogólne → Język przełącza interfejs między polskim a angielskim od
