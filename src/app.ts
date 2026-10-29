@@ -26,7 +26,7 @@ import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
 import { keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
 import { DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
 import { repoName } from "./github";
-import { Settings } from "./settings";
+import { Settings, type SettingsContext } from "./settings";
 import { applyTheme, terminalTheme, themeById } from "./themes";
 import {
   DEFAULT_FONT_SIZE,
@@ -164,22 +164,7 @@ export class App {
         this.save();
         void this.side.browserChanged();
       },
-      setDropdown: async (change) => {
-        const before = this.layout.dropdownHotkey;
-        Object.assign(this.layout, change);
-        // Rust reads the dropdown options from the file.
-        clearTimeout(this.saveTimer);
-        await this.persist();
-        await api.dropdownApply().catch(async (err) => {
-          toast(`Dropdown: ${err}`, 8000);
-          if (change.dropdownHotkey === undefined) return;
-          // Taken by another app: keep the one that works.
-          this.layout.dropdownHotkey = before;
-          await this.persist();
-          await api.dropdownApply().catch(() => {});
-        });
-        this.renderChrome();
-      },
+      setDropdown: (change) => this.setDropdown(change),
       setKey: (id, accelerator) => {
         const keys = { ...this.layout.keys };
         if (accelerator) keys[id] = accelerator;
@@ -247,6 +232,12 @@ export class App {
       this.layout.dropdownHeight = e.payload;
       this.save();
       if (this.settings.isOpen) this.settings.render();
+    });
+    this.footer.addEventListener("click", (e) => {
+      if (!(e.target as HTMLElement).closest("[data-pin]")) return;
+      void this.setDropdown({ dropdownAutohide: !this.layout.dropdownAutohide }).then(() => {
+        if (this.settings.isOpen) this.settings.render();
+      });
     });
     this.top.addEventListener("click", (e) => {
       const a = (e.target as HTMLElement).closest<HTMLElement>("[data-coffee]")?.dataset.coffee;
@@ -982,6 +973,32 @@ export class App {
     }
   }
 
+  private async setDropdown(change: Parameters<SettingsContext["setDropdown"]>[0]): Promise<void> {
+    const before = this.layout.dropdownHotkey;
+    Object.assign(this.layout, change);
+    // Rust reads the dropdown options from the file.
+    clearTimeout(this.saveTimer);
+    await this.persist();
+    await api.dropdownApply().catch(async (err) => {
+      toast(`Dropdown: ${err}`, 8000);
+      if (change.dropdownHotkey === undefined) return;
+      // Taken by another app: keep the one that works.
+      this.layout.dropdownHotkey = before;
+      await this.persist();
+      await api.dropdownApply().catch(() => {});
+    });
+    this.renderChrome();
+  }
+
+  /** The padlock in the bottom bar: the dropdown stays down when another app takes the focus. */
+  private pinHtml(): string {
+    if (!this.layout.dropdown) return "";
+    const pinned = !this.layout.dropdownAutohide;
+    // An open shackle while it hides, a closed one while it stays.
+    const shackle = pinned ? "M8 11V7a4 4 0 0 1 8 0v4" : "M8 11V7a4 4 0 0 1 7.75-1.4";
+    return `<button class="pin${pinned ? " on" : ""}" data-pin title="${t(pinned ? "bottom.pinnedTitle" : "bottom.pinTitle")}" aria-pressed="${pinned}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="${shackle}"/></svg></button>`;
+  }
+
   private renderChrome(): void {
     this.renderStrip();
     const states = [...this.tiles.values()].map((t) => t.state);
@@ -1004,7 +1021,7 @@ export class App {
     this.footer.innerHTML =
       `<span class="hints">${hints()
         .map(([k, label]) => `<span><kbd>${k}</kbd> ${escapeHtml(label)}</span>`)
-        .join("")}</span><span class="counts"><b>${this.tiles.size}</b> sessions · <span class="c-working">${count("working")} working</span> · <span class="c-waiting">${waiting} waiting</span> · ${count("idle")} idle</span>`;
+        .join("")}</span><span class="counts"><b>${this.tiles.size}</b> sessions · <span class="c-working">${count("working")} working</span> · <span class="c-waiting">${waiting} waiting</span> · ${count("idle")} idle</span>${this.pinHtml()}`;
   }
 
   // ---- updates -----------------------------------------------------------

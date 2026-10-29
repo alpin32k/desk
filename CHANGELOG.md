@@ -8,6 +8,10 @@
 - **Strona wypełnia okno od startu, także przy dwóch ekranach.** Gdy desk ruszał na monitorze bez
   Retiny, a zapamiętane okno leżało na Retinie (albo odwrotnie), strona zajmowała połowę okna
   (albo wychodziła poza nie) aż do pierwszej zmiany rozmiaru.
+- **Kłódka w stopce trzyma dropdown na ekranie.** Za licznikami sesji jest mała kłódka: zamknięta
+  zostawia dropdown, gdy klikniesz inną aplikację, otwarta chowa go jak dotąd. To ta sama opcja co
+  „Chowaj, gdy klikniesz inną aplikację” w Opcje → Dropdown. Kłódka jest tylko przy włączonym
+  dropdownie.
 
 ## 0.1.17 (2026-10-28)
 

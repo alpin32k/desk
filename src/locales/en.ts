@@ -117,6 +117,8 @@ export const en: Messages = {
   "top.waiting": "{n} waiting",
   "top.browser": "🌐 browser",
   "top.browserTitle": "Browser in the side panel ({keys}); ↗ opens the page in Brave or Chrome",
+  "bottom.pinTitle": "The dropdown hides when you click another app; click to keep it down",
+  "bottom.pinnedTitle": "The dropdown stays down when you click another app; click to let it hide",
   "usage.limit": "{agent} plan limit",
   "usage.window": "{label}: {percent}%, resets in {time}",
 
