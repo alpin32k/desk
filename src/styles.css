@@ -623,6 +623,30 @@ button:hover {
   color: var(--fg);
 }
 
+.bottom .pin {
+  flex-shrink: 0;
+  display: flex;
+  margin-left: -6px;
+  padding: 2px;
+  background: none;
+  border: 0;
+  color: var(--dim);
+  cursor: pointer;
+}
+
+.bottom .pin svg {
+  width: 12px;
+  height: 12px;
+}
+
+.bottom .pin:hover {
+  color: var(--fg);
+}
+
+.bottom .pin.on {
+  color: var(--accent);
+}
+
 .c-working {
   color: var(--working);
 }

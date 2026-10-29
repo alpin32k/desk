@@ -1,5 +1,12 @@
 # Zmiany
 
+## Niewydane
+
+- **Kłódka w stopce trzyma dropdown na ekranie.** Za licznikami sesji jest mała kłódka: zamknięta
+  zostawia dropdown, gdy klikniesz inną aplikację, otwarta chowa go jak dotąd. To ta sama opcja co
+  „Chowaj, gdy klikniesz inną aplikację” w Opcje → Dropdown. Kłódka jest tylko przy włączonym
+  dropdownie.
+
 ## 0.1.17 (2026-10-28)
 
 - **desk po angielsku.** Opcje → Ogólne → Język przełącza interfejs między polskim a angielskim od

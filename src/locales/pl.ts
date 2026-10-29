@@ -116,6 +116,8 @@ export const pl = {
   "top.waiting": "{n} czeka",
   "top.browser": "🌐 przeglądarka",
   "top.browserTitle": "Przeglądarka w panelu obok ({keys}); ↗ otwiera stronę w Brave albo Chrome",
+  "bottom.pinTitle": "Dropdown chowa się, gdy klikniesz inną aplikację; kliknij, żeby został",
+  "bottom.pinnedTitle": "Dropdown zostaje, gdy klikniesz inną aplikację; kliknij, żeby się chował",
   "usage.limit": "Limit planu {agent}",
   "usage.window": "{label}: {percent}%, reset za {time}",
 
