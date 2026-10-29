@@ -123,6 +123,7 @@ export const en: Messages = {
   "usage.window": "{label}: {percent}%, resets in {time}",
 
   // app
+  "app.dropUnsupported": "Files cannot be dropped here: paste the path instead",
   "app.pickSessionFirst": "First pick the session to add the path to",
   "app.pickTileFirst": "First pick a project tile",
   "app.noTmux": "No tmux: sessions will close together with desk. Install it ({install}) and start desk again.",

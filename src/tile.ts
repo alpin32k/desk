@@ -332,6 +332,12 @@ export class Tile {
     this.focus();
   }
 
+  /** Paste `text` into the session (bracketed, as ⌘V does) and focus it. */
+  paste(text: string): void {
+    this.term.paste(text);
+    this.focus();
+  }
+
   setTheme(t: ITheme): void {
     this.term.options.theme = t;
   }

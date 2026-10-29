@@ -12,6 +12,10 @@
   zostawia dropdown, gdy klikniesz inną aplikację, otwarta chowa go jak dotąd. To ta sama opcja co
   „Chowaj, gdy klikniesz inną aplikację” w Opcje → Dropdown. Kłódka jest tylko przy włączonym
   dropdownie.
+- **Przeciągnięty plik trafia do sesji.** Obrazek albo plik upuszczony na kafelek wpisuje się jako
+  ścieżka (jak w Terminalu i iTermie), więc Claude Code bierze obrazek jako załącznik. Wcześniej
+  upuszczony plik zastępował całe okno desk i trzeba było zabić aplikację; upuszczenie poza
+  kafelkiem nic teraz nie robi.
 
 ## 0.1.17 (2026-10-28)
 

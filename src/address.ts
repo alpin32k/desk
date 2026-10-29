@@ -32,3 +32,15 @@ export function mention(project: string | null, path: string): string {
   if (project && (path === project || path.startsWith(project + sep))) rel = path.slice(project.length + 1) || ".";
   return /\s/.test(rel) ? `@"${rel}" ` : `@${rel} `;
 }
+
+/**
+ * Files dropped on a terminal, typed the way Terminal and iTerm type them: each
+ * path with its shell characters escaped, so Claude Code takes an image as an
+ * attachment and a shell takes the path as one word. "" when a name has a
+ * control character, which could end the line.
+ */
+export function dropped(paths: string[]): string {
+  // eslint-disable-next-line no-control-regex
+  if (!paths.length || paths.some((p) => /[\x00-\x1f\x7f]/.test(p))) return "";
+  return paths.map((p) => p.replace(/[ !"#$&'()*;<>?[\\\]^`{|}~]/g, "\\$&")).join(" ") + " ";
+}
