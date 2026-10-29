@@ -2,6 +2,9 @@
 
 ## Niewydane
 
+- **Dropdown na właściwym ekranie przy Retinie obok zwykłego monitora.** ⌘` wysuwa go na ekranie
+  pod myszą, na całą szerokość, zamiast okrakiem między ekranami. Animacja nie skacze w połowie,
+  a „▭ okno” wraca dokładnie tam, gdzie okno było.
 - **Strona wypełnia okno od startu, także przy dwóch ekranach.** Gdy desk ruszał na monitorze bez
   Retiny, a zapamiętane okno leżało na Retinie (albo odwrotnie), strona zajmowała połowę okna
   (albo wychodziła poza nie) aż do pierwszej zmiany rozmiaru.
