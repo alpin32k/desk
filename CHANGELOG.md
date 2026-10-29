@@ -1,6 +1,6 @@
 # Zmiany
 
-## Niewydane
+## 0.1.18 (2026-10-29)
 
 - **Dropdown na właściwym ekranie przy Retinie obok zwykłego monitora.** ⌘` wysuwa go na ekranie
   pod myszą, na całą szerokość, zamiast okrakiem między ekranami. Animacja nie skacze w połowie,
