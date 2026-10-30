@@ -114,7 +114,7 @@ export const pl = {
   "top.hide": "chowa",
   "top.hideTitle": "Skrót zmienisz w Opcje → Skróty",
   "top.waiting": "{n} czeka",
-  "top.browser": "🌐 przeglądarka",
+  "top.browser": "🌐",
   "top.quitTitle": "Zamknij desk{keys}",
   "top.quitConfirm": "Zamknąć desk? {sessions}",
   "top.quit": "Zamknij",

@@ -115,7 +115,7 @@ export const en: Messages = {
   "top.hide": "hides",
   "top.hideTitle": "Change the shortcut in Options → Shortcuts",
   "top.waiting": "{n} waiting",
-  "top.browser": "🌐 browser",
+  "top.browser": "🌐",
   "top.quitTitle": "Quit desk{keys}",
   "top.quitConfirm": "Quit desk? {sessions}",
   "top.quit": "Quit",

@@ -64,7 +64,7 @@ w przeglądarce. Klikalne są też ścieżki względne, np. `docs/plan.md`, licz
   tabelę oraz kod i tekst.
 - **Edytuje** kod i tekst od razu, z kolorowaniem składni w kolorach motywu. Markdown, diagramy
   i tabele startują jako podgląd, a ✎ przełącza je na edytor. ⌘S zapisuje, ⌘Z / ⌘⇧Z cofa i ponawia.
-- **Pasek adresu** działa jak w przeglądarce: wstecz, odśwież, wpisany adres albo ścieżka. „🌐 przeglądarka”
+- **Pasek adresu** działa jak w przeglądarce: wstecz, odśwież, wpisany adres albo ścieżka. 🌐
   u góry otwiera panel od razu z paskiem.
 - **Strony poza desk:** ↗ otwiera stronę w Brave, a gdy go nie ma w Chrome (do zmiany w Opcjach,
   także na przeglądarkę systemową), a plik w jego domyślnym programie. Panel nie ma rozszerzeń, więc
