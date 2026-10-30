@@ -156,11 +156,11 @@ Zmieniają okno i terminale od razu.
 | ⌘B | blokada | ⌘C / ⌘V | kopiuj zaznaczenie / wklej |
 | ⌘` | dropdown z góry ekranu | | |
 | ⌘O | opcje | | |
-| ⏻ | zamknij desk (z potwierdzeniem; skrót przypiszesz w Opcjach) | | |
+| ⏻ | zamknij desk z dropdownu (z potwierdzeniem; skrót przypiszesz w Opcjach) | | |
 
 W palecie: ↵ otwiera, ⌘↵ włącza lub wyłącza autostart, ⌘⌫ zabija sesję, Tab wybiera agenta.
-Zwykłe Esc trafia do terminala, więc dalej przerywa Claude. desk zamyka się przyciskiem ⏻ na górnym pasku albo z menu (desk › Quit desk),
-a ⌘⇧Q przejmuje, zanim zrobi to macOS, więc skrót nie wylogowuje z systemu.
+Zwykłe Esc trafia do terminala, więc dalej przerywa Claude. desk zamyka się z menu (desk › Quit desk), a w dropdownie przyciskiem ⏻ na górnym pasku.
+⌘⇧Q desk przejmuje, zanim zrobi to macOS, więc skrót nie wylogowuje z systemu.
 
 Wszystkie poza ⌘1–9, kopiuj / wklej, klawiszami palety i ⌘S w edytorze zmienisz w Opcje → Skróty.
 Na Windows i Linuksie ⌘ to Ctrl⇧ (Ctrl⇧P, Ctrl⇧D...), a zabicie sesji to Ctrl⇧⌫.

@@ -11,7 +11,7 @@
   przywracają wcześniejsze. Sesja, która dalej działa w tmux, podpina się jak
   przed zamknięciem, a ta, która się skończyła, startuje od nowa (Claude z tą samą rozmową). Sesje
   zabite przez ⌘⇧Q nie wracają. Skrót zmienisz w Opcje → Skróty.
-- **⏻ zamyka desk.** Przycisk na końcu górnego paska pyta, czy zamknąć desk, i mówi, co stanie się
+- **⏻ zamyka desk.** Przycisk na końcu górnego paska w dropdownie pyta, czy zamknąć desk, i mówi, co stanie się
   z sesjami. Do tej pory desk zamykał się tylko z menu, którego nie ma w dropdownie, a ⌘Q zamyka
   kafelek. Skrót do zamykania przypiszesz w Opcje → Skróty („zamknij desk”); domyślnie go nie ma.
 

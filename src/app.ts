@@ -1129,8 +1129,9 @@ export class App {
         .join("")}</span><span class="counts"><b>${this.tiles.size}</b> sessions · <span class="c-working">${count("working")} working</span> · <span class="c-waiting">${waiting} waiting</span> · ${count("idle")} idle</span>${this.pinHtml()}`;
   }
 
-  /** ⏻ at the end of the top bar: desk has no other way out while docked, and ⌘Q closes a tile. */
+  /** ⏻ at the end of the top bar while docked: the dropdown has no menu, and ⌘Q closes a tile. */
   private quitHtml(): string {
+    if (!this.docked) return "";
     const keys = keyText("quit");
     return `<button class="top-btn quit" data-top="quit" title="${escapeHtml(t("top.quitTitle", { keys: keys ? ` (${keys})` : "" }))}">⏻</button>`;
   }
