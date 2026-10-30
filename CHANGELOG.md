@@ -1,5 +1,22 @@
 # Zmiany
 
+## Niewydane
+
+- **Ramki stoją tam, gdzie je postawisz.** Przeciągnięta ramka projektu nie wraca już na stare
+  miejsce przy następnym odświeżeniu, a druga sesja (⌘D) ani zmiana rozmiaru okna nie przenoszą
+  ramek do innych kolumn. Nowy projekt trafia w wolne miejsce: do własnej kolumny, gdy się mieści,
+  inaczej do najluźniejszej. Upuszczenie ramki przy lewym albo prawym brzegu kolumny tworzy nową
+  kolumnę.
+- **Rozmiary zmieniasz myszą.** Linie między kolumnami, ramkami i sesjami da się przeciągać,
+  a dwuklik dzieli miejsce po równo. desk pamięta te rozmiary. Terminal i polecenie z ⌘U startują
+  mniejsze niż agent, a nowa sesja bierze miejsce tylko ze swojej ramki.
+- **Sesje projektu pod sobą, obok siebie albo w zakładkach.** Trzy ikony w nagłówku ramki zmieniają
+  układ. Za niska ramka sama pokazuje sesje jako zakładki („za ciasno”). Przeciągnięty nagłówek
+  sesji zmienia jej miejsce w ramce, a ⌘1–9 idą za nową kolejnością.
+- **⌘L układa wszystko od nowa**, jednorazowo, według okna i liczby sesji (Opcje → Skróty). Opcja
+  „Układ automatyczny” nazywa się teraz „Nowe projekty w wolne miejsce”. Bez niej liczba kolumn
+  jest stała, jak dotąd. Nagłówki „LANE 1” zniknęły.
+
 ## 0.1.18 (2026-10-29)
 
 - **Dropdown na właściwym ekranie przy Retinie obok zwykłego monitora.** ⌘` wysuwa go na ekranie

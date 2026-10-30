@@ -9,10 +9,15 @@ import {
   groups,
   move,
   moveGroup,
+  moveGroupToNewLane,
+  moveInGroup,
+  place,
+  prune,
   remove,
   restore,
   setLaneCount,
   shortestLane,
+  split,
 } from "./lanes";
 
 // Session keys as in sessions.ts: "/a" is the main session, "codex#0:/a" another one of /a.
@@ -107,5 +112,46 @@ describe("lanes", () => {
     const lanes = [["/a", "claude#1:/a", "/b"], ["/c"], [], []];
     expect(autoLanes(lanes, of, 2000, 1100)).toEqual([["/a", "claude#1:/a"], ["/b"], ["/c"]]);
     expect(autoLanes([[], []], of, 2000, 1100)).toEqual([[]]);
+  });
+
+  it("places a new project in an empty lane, then a new one while there is room", () => {
+    expect(place([[]], "/a", of, 3)).toEqual([["/a"]]);
+    expect(place([["/a"]], "/b", of, 3)).toEqual([["/a"], ["/b"]]);
+    expect(place([["/a"], ["/b"], ["/c"]], "/d", of, 3)).toEqual([["/a", "/d"], ["/b"], ["/c"]]);
+    expect(place([["/a", "/b"], ["/c"]], "/d", of, 2)).toEqual([["/a", "/b"], ["/c", "/d"]]);
+  });
+
+  it("places another session of a project in its card, wherever there is room", () => {
+    const l = [["/a"], ["/b"]];
+    expect(place(l, "claude#1:/b", of, 6)).toEqual([["/a"], ["/b", "claude#1:/b"]]);
+    expect(place(l, "/a", of, 6)).toBe(l);
+  });
+
+  it("moves a project card to a new lane", () => {
+    const l = [["/a", "claude#1:/a", "/b"], ["/c"]];
+    expect(moveGroupToNewLane(l, "/a", of, 0)).toEqual([["/a", "claude#1:/a"], ["/b"], ["/c"]]);
+    expect(moveGroupToNewLane(l, "/b", of, 2)).toEqual([["/a", "claude#1:/a"], ["/c"], ["/b"]]);
+    expect(moveGroupToNewLane(l, "/c", of, 1)).toEqual([["/a", "claude#1:/a", "/b"], ["/c"], []]);
+    expect(moveGroupToNewLane(l, "/x", of, 0)).toBe(l);
+  });
+
+  it("reorders sessions inside their card only", () => {
+    const l = [["/b", "/a", "claude#1:/a", "shell#0:/a"], ["/c"]];
+    expect(moveInGroup(l, "shell#0:/a", of, 0)).toEqual([["/b", "shell#0:/a", "/a", "claude#1:/a"], ["/c"]]);
+    expect(moveInGroup(l, "/a", of, 2)).toEqual([["/b", "claude#1:/a", "shell#0:/a", "/a"], ["/c"]]);
+    expect(moveInGroup(l, "/a", of, 99)).toEqual([["/b", "claude#1:/a", "shell#0:/a", "/a"], ["/c"]]);
+    expect(moveInGroup(l, "/x", of, 0)).toBe(l);
+  });
+
+  it("drops empty lanes together with their widths", () => {
+    expect(prune([["/a"], [], ["/b"]], [2, 1, 3])).toEqual({ lanes: [["/a"], ["/b"]], widths: [2, 3] });
+    expect(prune([[], []], [1, 1])).toEqual({ lanes: [[]], widths: [1] });
+    expect(prune([["/a"]], [])).toEqual({ lanes: [["/a"]], widths: [1] });
+  });
+
+  it("splits two neighbours' weight by where the line was dragged", () => {
+    expect(split(2, 100, 100, 50, 10)).toEqual([1.5, 0.5]);
+    expect(split(2, 100, 100, -500, 10)).toEqual([0.1, 1.9]); // neither side below the minimum
+    expect(split(3, 300, 0, 0, 0)).toEqual([3, 0]);
   });
 });

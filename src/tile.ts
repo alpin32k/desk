@@ -123,7 +123,7 @@ export class Tile {
     this.el.className = "tile state-starting";
     this.el.dataset.key = this.key;
     this.el.innerHTML = `
-      <header draggable="true">
+      <header>
         <span class="dot" data-a="color"></span>
         <span class="badge"></span>
         <span class="title"></span>
@@ -147,12 +147,6 @@ export class Tile {
     this.setTitles();
 
     const header = this.el.querySelector("header")!;
-    header.addEventListener("dragstart", (e) => {
-      e.dataTransfer?.setData("text/x-desk-key", this.key);
-      e.dataTransfer!.effectAllowed = "move";
-      this.el.classList.add("dragging");
-    });
-    header.addEventListener("dragend", () => this.el.classList.remove("dragging"));
     header.addEventListener("dblclick", () => this.onAction(this, "fullscreen"));
     header.addEventListener("click", (e) => {
       if (this.renaming) return;
@@ -424,7 +418,7 @@ export class Tile {
   }
 
   queueFit(): void {
-    if (this.fitQueued) return;
+    if (this.fitQueued || fitsHeld) return;
     this.fitQueued = true;
     requestAnimationFrame(() => {
       this.fitQueued = false;
@@ -484,21 +478,18 @@ export class Tile {
   rename(): void {
     if (this.renaming) return;
     this.renaming = true;
-    const header = this.el.querySelector("header")!;
-    header.draggable = false;
     const input = document.createElement("input");
     input.className = "rename";
     input.spellcheck = false;
     input.placeholder = t("tile.namePlaceholder");
     input.value = this.customName ?? "";
     // Selecting text in the field must not start fullscreen or a drag.
-    for (const type of ["click", "dblclick", "mousedown"]) input.addEventListener(type, (e) => e.stopPropagation());
+    for (const type of ["click", "dblclick", "mousedown", "pointerdown"]) input.addEventListener(type, (e) => e.stopPropagation());
     let done = false;
     const finish = (save: boolean) => {
       if (done) return;
       done = true;
       this.renaming = false;
-      header.draggable = true;
       if (save) this.onRename(input.value.trim());
       this.render();
       this.focus();
@@ -531,6 +522,16 @@ export class Tile {
     this.term.dispose();
     this.el.remove();
   }
+}
+
+let fitsHeld = false;
+
+/**
+ * While a line between tiles is dragged, terminals keep their size: one
+ * resize for tmux when it is let go (App fits them all again), not one a frame.
+ */
+export function holdFits(on: boolean): void {
+  fitsHeld = on;
 }
 
 export function escapeHtml(s: string): string {

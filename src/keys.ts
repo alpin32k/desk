@@ -22,6 +22,7 @@ export type Action =
   | { type: "focus"; index: number }
   | { type: "fullscreen" }
   | { type: "minimize" }
+  | { type: "arrange" }
   | { type: "exitFullscreen" }
   | { type: "settings" }
   | { type: "preview" }
@@ -65,6 +66,7 @@ export const BINDINGS: Binding[] = [
   { id: "fullscreen", group: "tiles", action: { type: "fullscreen" }, mac: ["Super+KeyE", "Super+Enter"] },
   { id: "exitFullscreen", group: "tiles", action: { type: "exitFullscreen" }, mac: ["Super+Escape"], other: [] }, // Ctrl+Shift+Esc is the Task Manager
   { id: "minimize", group: "tiles", action: { type: "minimize" }, mac: ["Super+KeyJ"] },
+  { id: "arrange", group: "tiles", action: { type: "arrange" }, mac: ["Super+KeyL"] },
   { id: "close", group: "tiles", action: { type: "close" }, mac: ["Super+KeyQ"] },
   { id: "kill", group: "tiles", action: { type: "kill" }, mac: ["Super+Shift+KeyQ"], other: ["Control+Shift+Backspace"] },
   { id: "fontUp", group: "terminal", action: { type: "font", step: 1 }, mac: ["Super+Equal"] },

@@ -10,6 +10,9 @@ export interface Project {
   claudeSessions: number;
 }
 
+/** Sessions of a card one under another, side by side, or one at a time. */
+export type CardMode = "stack" | "row" | "tabs";
+
 export interface Layout {
   version: number;
   lanes: string[][];
@@ -23,8 +26,18 @@ export interface Layout {
   runs: Record<string, string>;
   /** Card of a session opened inside another project's card (⌘R conversations), by key. */
   cards: Record<string, string>;
-  /** Columns follow what is open and the window size. */
+  /** desk places new projects (a lane of their own while there is room) and drops empty lanes. */
   autoLayout: boolean;
+  /** Width of each lane, as a weight (index = lane). */
+  widths: number[];
+  /** Height of a project's card in its lane, as a weight, by card. */
+  heights: Record<string, number>;
+  /** Room of a session in its card, as a weight, by session key. */
+  sizes: Record<string, number>;
+  /** How a card shows its sessions, by card: "row" side by side, "tabs" one at a time. */
+  modes: Record<string, CardMode>;
+  /** The session a card in tabs shows, by card. */
+  tabs: Record<string, string>;
   /** Color theme id (themes.ts). */
   theme: string;
   /** Web pages outside desk: "auto" (Brave, then Chrome), "brave", "chrome", "system". */

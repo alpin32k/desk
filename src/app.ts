@@ -1,4 +1,4 @@
-// Main controller: lanes of tiles, shortcuts, session state, persistence.
+// Main controller: lanes of project cards, shortcuts, session state, persistence.
 import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -6,6 +6,7 @@ import { isPermissionGranted, requestPermission, sendNotification } from "@tauri
 import {
   api,
   type AgentInfo,
+  type CardMode,
   type CoffeeLevel,
   type CoffeeStatus,
   type GithubRepo,
@@ -21,6 +22,7 @@ import { actionFor, hints, keysIn, setCustomKeys, type Action } from "./keys";
 import { PLATFORM, shortcut } from "./platform";
 import { Side } from "./side";
 import * as L from "./lanes";
+import { label, mark, sizable, splitLine, watchDrag, type Box } from "./drag";
 import { Palette } from "./palette";
 import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
 import { keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
@@ -46,6 +48,13 @@ const POLL_MS = 3000;
 const UPDATE_CHECK_MS = 24 * 60 * 60 * 1000;
 const UPDATE_KEY = "desk.updateCheckedAt";
 const USAGE_MS = 30_000;
+/** Room of a shell or ⌘U command in its card, next to an agent's 1. */
+const AUX_SIZE = 0.4;
+/** A card one under another shows its sessions as tabs below this height per session (px). */
+const TIGHT_PX = 100;
+/** Within this distance of a lane's side, a dragged card makes a new lane (px). */
+const EDGE_PX = 40;
+const MAX_LANES = 8;
 
 export class App {
   private layout!: Layout;
@@ -65,6 +74,9 @@ export class App {
   private githubRepos: { at: number; list: Promise<GithubRepo[]> } | null = null;
   /** One card per project in the grid; its sessions' tiles sit inside. */
   private cards = new Map<string, HTMLElement>();
+  private laneEls: HTMLElement[] = [];
+  /** Cards showing one session at a time now: set to tabs, or too low for their sessions. */
+  private tabbed = new Map<string, string[]>();
   /** Folder of ⌘R conversations (they run there, but sit in a project's card). */
   private chatPath = "";
   /** The card a session belongs to: its project, or for a conversation the card it was opened in. */
@@ -275,6 +287,11 @@ export class App {
       // Conversations used to sit in the active project's card: back to their own.
       cards: Object.fromEntries(Object.entries(boot.layout.cards ?? {}).filter(([k]) => parseKey(k).path !== this.chatPath)),
       autoLayout: boot.layout.autoLayout ?? true,
+      widths: boot.layout.widths ?? [],
+      heights: boot.layout.heights ?? {},
+      sizes: boot.layout.sizes ?? {},
+      modes: boot.layout.modes ?? {},
+      tabs: boot.layout.tabs ?? {},
       theme: boot.layout.theme ?? "desk",
       browser: boot.layout.browser ?? "auto",
       fontSize: boot.layout.fontSize || DEFAULT_FONT_SIZE,
@@ -318,9 +335,9 @@ export class App {
     let resizeTimer: number | undefined;
     window.addEventListener("resize", () => {
       this.fitAll();
-      // Columns follow the window: re-lay out once resizing settles.
+      // Cards too low for their sessions turn to tabs: look again once resizing settles.
       clearTimeout(resizeTimer);
-      if (this.layout.autoLayout) resizeTimer = window.setTimeout(() => this.render(), 120);
+      resizeTimer = window.setTimeout(() => this.render(), 120);
     });
 
     // Reattach every tile from the saved layout (starting sessions tmux lost) and the autostart ones.
@@ -359,6 +376,9 @@ export class App {
       tile.detail = this.layout.runs[key] ?? null;
       tile.setName(this.layout.titles[key] ?? null);
       tile.onRename = (name) => this.renameTile(key, name);
+      tile.el.querySelector("header")!.addEventListener("pointerdown", (e) => {
+        if (!(e.target as HTMLElement).closest("button, input")) this.dragTile(e, key);
+      });
       tile.chat = spec.path === this.chatPath;
       // One color per project (shared by its agents and sub-sessions), distinct from other projects.
       const taken = [...this.tiles.values()]
@@ -392,7 +412,7 @@ export class App {
     this.missing = this.missing.filter((m) => m.key !== key);
     const tile = await this.createTile(key);
     if (!tile) return;
-    this.layout.lanes = L.add(this.layout.lanes, key, this.projectOf);
+    this.place(key);
     this.render();
     try {
       await tile.start();
@@ -495,10 +515,12 @@ export class App {
     const slug = tile?.slug ?? (await api.listSessions()).find((s) => keyOf(s) === key)?.slug;
     if (slug) await api.killSession(slug).catch((err) => toast(String(err)));
     this.running.delete(key);
-    if (this.layout.runs[key] || this.layout.cards[key] || this.layout.titles[key] || this.layout.minimized.includes(key)) {
+    const forgotten = [this.layout.runs, this.layout.cards, this.layout.titles, this.layout.sizes].some((m) => key in m);
+    if (forgotten || this.layout.minimized.includes(key)) {
       delete this.layout.runs[key];
       delete this.layout.cards[key];
       delete this.layout.titles[key];
+      delete this.layout.sizes[key];
       this.layout.minimized = this.layout.minimized.filter((k) => k !== key);
       this.save();
     }
@@ -555,6 +577,13 @@ export class App {
   }
 
   private setActive(key: string, focus: boolean): void {
+    // A card showing one session at a time turns to this one.
+    const project = this.projectOf(key);
+    if (this.tabbed.has(project) && this.tabOf(project, this.tabbed.get(project)!) !== key) {
+      this.layout.tabs[project] = key;
+      this.save();
+      this.render();
+    }
     if (this.active !== key) {
       this.tiles.get(this.active ?? "")?.setActive(false);
       this.active = key;
@@ -635,54 +664,312 @@ export class App {
 
   private render(): void {
     const focus = this.focusMode();
-    this.layout.lanes =
-      this.layout.autoLayout && !focus
-        ? L.autoLanes(this.layout.lanes, this.projectOf, this.grid.clientWidth || window.innerWidth, this.grid.clientHeight || window.innerHeight)
-        : L.group(this.layout.lanes, this.projectOf);
+    this.layout.lanes = L.group(this.layout.lanes, this.projectOf);
+    if (this.layout.autoLayout && !focus) ({ lanes: this.layout.lanes, widths: this.layout.widths } = L.prune(this.layout.lanes, this.layout.widths));
+    this.layout.widths = this.layout.lanes.map((_, i) => (this.layout.widths[i] > 0 ? this.layout.widths[i] : 1));
+    L.flatten(this.layout.lanes).forEach((p, i) => this.tiles.get(p)?.update({ index: i + 1 }));
     const shown = focus ? this.active ?? L.flatten(this.layout.lanes).find((k) => this.tiles.has(k)) : undefined;
     const lanes = shown ? [[shown]] : this.layout.lanes;
     if (shown) for (const t of this.tiles.values()) if (t.key !== shown) t.el.remove();
-    while (this.grid.children.length > lanes.length) this.grid.lastElementChild!.remove();
-    while (this.grid.children.length < lanes.length) this.grid.appendChild(this.laneEl());
+    this.tabbed.clear();
+    const stacked: { card: HTMLElement; project: string; keys: string[]; open: number }[] = [];
+    const grid: HTMLElement[] = [];
     lanes.forEach((paths, i) => {
-      const lane = this.grid.children[i] as HTMLElement;
+      if (i > 0) grid.push(splitLine("v", () => this.changed()));
+      const lane = (this.laneEls[i] ??= this.laneEl());
       lane.dataset.lane = String(i);
-      lane.querySelector(".lane-head")!.innerHTML =
-        `LANE ${i + 1} <span class="dim">${paths.length || ""}</span>`;
+      if (shown) lane.style.flexGrow = "1";
+      else sizable(lane, { get: () => this.layout.widths[i], set: (w) => (this.layout.widths[i] = w) });
       const body = lane.querySelector<HTMLElement>(".lane-body")!;
+      const items: HTMLElement[] = [lane.querySelector<HTMLElement>(".hint")!];
       const open = paths.filter((p) => this.tiles.has(p));
-      // Order inside the lane: one card per project, its sessions top to bottom.
-      for (const keys of L.groups(open, this.projectOf)) {
-        const card = this.card(this.projectOf(keys[0]));
-        const cardBody = card.querySelector<HTMLElement>(".card-body")!;
-        let unfolded = 0;
-        for (const k of keys) {
-          const t = this.tiles.get(k)!;
-          cardBody.appendChild(t.el);
-          t.update({ grouped: keys.length > 1 });
-          // The one session in the middle (side panel open) always shows.
-          const folded = k !== shown && this.layout.minimized.includes(k);
-          t.setMinimized(folded);
-          if (!folded) unfolded++;
-        }
-        card.classList.toggle("multi", keys.length > 1);
-        // Folded tiles take only their header; a card of folded tiles too.
-        card.style.flex = unfolded ? `${unfolded} 1 0` : "none";
-        body.appendChild(card);
-      }
+      // Order inside the lane: one card per project, its sessions in their order.
+      L.groups(open, this.projectOf).forEach((keys, j) => {
+        if (j > 0) items.push(splitLine("h", () => this.changed()));
+        const project = this.projectOf(keys[0]);
+        const card = this.card(project);
+        const mode: CardMode = shown ? "stack" : (this.layout.modes[project] ?? "stack");
+        const unfolded = this.fillCard(card, project, keys, mode, shown);
+        if (mode === "stack" && unfolded > 1) stacked.push({ card, project, keys, open: unfolded });
+        items.push(card);
+      });
+      body.replaceChildren(...items);
       body.classList.toggle("empty", open.length === 0);
+      grid.push(lane);
     });
+    this.grid.replaceChildren(...grid);
     for (const [project, card] of this.cards) {
       if (!card.querySelector(".tile")) {
         card.remove();
         this.cards.delete(project);
       }
     }
-    L.flatten(this.layout.lanes).forEach((p, i) => this.tiles.get(p)?.update({ index: i + 1 }));
+    // Laid out: a card too low for its sessions one under another shows them as tabs.
+    for (const c of stacked) {
+      const height = c.card.querySelector(".card-body")!.getBoundingClientRect().height;
+      if (height / c.open < TIGHT_PX) this.showTabs(c.card, c.project, c.keys, true);
+    }
     this.renderRail(shown);
     this.renderCards();
     this.renderChrome();
     this.fitAll();
+  }
+
+  /** A card's tiles as its mode shows them; returns how many are unfolded. */
+  private fillCard(card: HTMLElement, project: string, keys: string[], mode: CardMode, shown?: string): number {
+    const multi = keys.length > 1;
+    const body = card.querySelector<HTMLElement>(".card-body")!;
+    const items: HTMLElement[] = [];
+    let unfolded = 0;
+    keys.forEach((k, i) => {
+      const t = this.tiles.get(k)!;
+      t.update({ grouped: multi });
+      t.el.classList.remove("tab-hidden");
+      // The one session in the middle (side panel open) always shows.
+      const folded = k !== shown && mode !== "tabs" && this.layout.minimized.includes(k);
+      t.setMinimized(folded);
+      if (i > 0 && mode !== "tabs") items.push(splitLine(mode === "row" ? "v" : "h", () => this.changed()));
+      sizable(t.el, { get: () => this.sessionSize(k), set: (w) => (this.layout.sizes[k] = w) });
+      // Folded tiles take only their header.
+      if (folded) t.el.style.flexGrow = "";
+      else unfolded++;
+      items.push(t.el);
+    });
+    body.replaceChildren(...items);
+    card.classList.toggle("multi", multi);
+    card.classList.remove("dragging");
+    body.classList.toggle("row", multi && mode === "row");
+    card.querySelectorAll<HTMLElement>("[data-mode]").forEach((b) => b.classList.toggle("sel", b.dataset.mode === mode));
+    card.querySelector<HTMLElement>(".card-tabs")!.hidden = true;
+    if (multi && mode === "tabs") {
+      this.showTabs(card, project, keys, false);
+      unfolded = 1;
+    }
+    // A card of folded tiles takes only its headers.
+    if (unfolded) {
+      card.style.flex = "";
+      sizable(card, {
+        get: () => this.layout.heights[project] ?? this.cardHeight(keys),
+        set: (w) => (this.layout.heights[project] = w),
+      });
+    } else card.style.flex = "none";
+    return unfolded;
+  }
+
+  /** One session of the card at a time, the others behind tabs above it. */
+  private showTabs(card: HTMLElement, project: string, keys: string[], tight: boolean): void {
+    const shown = this.tabOf(project, keys);
+    for (const k of keys) {
+      const t = this.tiles.get(k)!;
+      t.el.classList.toggle("tab-hidden", k !== shown);
+      if (k === shown) {
+        t.setMinimized(false);
+        t.el.style.flexGrow = "1";
+      }
+    }
+    const body = card.querySelector(".card-body")!;
+    body.classList.remove("row");
+    body.querySelectorAll(":scope > .split").forEach((line) => line.remove());
+    const bar = card.querySelector<HTMLElement>(".card-tabs")!;
+    bar.hidden = false;
+    bar.classList.toggle("tight", tight);
+    this.tabbed.set(project, keys);
+    this.renderTabs(project);
+  }
+
+  /** The tabs of a card showing one session at a time: state, name and ⌘1–9. */
+  private renderTabs(project: string): void {
+    const keys = this.tabbed.get(project);
+    const bar = this.cards.get(project)?.querySelector<HTMLElement>(".card-tabs");
+    if (!keys || !bar) return;
+    const shown = this.tabOf(project, keys);
+    const tabs = keys
+      .map((k) => this.tiles.get(k))
+      .filter((t): t is Tile => t !== undefined)
+      .map((t) => {
+        const s = t.summary();
+        const idx = t.index > 0 && t.index < 10 ? `<span class="strip-idx">${shortcut(`⌘${t.index}`)}</span>` : "";
+        return `<button class="card-tab state-${t.state}${t.key === shown ? " sel" : ""}" data-key="${escapeHtml(t.key)}" title="${escapeHtml(t.path)}"><span class="dot"></span><span class="card-tab-name">${escapeHtml(s.label)}</span>${idx}</button>`;
+      });
+    const note = bar.classList.contains("tight") ? `<span class="card-tabs-note">${escapeHtml(t("card.tight"))}</span>` : "";
+    bar.innerHTML = tabs.join("") + note;
+  }
+
+  /** The session a card in tabs shows: the one picked last, else its first. */
+  private tabOf(project: string, keys: string[]): string {
+    const picked = this.layout.tabs[project];
+    return picked && keys.includes(picked) ? picked : keys[0];
+  }
+
+  /** Room of a session in its card: as resized, else 1 for an agent and less for a shell or command. */
+  private sessionSize(key: string): number {
+    const size = this.layout.sizes[key];
+    if (size > 0) return size;
+    return ["shell", "run"].includes(parseKey(key).agent) ? AUX_SIZE : 1;
+  }
+
+  /** A card's height until it is resized: what its unfolded sessions need. */
+  private cardHeight(keys: string[]): number {
+    const open = keys.filter((k) => !this.layout.minimized.includes(k));
+    return open.reduce((sum, k) => sum + this.sessionSize(k), 0) || 1;
+  }
+
+  /** Put a newly opened session in the layout; nothing already open moves. */
+  private place(key: string): void {
+    const project = this.projectOf(key);
+    const mates = L.flatten(this.layout.lanes).filter((k) => k !== key && this.projectOf(k) === project);
+    // It takes room from its own card only: the card keeps the height it has now.
+    if (mates.length && this.layout.heights[project] === undefined) this.layout.heights[project] = this.cardHeight(mates);
+    if (mates.length && this.layout.modes[project] === "tabs") this.layout.tabs[project] = key;
+    const before = this.layout.lanes.length;
+    this.layout.lanes = this.layout.autoLayout
+      ? L.place(this.layout.lanes, key, this.projectOf, this.maxLanes())
+      : L.add(this.layout.lanes, key, this.projectOf);
+    if (this.layout.lanes.length > before) this.layout.widths.push(average(this.layout.widths));
+  }
+
+  /** How many lanes of a readable width fit the window. */
+  private maxLanes(): number {
+    const width = this.grid.clientWidth || window.innerWidth;
+    return Math.max(1, Math.min(L.AUTO.maxColumns, Math.floor(width / L.AUTO.minWidth)));
+  }
+
+  /** ⌘L: lay every card out once by the window and the sessions; then it is yours again. */
+  private arrange(): void {
+    if (this.focusMode() || !this.tiles.size) return;
+    const grid = this.grid.getBoundingClientRect();
+    this.layout.lanes = L.autoLanes(this.layout.lanes, this.projectOf, grid.width || window.innerWidth, grid.height || window.innerHeight);
+    this.layout.widths = this.layout.lanes.map(() => 1);
+    this.layout.heights = {};
+    this.changed();
+    toast(t("app.arranged", { n: this.layout.lanes.length }));
+  }
+
+  private setMode(project: string, mode: CardMode): void {
+    if (mode === "stack") delete this.layout.modes[project];
+    else this.layout.modes[project] = mode;
+    this.changed();
+  }
+
+  // ---- dragging cards and tiles --------------------------------------------
+
+  private canDrag(): boolean {
+    return !this.focusMode() && this.fullscreen === null && !this.locked;
+  }
+
+  /** Drag a project's card: between cards, or to a lane's side for a lane of its own. */
+  private dragCard(e: PointerEvent, project: string): void {
+    if (!this.canDrag()) return;
+    const card = this.cards.get(project);
+    const name = this.cardName(project);
+    let target: CardDrop | null = null;
+    watchDrag(e, {
+      start: () => card?.classList.add("dragging"),
+      move: (ev) => {
+        target = this.cardDrop(ev, project);
+        mark(target?.box ?? null, target?.zone);
+        label(target ? `${name} → ${target.label}` : name, ev);
+      },
+      drop: (ev) => {
+        card?.classList.remove("dragging");
+        if (ev && target) this.moveCard(project, target);
+      },
+    });
+  }
+
+  private cardDrop(ev: PointerEvent, project: string): CardDrop | null {
+    for (const lane of this.grid.querySelectorAll<HTMLElement>(":scope > .lane")) {
+      const r = lane.getBoundingClientRect();
+      if (ev.clientX < r.left - 3 || ev.clientX > r.right + 3 || ev.clientY < r.top || ev.clientY > r.bottom) continue;
+      const at = Number(lane.dataset.lane);
+      const cards = [...lane.querySelectorAll<HTMLElement>(":scope > .lane-body > .card")];
+      const others = cards.filter((c) => c !== this.cards.get(project));
+      // Its own lane already: a new lane would change nothing.
+      const alone = cards.length === 1 && !others.length;
+      const room = this.layout.lanes.length < MAX_LANES && !alone;
+      const newLane = t("drag.newLane");
+      if (room && ev.clientX < r.left + EDGE_PX) return { lane: at, index: -1, box: { x: r.left - 1, y: r.top, w: 3, h: r.height }, label: newLane };
+      if (room && ev.clientX > r.right - EDGE_PX) return { lane: at + 1, index: -1, box: { x: r.right - 2, y: r.top, w: 3, h: r.height }, label: newLane };
+      const where = t("drag.lane", { n: at + 1 });
+      if (!others.length) return { lane: at, index: 0, box: { x: r.left + 4, y: r.top + 4, w: r.width - 8, h: r.height - 8 }, zone: true, label: where };
+      let index = others.findIndex((c) => {
+        const cr = c.getBoundingClientRect();
+        return ev.clientY < cr.top + cr.height / 2;
+      });
+      if (index < 0) index = others.length;
+      const y = index < others.length ? others[index].getBoundingClientRect().top - 1 : others[others.length - 1].getBoundingClientRect().bottom - 2;
+      return { lane: at, index, box: { x: r.left + 4, y, w: r.width - 8, h: 3 }, label: where };
+    }
+    return null;
+  }
+
+  private moveCard(project: string, to: CardDrop): void {
+    const from = this.layout.lanes.findIndex((l) => l.some((k) => this.projectOf(k) === project));
+    if (to.index < 0) {
+      this.layout.lanes = L.moveGroupToNewLane(this.layout.lanes, project, this.projectOf, to.lane);
+      this.layout.widths.splice(to.lane, 0, average(this.layout.widths));
+      delete this.layout.heights[project];
+    } else {
+      // In another lane it takes a height like the cards already there.
+      if (to.lane !== from) {
+        const cards = L.groups(this.layout.lanes[to.lane], this.projectOf);
+        const heights = cards.map((keys) => this.layout.heights[this.projectOf(keys[0])] ?? this.cardHeight(keys));
+        if (heights.length) this.layout.heights[project] = average(heights);
+        else delete this.layout.heights[project];
+      }
+      this.layout.lanes = L.moveGroup(this.layout.lanes, project, this.projectOf, to.lane, to.index);
+    }
+    this.changed();
+    const first = L.flatten(this.layout.lanes).find((k) => this.projectOf(k) === project);
+    if (first) this.setActive(first, true);
+  }
+
+  /** Drag a tile's header: a lone tile moves its card, others change places inside their card. */
+  private dragTile(e: PointerEvent, key: string): void {
+    const project = this.projectOf(key);
+    const mates = L.flatten(this.layout.lanes).filter((k) => this.projectOf(k) === project);
+    if (mates.length < 2) return this.dragCard(e, project);
+    if (!this.canDrag()) return;
+    const card = this.cards.get(project)!;
+    const tabs = this.tabbed.has(project);
+    const across = tabs || this.layout.modes[project] === "row";
+    const el = () => (tabs ? card.querySelector<HTMLElement>(`.card-tab[data-key="${CSS.escape(key)}"]`) : this.tiles.get(key)?.el) ?? null;
+    const name = this.tiles.get(key)?.summary().label ?? "";
+    let index: number | null = null;
+    watchDrag(e, {
+      start: () => el()?.classList.add("dragging"),
+      move: (ev) => {
+        index = null;
+        const r = card.getBoundingClientRect();
+        if (ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom) {
+          mark(null);
+          return label(t("drag.staysInCard"), ev);
+        }
+        const items = [...card.querySelectorAll<HTMLElement>(tabs ? ".card-tab" : ":scope > .card-body > .tile")].filter((x) => x !== el());
+        if (!items.length) return;
+        let i = items.findIndex((x) => {
+          const b = x.getBoundingClientRect();
+          return across ? ev.clientX < b.left + b.width / 2 : ev.clientY < b.top + b.height / 2;
+        });
+        if (i < 0) i = items.length;
+        const b = items[Math.min(i, items.length - 1)].getBoundingClientRect();
+        const end = i >= items.length;
+        mark(across ? { x: (end ? b.right : b.left) - 1, y: b.top, w: 3, h: b.height } : { x: b.left + 2, y: (end ? b.bottom : b.top) - 1, w: b.width - 4, h: 3 });
+        label(name, ev);
+        index = i;
+      },
+      drop: (ev) => {
+        el()?.classList.remove("dragging");
+        if (!ev || index === null) return;
+        this.layout.lanes = L.moveInGroup(this.layout.lanes, key, this.projectOf, index);
+        this.changed();
+      },
+    });
+  }
+
+  private cardName(project: string): string {
+    const own = [...this.tiles.values()].find((t) => t.path === project);
+    return own?.name ?? project.split(/[\\/]/).filter(Boolean).pop() ?? project;
   }
 
   /** Mini cards of the sessions not in the middle (side panel open). */
@@ -714,11 +1001,14 @@ export class App {
     if (card) return card;
     card = document.createElement("div");
     card.className = "card";
+    card.dataset.project = project;
     card.innerHTML = keysIn(`
-      <header class="card-head" draggable="true">
+      <header class="card-head">
         <span class="dot"></span><span class="card-title"></span>
+        <span class="modes">${(["stack", "row", "tabs"] as const).map((m) => `<button data-mode="${m}">${MODE_ICONS[m]}</button>`).join("")}</span>
         <span class="actions"><button data-a="sub">+</button><button data-a="terminal">›_</button><button data-a="run">▶</button></span>
       </header>
+      <nav class="card-tabs" hidden></nav>
       <div class="card-body"></div>`);
     const head = card.querySelector<HTMLElement>(".card-head")!;
     cardTitles(head);
@@ -726,23 +1016,30 @@ export class App {
       const tiles = [...this.tiles.values()].filter((t) => this.projectOf(t.key) === project);
       return tiles.find((t) => t.path === project) ?? tiles[0];
     };
-    head.addEventListener("dragstart", (e) => {
-      const t = first();
-      if (!t) return;
-      e.dataTransfer?.setData("text/x-desk-key", t.key);
-      e.dataTransfer!.effectAllowed = "move";
-      card.classList.add("dragging");
+    head.addEventListener("pointerdown", (e) => {
+      if (!(e.target as HTMLElement).closest("button")) this.dragCard(e, project);
     });
-    head.addEventListener("dragend", () => card.classList.remove("dragging"));
     head.addEventListener("click", (e) => {
       const t = first();
       if (!t) return;
-      const a = (e.target as HTMLElement).closest<HTMLElement>("[data-a]")?.dataset.a;
+      const target = e.target as HTMLElement;
+      const mode = target.closest<HTMLElement>("[data-mode]")?.dataset.mode as CardMode | undefined;
+      if (mode) return this.setMode(project, mode);
+      const a = target.closest<HTMLElement>("[data-a]")?.dataset.a;
       if (a === "sub") void this.openSub(t);
       else if (a === "terminal") void this.openTerminal(project);
       else if (a === "branch") void this.switchBranch(project);
       else if (a === "run") void this.runInProject(project);
       else this.setActive(t.key, true);
+    });
+    const tabs = card.querySelector<HTMLElement>(".card-tabs")!;
+    tabs.addEventListener("pointerdown", (e) => {
+      const key = (e.target as HTMLElement).closest<HTMLElement>("[data-key]")?.dataset.key;
+      if (key) this.dragTile(e, key);
+    });
+    tabs.addEventListener("click", (e) => {
+      const key = (e.target as HTMLElement).closest<HTMLElement>("[data-key]")?.dataset.key;
+      if (key) this.setActive(key, true);
     });
     this.cards.set(project, card);
     return card;
@@ -755,7 +1052,7 @@ export class App {
       if (!tiles.length) continue;
       card.style.setProperty("--proj", projectColor(project, this.layout.colors));
       const own = tiles.find((t) => t.path === project);
-      const name = own?.name ?? project.split(/[\\/]/).filter(Boolean).pop() ?? project;
+      const name = this.cardName(project);
       const parts = [
         `<b>${escapeHtml(name)}</b>`,
         own?.branch ? `<span class="branch" data-a="branch" title="${t("common.changeBranch")}">${escapeHtml(own.branch)}</span>` : "",
@@ -772,7 +1069,7 @@ export class App {
     this.side.relabel();
     for (const tile of this.tiles.values()) tile.relabel();
     for (const card of this.cards.values()) cardTitles(card.querySelector<HTMLElement>(".card-head")!);
-    this.grid.querySelectorAll(".lane .hint").forEach((h) => (h.textContent = laneHint()));
+    for (const lane of this.laneEls) lane.querySelector(".hint")!.textContent = laneHint();
     this.render();
   }
 
@@ -794,38 +1091,8 @@ export class App {
   private laneEl(): HTMLElement {
     const lane = document.createElement("div");
     lane.className = "lane";
-    lane.innerHTML = `<div class="lane-head"></div><div class="lane-body"><div class="hint">${laneHint()}</div></div>`;
-    const body = lane.querySelector<HTMLElement>(".lane-body")!;
-    body.addEventListener("dragover", (e) => {
-      if (!e.dataTransfer?.types.includes("text/x-desk-key")) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      this.markDrop(body, dropIndex(body, e.clientY));
-    });
-    body.addEventListener("dragleave", (e) => {
-      if (!body.contains(e.relatedTarget as Node)) this.markDrop(null, 0);
-    });
-    body.addEventListener("drop", (e) => {
-      const key = e.dataTransfer?.getData("text/x-desk-key");
-      this.markDrop(null, 0);
-      if (!key) return;
-      e.preventDefault();
-      const laneIdx = Number(lane.dataset.lane);
-      const index = dropIndex(body, e.clientY);
-      // A project moves as a whole card, with all its sessions.
-      this.layout.lanes = L.moveGroup(this.layout.lanes, this.projectOf(key), this.projectOf, laneIdx, index);
-      this.changed();
-      this.setActive(key, true);
-    });
+    lane.innerHTML = `<div class="lane-body"><div class="hint">${laneHint()}</div></div>`;
     return lane;
-  }
-
-  private markDrop(body: HTMLElement | null, index: number): void {
-    this.grid.querySelectorAll(".drop-before, .drop-end").forEach((el) => el.classList.remove("drop-before", "drop-end"));
-    if (!body) return;
-    const cards = droppable(body);
-    if (cards[index]) cards[index].classList.add("drop-before");
-    else body.classList.add("drop-end");
   }
 
   /** Terminal font size for every tile (8–24 px). */
@@ -1030,6 +1297,7 @@ export class App {
 
   private renderChrome(): void {
     this.renderStrip();
+    for (const project of this.tabbed.keys()) this.renderTabs(project);
     const states = [...this.tiles.values()].map((t) => t.state);
     const count = (s: string) => states.filter((x) => x === s).length;
     const waiting = count("waiting");
@@ -1312,6 +1580,9 @@ export class App {
       case "minimize":
         this.toggleMinimized();
         break;
+      case "arrange":
+        this.arrange();
+        break;
       case "exitFullscreen":
         if (this.fullscreen) this.toggleFullscreen(this.fullscreen);
         break;
@@ -1327,26 +1598,32 @@ function cardTitles(head: HTMLElement): void {
     ["run", t("tile.run")],
   ];
   for (const [a, title] of titles) head.querySelector<HTMLElement>(`[data-a="${a}"]`)!.title = keysIn(title);
+  for (const mode of ["stack", "row", "tabs"] as const) head.querySelector<HTMLElement>(`[data-mode="${mode}"]`)!.title = t(`card.${mode}`);
 }
 
 function laneHint(): string {
   return t("lane.hint", { keys: keysIn("⌘P") });
 }
 
-/** The lane's project cards, without the one being dragged. */
-function droppable(body: HTMLElement): HTMLElement[] {
-  return [...body.querySelectorAll<HTMLElement>(":scope > .card:not(.dragging):not(:has(.tile.dragging))")];
+/** Where a dragged card lands: before the `index`-th card of `lane`, or in a new lane there (index -1). */
+interface CardDrop {
+  lane: number;
+  index: number;
+  box: Box;
+  zone?: boolean;
+  label: string;
 }
 
-/** Index among the lane's cards before which a drop at `y` lands (ignoring the dragged one). */
-function dropIndex(body: HTMLElement, y: number): number {
-  const tiles = droppable(body);
-  const i = tiles.findIndex((t) => {
-    const r = t.getBoundingClientRect();
-    return y < r.top + r.height / 2;
-  });
-  return i < 0 ? tiles.length : i;
+function average(xs: number[]): number {
+  return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 1;
 }
+
+/** The card header's mode buttons: sessions one under another, side by side, one at a time. */
+const MODE_ICONS: Record<CardMode, string> = {
+  stack: `<svg viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/><path d="M1.5 6h9"/></svg>`,
+  row: `<svg viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/><path d="M6 1.5v9"/></svg>`,
+  tabs: `<svg viewBox="0 0 12 12"><rect x="1.5" y="3.5" width="9" height="7" rx="1"/><path d="M1.5 3.5V1.5h4v2"/></svg>`,
+};
 
 async function ensureNotificationPermission(): Promise<void> {
   try {

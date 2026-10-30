@@ -79,6 +79,69 @@ export function moveGroup(lanes: Lanes, project: string, of: ProjectOf, lane: nu
   return next;
 }
 
+/** Move a project's whole card into a new lane inserted at `at` (the lane it leaves may be empty). */
+export function moveGroupToNewLane(lanes: Lanes, project: string, of: ProjectOf, at: number): Lanes {
+  const keys = lanes.flat().filter((k) => of(k) === project);
+  if (!keys.length) return lanes;
+  const next = lanes.map((l) => l.filter((k) => of(k) !== project));
+  next.splice(Math.max(0, Math.min(at, next.length)), 0, keys);
+  return next;
+}
+
+/** Move a session among its own project's sessions, to `index` (counted without it). */
+export function moveInGroup(lanes: Lanes, key: string, of: ProjectOf, index: number): Lanes {
+  const lane = lanes.findIndex((l) => l.includes(key));
+  if (lane < 0) return lanes;
+  const project = of(key);
+  const next = clone(lanes);
+  const others = next[lane].filter((k) => k !== key);
+  const start = others.findIndex((k) => of(k) === project);
+  if (start < 0) return lanes;
+  let size = 0;
+  while (start + size < others.length && of(others[start + size]) === project) size++;
+  others.splice(start + Math.max(0, Math.min(index, size)), 0, key);
+  next[lane] = others;
+  return next;
+}
+
+/**
+ * Where a newly opened session goes when desk places it: in its project's
+ * card if there is one, else in an empty lane, else in a new lane while
+ * fewer than `maxLanes`, else in the lane with the fewest sessions.
+ * Nothing already open moves.
+ */
+export function place(lanes: Lanes, key: string, of: ProjectOf, maxLanes: number): Lanes {
+  if (contains(lanes, key)) return lanes;
+  const project = of(key);
+  if (lanes.some((l) => l.some((k) => of(k) === project))) return add(lanes, key, of);
+  const next = clone(lanes.length ? lanes : [[]]);
+  const empty = next.findIndex((l) => !l.length);
+  if (empty >= 0) next[empty].push(key);
+  else if (next.length < maxLanes) next.push([key]);
+  else next[shortestLane(next)].push(key);
+  return next;
+}
+
+/** Lanes without the empty ones (at least one stays), each keeping its width (1 if it had none). */
+export function prune(lanes: Lanes, widths: number[]): { lanes: Lanes; widths: number[] } {
+  const keep = lanes.map((_, i) => i).filter((i) => lanes[i].length);
+  if (!keep.length) return { lanes: [[]], widths: [1] };
+  return { lanes: keep.map((i) => lanes[i]), widths: keep.map((i) => (widths[i] > 0 ? widths[i] : 1)) };
+}
+
+/**
+ * Two neighbours share `total` weight and are `a`×`b` pixels: their new
+ * weights after the line between them moves by `delta` pixels, neither
+ * going below `min` pixels.
+ */
+export function split(total: number, a: number, b: number, delta: number, min: number): [number, number] {
+  const sum = a + b;
+  if (sum <= 0) return [total / 2, total / 2];
+  const pixels = Math.max(Math.min(min, sum / 2), Math.min(sum - Math.min(min, sum / 2), a + delta));
+  const first = (total * pixels) / sum;
+  return [first, total - first];
+}
+
 export function remove(lanes: Lanes, path: string): Lanes {
   return lanes.map((l) => l.filter((p) => p !== path));
 }

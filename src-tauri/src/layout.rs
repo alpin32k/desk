@@ -1,5 +1,5 @@
 //! Persistent layout and options in `layout.json`: lanes (columns) of project
-//! paths, projects started with the app, hand-added folders.
+//! paths and their sizes, projects started with the app, hand-added folders.
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -30,8 +30,22 @@ pub struct Layout {
     /// Where "new project" creates folders; None = a usual folder such as
     /// ~/Projects if one exists, else ~ (new_project::default_parent).
     pub projects_dir: Option<String>,
-    /// Columns follow what is open and the window size; off = `lanes` as set by hand.
+    /// desk places newly opened projects (a lane of their own while there is
+    /// room) and drops empty lanes; off = a fixed number of lanes, set by hand.
     pub auto_layout: bool,
+    /// Width of each lane, as a weight (index = lane); missing ones are 1.
+    pub widths: Vec<f64>,
+    /// Height of each project's card in its lane, as a weight, by card (project
+    /// path); cards not listed follow their sessions.
+    pub heights: std::collections::BTreeMap<String, f64>,
+    /// Room of each session in its card, as a weight, by session key; agents
+    /// not listed get 1, shells and ⌘U commands less.
+    pub sizes: std::collections::BTreeMap<String, f64>,
+    /// How a card shows its sessions, by card: "row" side by side, "tabs" one
+    /// at a time; not listed = one under another.
+    pub modes: std::collections::BTreeMap<String, String>,
+    /// The session a card in tabs shows, by card.
+    pub tabs: std::collections::BTreeMap<String, String>,
     /// Color theme id (see src/themes.ts).
     pub theme: String,
     /// Where web pages open outside desk: "auto" (Brave, then Chrome),
@@ -77,6 +91,11 @@ impl Default for Layout {
             cards: Default::default(),
             projects_dir: None,
             auto_layout: true,
+            widths: Vec::new(),
+            heights: Default::default(),
+            sizes: Default::default(),
+            modes: Default::default(),
+            tabs: Default::default(),
             theme: "desk".into(),
             browser: "auto".into(),
             font_size: 11.5,
@@ -167,6 +186,11 @@ mod tests {
             notifications: false,
             colors: [("/a".to_string(), 3)].into(),
             language: "en".into(),
+            widths: vec![1.5, 1.0, 0.5],
+            heights: [("/a".to_string(), 2.0)].into(),
+            sizes: [("shell#0:/a".to_string(), 0.4)].into(),
+            modes: [("/a".to_string(), "tabs".to_string())].into(),
+            tabs: [("/a".to_string(), "shell#0:/a".to_string())].into(),
             ..Layout::default()
         };
         save(&p, &l).unwrap();
