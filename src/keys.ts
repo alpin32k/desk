@@ -12,6 +12,7 @@ export type Action =
   | { type: "new" }
   | { type: "close" }
   | { type: "kill" }
+  | { type: "reopen" }
   | { type: "sub" }
   | { type: "coffee" }
   | { type: "lock" }
@@ -72,6 +73,8 @@ export const BINDINGS: Binding[] = [
   { id: "minimize", group: "tiles", action: { type: "minimize" }, mac: ["Super+KeyJ"] },
   { id: "close", group: "tiles", action: { type: "close" }, mac: ["Super+KeyQ"] },
   { id: "kill", group: "tiles", action: { type: "kill" }, mac: ["Super+Shift+KeyQ"], other: ["Control+Shift+Backspace"] },
+  // Like a browser's "reopen closed tab" (⌘Z stays undo in text fields).
+  { id: "reopen", group: "tiles", action: { type: "reopen" }, mac: ["Super+Shift+KeyT"], other: ["Control+Alt+Shift+KeyT"] },
   { id: "fontUp", group: "terminal", action: { type: "font", step: 1 }, mac: ["Super+Equal"] },
   { id: "fontDown", group: "terminal", action: { type: "font", step: -1 }, mac: ["Super+Minus"] },
   { id: "fontReset", group: "terminal", action: { type: "font", step: 0 }, mac: ["Super+Digit0"] },

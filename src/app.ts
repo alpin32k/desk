@@ -47,6 +47,8 @@ const POLL_MS = 3000;
 const UPDATE_CHECK_MS = 24 * 60 * 60 * 1000;
 const UPDATE_KEY = "desk.updateCheckedAt";
 const USAGE_MS = 30_000;
+/** Closed tiles ⌘⇧T can still reopen. */
+const CLOSED_KEPT = 20;
 
 export class App {
   private layout!: Layout;
@@ -59,6 +61,8 @@ export class App {
   private projectCache: Promise<Project[]> | null = null;
   private active: string | null = null;
   private opening = new Map<string, Promise<void>>();
+  /** Tiles closed with ⌘Q or ✕, newest last, for ⌘⇧T: key and the Claude conversation in it. */
+  private closed: { key: string; sessionId: string | null }[] = [];
   /** No tmux: sessions end when desk quits. */
   private tmuxMissing = false;
   /** Tiles about to open a conversation again (⌘S): key → Claude session id. */
@@ -535,6 +539,28 @@ export class App {
     else this.grid.classList.remove("has-full");
   }
 
+  /** ⌘Q or ✕: the tile goes, and ⌘⇧T can bring it back. */
+  private closeByUser(key: string): void {
+    const tile = this.tiles.get(key);
+    if (!tile) return;
+    const sessionId = this.hook.get(tile.slug)?.sessionId ?? null;
+    this.closed = [...this.closed.filter((c) => c.key !== key), { key, sessionId }].slice(-CLOSED_KEPT);
+    this.closeTile(key);
+  }
+
+  /** ⌘⇧T: the last closed tile again. Its session still runs in tmux and is
+   *  attached as it was; one that ended starts again, Claude with its
+   *  conversation (`--resume`). */
+  private async reopenClosed(): Promise<void> {
+    let last = this.closed.pop();
+    while (last && this.tiles.has(last.key)) last = this.closed.pop(); // opened again meanwhile
+    if (!last) return toast(t("app.nothingToReopen"));
+    const { key, sessionId } = last;
+    const alive = (await api.listSessions()).some((s) => keyOf(s) === key);
+    if (!alive && sessionId && parseKey(key).agent === "claude") this.resuming.set(key, sessionId);
+    await this.openTile(key);
+  }
+
   async killSession(key: string): Promise<void> {
     const spec = parseKey(key);
     const name = spec.path.split(/[\\/]/).pop() ?? spec.path;
@@ -544,6 +570,7 @@ export class App {
     const slug = tile?.slug ?? (await api.listSessions()).find((s) => keyOf(s) === key)?.slug;
     if (slug) await api.killSession(slug).catch((err) => toast(String(err)));
     this.running.delete(key);
+    this.closed = this.closed.filter((c) => c.key !== key); // killed: nothing to reopen
     if (this.layout.runs[key] || this.layout.cards[key] || this.layout.titles[key] || this.layout.minimized.includes(key)) {
       delete this.layout.runs[key];
       delete this.layout.cards[key];
@@ -561,7 +588,7 @@ export class App {
       return this.setActive(tile.key, false);
     }
     if (action === "minimize") return this.toggleMinimized(tile.key);
-    if (action === "close") return this.closeTile(tile.key);
+    if (action === "close") return this.closeByUser(tile.key);
     if (action === "kill") return this.killSession(tile.key);
     if (action === "fullscreen") return this.toggleFullscreen(tile.key);
     if (action === "sub") return this.openSub(tile);
@@ -1338,10 +1365,13 @@ export class App {
       case "close":
         if (this.palette.isOpen) this.palette.close();
         else if (this.settings.isOpen) this.settings.close();
-        else if (this.active) this.closeTile(this.active);
+        else if (this.active) this.closeByUser(this.active);
         break;
       case "kill":
         if (this.active) void this.killSession(this.active);
+        break;
+      case "reopen":
+        void this.reopenClosed();
         break;
       case "coffee":
         void this.cycleCoffee();

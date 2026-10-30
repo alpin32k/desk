@@ -20,6 +20,8 @@ describe("actionFor", () => {
     expect(mac(k("q"))).toEqual({ type: "close" });
     expect(mac(k("z"))).toBeNull(); // ⌘Z is undo again
     expect(mac(k("Q", { shiftKey: true }))).toEqual({ type: "kill" });
+    expect(mac(k("T", { shiftKey: true }))).toEqual({ type: "reopen" });
+    expect(actionFor({ ...k("T"), metaKey: false, ctrlKey: true, shiftKey: true, altKey: true, code: "KeyT" }, "linux")).toEqual({ type: "reopen" });
     expect(mac(k("Z", { shiftKey: true }))).toBeNull(); // redo
     expect(mac(k("3"))).toEqual({ type: "focus", index: 2 });
     expect(mac(k("e"))).toEqual({ type: "fullscreen" });

@@ -149,7 +149,7 @@ Zmieniają okno i terminale od razu.
 | ⌘T | terminal w projekcie kafelka | ⌘Q | zamknij kafelek (sesja zostaje) |
 | ⌘F | pliki projektu | ⌘⇧Q | zabij sesję |
 | ⌘U | uruchom (dev serwer, testy...) | ✎ | nazwij kafelek (albo prawy klik na tytule), pusta nazwa wraca do domyślnej |
-| ⌘R | rozmowa | | |
+| ⌘R | rozmowa | ⌘⇧T | przywróć zamknięty kafelek |
 | ⌘S | ostatnie rozmowy Claude w projekcie | | |
 | ⌘W | podgląd obok | **Terminal** | |
 | ⌘K | kawa | ⌘= / ⌘- / ⌘0 | czcionka większa / mniejsza / zwykła |
