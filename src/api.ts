@@ -110,6 +110,19 @@ export interface SessionState {
   event: string;
   ts: number;
   message: string | null;
+  /** The Claude Code conversation in the tile. */
+  sessionId: string | null;
+}
+
+/** A Claude Code conversation held in a project (⌘S). */
+export interface Conversation {
+  id: string;
+  /** From `/rename`, else the one Claude Code gave it. */
+  title: string | null;
+  /** The first message typed in it, on one line. */
+  prompt: string;
+  branch: string | null;
+  modifiedMs: number;
 }
 
 export interface Bootstrap {
@@ -158,8 +171,11 @@ export const api = {
   bootstrap: () => invoke<Bootstrap>("bootstrap"),
   listProjects: (extra: string[]) => invoke<Project[]>("list_projects", { extra }),
   listSessions: () => invoke<SessionInfo[]>("list_sessions"),
-  openSession: (path: string, agent: string, instance: number, command?: string) =>
-    invoke<string>("open_session", { path, agent, instance, command: command ?? null }),
+  /** `resume`: a Claude conversation's id, to pick it up again (⌘S). */
+  openSession: (path: string, agent: string, instance: number, command?: string, resume?: string) =>
+    invoke<string>("open_session", { path, agent, instance, command: command ?? null, resume: resume ?? null }),
+  /** The project's newest Claude conversations (⌘S). */
+  recentConversations: (path: string) => invoke<Conversation[]>("recent_conversations", { path }),
   projectFiles: (path: string) => invoke<string[]>("project_files", { path }),
   openFile: (path: string, file: string) => invoke<void>("open_file", { path, file }),
   previewFile: (path: string, file: string, bounds: PreviewBounds) =>

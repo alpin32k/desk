@@ -48,6 +48,7 @@ const COMMANDS: &[&str] = &[
     "github_repos",
     "clone_project",
     "dropped_paths",
+    "recent_conversations",
 ];
 
 fn main() {

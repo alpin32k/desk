@@ -138,9 +138,10 @@ fn script(id: &str, command: &str, hooks_settings: &Path, install: Install) -> S
     let shell = shell_quote(&crate::env::user_shell());
     let run = if id == "claude" {
         format!(
-            "{} --settings {}",
+            "{} --settings {}{}",
             shell_quote(crate::env::claude_bin()),
-            shell_quote(&hooks_settings.display().to_string())
+            shell_quote(&hooks_settings.display().to_string()),
+            claude_args(command)
         )
     } else if command.trim().is_empty() {
         return format!("exec {shell} -l");
@@ -201,9 +202,10 @@ fn argv(id: &str, command: &str, hooks_settings: &Path, install: Install) -> Vec
     }
     let run = if id == "claude" {
         format!(
-            "& {} --settings {}",
+            "& {} --settings {}{}",
             ps_quote(crate::env::claude_bin()),
-            ps_quote(&hooks_settings.display().to_string())
+            ps_quote(&hooks_settings.display().to_string()),
+            claude_args(command)
         )
     } else if command.trim().is_empty() {
         return vec![shell, "-NoLogo".into()];
@@ -231,6 +233,12 @@ fn argv(id: &str, command: &str, hooks_settings: &Path, install: Install) -> Vec
         "-Command".into(),
         run,
     ]
+}
+
+/// What follows `claude` in its command: `--resume <id>` for a conversation
+/// picked up with ⌘S (open_session checks the id), else nothing.
+fn claude_args(command: &str) -> &str {
+    command.trim().strip_prefix("claude").filter(|a| a.starts_with(' ')).unwrap_or("")
 }
 
 /// PowerShell single-quoted string literal.
@@ -327,6 +335,11 @@ mod tests {
             "{claude}"
         );
         assert!(claude.ends_with(" -l"));
+        let resumed = script("claude", "claude --resume 0f096eef-0a11-4750-93d4-7f09562dc824", hooks, None);
+        assert!(
+            resumed.contains("--settings '/s/claude-hooks.json' --resume 0f096eef-0a11-4750-93d4-7f09562dc824;"),
+            "{resumed}"
+        );
         assert!(script("shell", "", hooks, None).starts_with("exec "));
         let custom = script("mine", "definitely-not-installed-xyz --flag", hooks, None);
         assert!(

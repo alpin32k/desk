@@ -57,6 +57,7 @@
     "allow-create-project",
     "allow-github-repos",
     "allow-clone-project",
-    "allow-dropped-paths"
+    "allow-dropped-paths",
+    "allow-recent-conversations"
   ]
 }

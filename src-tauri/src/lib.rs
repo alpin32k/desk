@@ -6,6 +6,7 @@ pub mod backend;
 pub mod browser;
 pub mod claude_projects;
 pub mod coffee;
+pub mod conversations;
 pub mod discovery;
 pub mod drag;
 pub mod dropdown;
@@ -93,6 +94,12 @@ fn list_sessions(app: State<App>) -> Vec<tmux::SessionInfo> {
     app.sessions.list()
 }
 
+/// ⌘S: the project's newest Claude conversations, to resume one.
+#[tauri::command(async)]
+fn recent_conversations(path: String) -> Vec<conversations::Conversation> {
+    conversations::recent(&env::home().join(".claude/projects"), Path::new(&path), 40)
+}
+
 /// Ensure the tmux session for project + agent + sub-session exists; returns its slug.
 #[tauri::command]
 fn open_session(
@@ -101,6 +108,7 @@ fn open_session(
     agent: String,
     instance: u32,
     command: Option<String>,
+    resume: Option<String>,
 ) -> Result<String, String> {
     let dir = Path::new(&path);
     if !dir.is_dir() {
@@ -129,6 +137,12 @@ fn open_session(
             ));
         }
         command
+    } else if let Some(id) = resume {
+        // ⌘S: a conversation picked up again; its id goes into the command line.
+        if agent != "claude" || !conversations::is_session_id(&id) {
+            return Err(format!("cannot resume {agent} {id}"));
+        }
+        format!("claude --resume {id}")
     } else {
         let custom = layout::load(&app.layout_path).agents;
         agents::command_for(&agent, &custom).ok_or_else(|| format!("unknown agent: {agent}"))?
@@ -653,6 +667,7 @@ pub fn run() {
             github_repos,
             clone_project,
             dropped_paths,
+            recent_conversations,
         ])
         .on_window_event(|window, event| {
             if window.label() != "main" {

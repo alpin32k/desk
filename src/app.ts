@@ -8,6 +8,7 @@ import {
   type AgentInfo,
   type CoffeeLevel,
   type CoffeeStatus,
+  type Conversation,
   type GithubRepo,
   type Layout,
   type Project,
@@ -22,7 +23,7 @@ import { PLATFORM, shortcut } from "./platform";
 import { Side } from "./side";
 import * as L from "./lanes";
 import { Palette } from "./palette";
-import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
+import { ago, pickColor, PROJECT_COLORS, projectColor } from "./projects";
 import { keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
 import { dropped } from "./address";
 import { DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
@@ -58,6 +59,8 @@ export class App {
   private projectCache: Promise<Project[]> | null = null;
   private active: string | null = null;
   private opening = new Map<string, Promise<void>>();
+  /** Tiles about to open a conversation again (⌘S): key → Claude session id. */
+  private resuming = new Map<string, string>();
   private earlyExits = new Map<number, string>(); // pty-exit that arrived before attach returned
   private missing: { key: string; lane: number }[] = [];
   private creatingProject = false;
@@ -350,8 +353,10 @@ export class App {
 
   private async createTile(key: string): Promise<Tile | null> {
     const spec = parseKey(key);
+    const resume = this.resuming.get(key);
+    this.resuming.delete(key);
     try {
-      const slug = await api.openSession(spec.path, spec.agent, spec.instance, this.layout.runs[key]);
+      const slug = await api.openSession(spec.path, spec.agent, spec.instance, this.layout.runs[key], resume);
       this.running.add(key);
       this.usageAt = 0; // a new harness may need its limits on the next poll
       if (this.tiles.has(key)) return null; // opened meanwhile (startup restore vs palette)
@@ -457,6 +462,46 @@ export class App {
   private async openTerminal(path: string): Promise<void> {
     const taken = [...(await api.listSessions()), ...this.tiles.values()];
     await this.openTile(keyOf({ path, agent: "shell", instance: nextInstance(taken, path, "shell") }));
+  }
+
+  /** ⌘S: the project's recent Claude conversations. One still in a tile gets
+   *  the focus; another opens in a new tile with `claude --resume`. */
+  private async pickConversation(path: string): Promise<void> {
+    const name = path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+    let found: Conversation[];
+    try {
+      found = await api.recentConversations(path);
+    } catch (err) {
+      return toast(t("app.conversationsFailed", { err: String(err) }));
+    }
+    if (!found.length) return toast(t("app.noConversations", { name }));
+    const tileOf = (id: string) =>
+      [...this.tiles.entries()].find(([, tile]) => {
+        const hook = this.hook.get(tile.slug);
+        return tile.path === path && hook?.sessionId === id && hook.state !== "exited";
+      })?.[0];
+    // pickBox picks by text: the same title twice gets a number.
+    const byLabel = new Map<string, Conversation>();
+    for (const c of found) {
+      const label = c.title ?? c.prompt;
+      let unique = label;
+      for (let n = 2; byLabel.has(unique); n++) unique = `${label} (${n})`;
+      byLabel.set(unique, c);
+    }
+    const note = (label: string) => {
+      const c = byLabel.get(label)!;
+      const open = tileOf(c.id) ? t("app.conversationOpen") : "";
+      return [open, ago(c.modifiedMs), c.branch ?? ""].filter(Boolean).join(" · ");
+    };
+    const picked = await pickBox(t("app.conversations", { name }), [...byLabel.keys()], { note });
+    const c = picked && byLabel.get(picked.value);
+    if (!c) return;
+    const open = tileOf(c.id);
+    if (open) return this.setActive(open, true);
+    const taken = [...(await api.listSessions()), ...this.tiles.values()];
+    const key = keyOf({ path, agent: "claude", instance: nextInstance(taken, path, "claude") });
+    this.resuming.set(key, c.id);
+    await this.openTile(key);
   }
 
   /** Another session of the same agent in the same project, next to it. */
@@ -1227,6 +1272,8 @@ export class App {
     if (this.settings.isRecording) return; // the dropdown's new shortcut
     const action = actionFor(e);
     if (!action) return;
+    // ⌘S in the side panel's editor saves the file there.
+    if (action.type === "sessions" && (e.target as Element | null)?.closest?.(".cm-editor")) return;
     const overlay = document.querySelector(".overlay") !== null;
     if (overlay && !["palette", "new", "settings", "close"].includes(action.type)) return; // e.g. ⌘↵ in the palette
     e.preventDefault();
@@ -1283,6 +1330,15 @@ export class App {
       case "chat":
         void this.openChat();
         break;
+      case "sessions": {
+        const tile = this.tiles.get(this.active ?? "");
+        if (!tile) {
+          toast(t("app.pickTileFirst"));
+          break;
+        }
+        void this.pickConversation(tile.path);
+        break;
+      }
       case "sub": {
         const t = this.tiles.get(this.active ?? "");
         if (t) void this.openSub(t);

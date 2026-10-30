@@ -1,5 +1,13 @@
 # Zmiany
 
+## Niewydane
+
+- **⌘S: ostatnie rozmowy Claude w projekcie.** Lista rozmów z folderu aktywnego kafelka, od
+  najnowszej: tytuł (z `/rename` albo nadany przez Claude Code), kiedy i na jakim branchu. Wybrana
+  rozmowa wraca w nowym kafelku (`claude --resume`), więc zamknięta karta albo sesja zgubiona przez
+  desk nie przepada. Rozmowa, która jest już w kafelku, ma dopisek „otwarta” i tylko dostaje fokus.
+  W edytorze w podglądzie ⌘S dalej zapisuje plik.
+
 ## 0.1.18 (2026-10-29)
 
 - **Dropdown na właściwym ekranie przy Retinie obok zwykłego monitora.** ⌘` wysuwa go na ekranie

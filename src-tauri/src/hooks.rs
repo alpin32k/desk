@@ -61,6 +61,8 @@ pub struct SessionState {
     /// Unix seconds.
     pub ts: u64,
     pub message: Option<String>,
+    /// The Claude Code conversation in the tile (⌘S shows it as open).
+    pub session_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -88,6 +90,7 @@ pub fn parse_state(slug: &str, text: &str) -> Option<SessionState> {
         event,
         ts: r.ts,
         message: field("message"),
+        session_id: field("session_id"),
     })
 }
 

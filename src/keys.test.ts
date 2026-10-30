@@ -29,6 +29,7 @@ describe("actionFor", () => {
     expect(mac(k("k"))).toEqual({ type: "coffee" });
     expect(mac(k("b"))).toEqual({ type: "lock" });
     expect(mac(k("r"))).toEqual({ type: "chat" });
+    expect(mac(k("s"))).toEqual({ type: "sessions" });
     expect(mac(k("t"))).toEqual({ type: "terminal" });
     expect(mac(k("f"))).toEqual({ type: "files" });
     expect(mac(k("u"))).toEqual({ type: "run" });

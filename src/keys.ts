@@ -16,6 +16,7 @@ export type Action =
   | { type: "coffee" }
   | { type: "lock" }
   | { type: "chat" }
+  | { type: "sessions" }
   | { type: "terminal" }
   | { type: "files" }
   | { type: "run" }
@@ -58,6 +59,7 @@ export const BINDINGS: Binding[] = [
   { id: "files", group: "window", action: { type: "files" }, mac: ["Super+KeyF"] },
   { id: "run", group: "window", action: { type: "run" }, mac: ["Super+KeyU"] },
   { id: "chat", group: "window", action: { type: "chat" }, mac: ["Super+KeyR"] },
+  { id: "sessions", group: "window", action: { type: "sessions" }, mac: ["Super+KeyS"] },
   { id: "preview", group: "window", action: { type: "preview" }, mac: ["Super+KeyW"] },
   { id: "coffee", group: "window", action: { type: "coffee" }, mac: ["Super+KeyK"] },
   { id: "lock", group: "window", action: { type: "lock" }, mac: ["Super+KeyB"] },
@@ -183,7 +185,7 @@ export function actionFor(e: KeyLike, platform: Platform = PLATFORM): Action | n
 }
 
 /** Footer hints, by binding id (their labels are "hint.<id>"). */
-const HINTS = ["palette", "new", "sub", "terminal", "files", "run", "chat", "preview", "close", "kill", "focus", "fullscreen", "minimize", "coffee", "lock", "settings"];
+const HINTS = ["palette", "new", "sub", "terminal", "files", "run", "chat", "sessions", "preview", "close", "kill", "focus", "fullscreen", "minimize", "coffee", "lock", "settings"];
 
 /** Footer hints for the user's platform and shortcuts (the first key of each). */
 export function hints(platform: Platform = PLATFORM): [string, string][] {
