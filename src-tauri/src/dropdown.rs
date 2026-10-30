@@ -20,7 +20,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use crate::window_place::{self as place, Place};
-use tauri::{AppHandle, Emitter, LogicalSize, Manager, WebviewWindow};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, Window};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
 /// One step of the slide, about two frames.
@@ -110,7 +110,7 @@ pub fn apply(app: &AppHandle) -> Result<(), String> {
             }
         }
     }
-    let Some(window) = app.get_webview_window("main") else {
+    let Some(window) = crate::main_window(app) else {
         return Ok(());
     };
     if !dropdown.docked() {
@@ -131,7 +131,7 @@ pub fn toggle(app: &AppHandle) {
     if app.state::<crate::lock::Lock>().is_locked() {
         return;
     }
-    let Some(window) = app.get_webview_window("main") else {
+    let Some(window) = crate::main_window(app) else {
         return;
     };
     let dropdown = app.state::<Dropdown>();
@@ -160,7 +160,7 @@ pub fn blurred(app: &AppHandle) {
     std::thread::spawn(move || {
         // The focus may only be moving to a sheet or the file dialog.
         std::thread::sleep(Duration::from_millis(150));
-        let Some(window) = app.get_webview_window("main") else {
+        let Some(window) = crate::main_window(&app) else {
             return;
         };
         if app.state::<crate::lock::Lock>().is_locked()
@@ -201,7 +201,7 @@ pub fn moved(app: &AppHandle) {
 }
 
 /// The docked window, while it rests (not sliding, desk not locked).
-fn held(app: &AppHandle) -> Option<WebviewWindow> {
+fn held(app: &AppHandle) -> Option<Window> {
     let dropdown = app.state::<Dropdown>();
     if !dropdown.docked()
         || dropdown.sliding.load(Ordering::SeqCst)
@@ -209,12 +209,12 @@ fn held(app: &AppHandle) -> Option<WebviewWindow> {
     {
         return None;
     }
-    app.get_webview_window("main")
+    crate::main_window(app)
 }
 
 /// Keep the docked window at the top of its screen, full width: only its
 /// bottom edge changes how tall it is (dragging the top one ends the same).
-fn pin(window: &WebviewWindow) {
+fn pin(window: &Window) {
     let Some(screen) = window.current_monitor().ok().flatten() else {
         return;
     };
@@ -237,14 +237,14 @@ pub fn leave(app: &AppHandle) {
     {
         return;
     }
-    if let Some(window) = app.get_webview_window("main") {
+    if let Some(window) = crate::main_window(app) {
         undock(app, &window);
     }
 }
 
 /// Where the dropdown goes: the top of the work area (under the menu bar) of
 /// the screen with the mouse, full width, `height` percent tall.
-fn frame(window: &WebviewWindow, height: u32) -> Place {
+fn frame(window: &Window, height: u32) -> Place {
     let monitors = window.available_monitors().unwrap_or_default();
     let screens: Vec<Place> = monitors.iter().map(place::screen).collect();
     let screen = place::cursor(window)
@@ -264,7 +264,7 @@ fn fit(area: Place, height: u32) -> Place {
     Place { height: (area.height * pct / 100.0).floor(), ..area }
 }
 
-fn slide_down(app: &AppHandle, window: WebviewWindow) {
+fn slide_down(app: &AppHandle, window: Window) {
     let dropdown = app.state::<Dropdown>();
     if dropdown.sliding.swap(true, Ordering::SeqCst) {
         return;
@@ -305,7 +305,7 @@ fn slide_down(app: &AppHandle, window: WebviewWindow) {
     });
 }
 
-fn slide_up(app: &AppHandle, window: WebviewWindow) {
+fn slide_up(app: &AppHandle, window: Window) {
     let dropdown = app.state::<Dropdown>();
     if dropdown.sliding.swap(true, Ordering::SeqCst) {
         return;
@@ -330,7 +330,7 @@ fn slide_up(app: &AppHandle, window: WebviewWindow) {
 
 /// Move the window at `x` from `from` to `to` down the screen in `duration`
 /// (none: at once), fast at first and slowing down.
-fn slide(window: &WebviewWindow, x: f64, from: f64, to: f64, duration: Duration) {
+fn slide(window: &Window, x: f64, from: f64, to: f64, duration: Duration) {
     let steps = (duration.as_millis() / FRAME.as_millis()).max(1) as u32;
     for step in 1..=steps {
         place::move_to(window, x, from + (to - from) * ease(step, steps));
@@ -347,7 +347,7 @@ fn ease(step: u32, steps: u32) -> f64 {
 }
 
 /// Back to the window desk had before the first ⌘`.
-fn undock(app: &AppHandle, window: &WebviewWindow) {
+fn undock(app: &AppHandle, window: &Window) {
     let Some(normal) = app.state::<Dropdown>().normal.lock().unwrap().take() else {
         return;
     };
@@ -362,7 +362,7 @@ fn undock(app: &AppHandle, window: &WebviewWindow) {
 /// Above other apps' windows and on every Space (on macOS also allowed next
 /// to an app in full screen), or back to an ordinary window. The page hears
 /// about it ("dropdown"): the top bar keeps no room for the traffic lights.
-fn float(app: &AppHandle, window: &WebviewWindow, on: bool) {
+fn float(app: &AppHandle, window: &Window, on: bool) {
     let _ = window.set_always_on_top(on);
     let _ = window.set_visible_on_all_workspaces(on);
     let _ = window.set_min_size(Some(if on { DOCKED_MIN } else { NORMAL_MIN }));
@@ -379,7 +379,7 @@ fn float(app: &AppHandle, window: &WebviewWindow, on: bool) {
 /// above the screen's top edge, and allowed on a Space with an app in full
 /// screen.
 #[cfg(target_os = "macos")]
-fn dropdown_window(window: &WebviewWindow, on: bool) {
+fn dropdown_window(window: &Window, on: bool) {
     use objc2_app_kit::{NSWindow, NSWindowButton, NSWindowCollectionBehavior as B};
     let Ok(ptr) = window.ns_window() else {
         return;

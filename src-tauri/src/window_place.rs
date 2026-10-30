@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::{AppHandle, Manager, Monitor, PhysicalPosition, PhysicalSize, WebviewWindow};
+use tauri::{AppHandle, Manager, Monitor, PhysicalPosition, PhysicalSize, Window};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Place {
@@ -27,7 +27,7 @@ pub fn file(support_dir: &Path) -> PathBuf {
     support_dir.join("window.json")
 }
 
-pub fn restore(window: &WebviewWindow, file: &Path) {
+pub fn restore(window: &Window, file: &Path) {
     let Some(place) = load(file) else {
         return;
     };
@@ -47,7 +47,7 @@ pub fn restore(window: &WebviewWindow, file: &Path) {
 /// still on the way from a screen with another scale reaches the page after
 /// the move, read with the new scale, and leaves it half (or twice) the
 /// window. The top left corner stays where it was put.
-pub(crate) fn put(window: &WebviewWindow, place: Place) {
+pub(crate) fn put(window: &Window, place: Place) {
     move_to(window, place.x, place.y);
     if cfg!(target_os = "macos") {
         let _ = window.set_size(tauri::LogicalSize::new(place.width, place.height));
@@ -59,7 +59,7 @@ pub(crate) fn put(window: &WebviewWindow, place: Place) {
 /// Move the window's top left corner there. (Physical pixels on macOS would
 /// be read with the scale of the screen the window is on now, not the one
 /// it goes to: on the way from a Retina screen to another they halve.)
-pub(crate) fn move_to(window: &WebviewWindow, x: f64, y: f64) {
+pub(crate) fn move_to(window: &Window, x: f64, y: f64) {
     if cfg!(target_os = "macos") {
         let _ = window.set_position(tauri::LogicalPosition::new(x, y));
     } else {
@@ -89,13 +89,13 @@ pub fn save_soon(app: &AppHandle, file: PathBuf) {
         if app.try_state::<crate::dropdown::Dropdown>().is_some_and(|d| d.docked()) {
             return;
         }
-        if let Some(place) = app.get_webview_window("main").and_then(|w| read(&w)) {
+        if let Some(place) = crate::main_window(&app).and_then(|w| read(&w)) {
             let _ = save(&file, place);
         }
     });
 }
 
-fn read(window: &WebviewWindow) -> Option<Place> {
+fn read(window: &Window) -> Option<Place> {
     if window.is_minimized().unwrap_or(false) || window.is_fullscreen().unwrap_or(false) {
         return None;
     }
@@ -103,7 +103,7 @@ fn read(window: &WebviewWindow) -> Option<Place> {
 }
 
 /// Where the window is now and how big.
-pub(crate) fn here(window: &WebviewWindow) -> Option<Place> {
+pub(crate) fn here(window: &Window) -> Option<Place> {
     let pos = window.outer_position().ok()?;
     let size = window.inner_size().ok()?;
     if cfg!(target_os = "macos") {
@@ -147,7 +147,7 @@ fn shared(m: &Monitor, pos: PhysicalPosition<i32>, size: PhysicalSize<u32>) -> P
 
 /// The mouse, in the same units as `Place`. (On macOS tao gives its points
 /// times the main screen's scale.)
-pub(crate) fn cursor(window: &WebviewWindow) -> Option<(f64, f64)> {
+pub(crate) fn cursor(window: &Window) -> Option<(f64, f64)> {
     let at = window.cursor_position().ok()?;
     if cfg!(target_os = "macos") {
         let scale = window.primary_monitor().ok().flatten()?.scale_factor();

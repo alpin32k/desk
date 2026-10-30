@@ -1,5 +1,11 @@
 # Zmiany
 
+## Niewydane
+
+- **⌘` nie gubi się po otwarciu podglądu.** Gdy w panelu bocznym był otwarty link albo plik, desk
+  przestawał widzieć własne okno: ⌘` nic nie robił, blokada nie zasłaniała ekranu, a miejsce okna
+  się nie zapisywało, aż do restartu. Teraz wszystko działa także z otwartym podglądem.
+
 ## 0.1.18 (2026-10-29)
 
 - **Dropdown na właściwym ekranie przy Retinie obok zwykłego monitora.** ⌘` wysuwa go na ekranie

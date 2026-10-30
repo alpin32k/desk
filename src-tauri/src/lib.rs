@@ -305,6 +305,14 @@ fn open_external(url: String, browser: Option<String>) -> Result<(), String> {
     preview::open_external(&url, browser.as_deref().unwrap_or("auto"))
 }
 
+/// desk's window. Not `get_webview_window("main")`: that finds nothing once
+/// the side panel's preview (a second webview) is inside the window, which
+/// left the dropdown, the lock and the window's place without a window until
+/// desk restarted.
+pub(crate) fn main_window<R: tauri::Runtime, M: Manager<R>>(app: &M) -> Option<tauri::Window<R>> {
+    app.get_window("main")
+}
+
 /// Options changed the dropdown (⌘`): register or drop the shortcut, refit the window.
 #[tauri::command]
 fn dropdown_apply(handle: AppHandle) -> Result<(), String> {
@@ -587,7 +595,7 @@ pub fn run() {
             app.manage(lock::Lock::default());
             #[cfg(target_os = "macos")]
             mac_keys::install(app.handle());
-            if let Some(w) = app.get_webview_window("main") {
+            if let Some(w) = crate::main_window(app) {
                 window_place::restore(&w, &window_place::file(&support));
             }
             app.manage(AppCoffee(coffee::Coffee::new(&support)));
@@ -681,7 +689,7 @@ pub fn run() {
                 tauri::WindowEvent::Focused(false) | tauri::WindowEvent::Resized(_)
                     if window.state::<lock::Lock>().holds_focus() =>
                 {
-                    if let Some(w) = window.app_handle().get_webview_window("main") {
+                    if let Some(w) = crate::main_window(window.app_handle()) {
                         let _ = w.unminimize();
                         let _ = w.set_focus();
                     }
@@ -822,5 +830,31 @@ mod acl_tests {
                 assert!(denied(call_panel(url, cmd)), "{cmd} panel {url}");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod main_window_tests {
+    use tauri::test::mock_builder;
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+
+    /// A link opened in the side panel puts a second webview in the window;
+    /// ⌘` then did nothing until desk restarted.
+    #[test]
+    fn the_window_is_found_with_a_preview_open() {
+        let app = mock_builder().build(super::context()).unwrap();
+        let main = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
+            .build()
+            .unwrap();
+        main.as_ref()
+            .window()
+            .add_child(
+                tauri::webview::WebviewBuilder::new(crate::preview::LABEL, WebviewUrl::default()),
+                tauri::LogicalPosition::new(0.0, 0.0),
+                tauri::LogicalSize::new(100.0, 100.0),
+            )
+            .unwrap();
+        assert!(app.get_webview_window("main").is_none(), "the trap main_window avoids");
+        assert_eq!(super::main_window(&app).map(|w| w.label().to_string()), Some("main".into()));
     }
 }

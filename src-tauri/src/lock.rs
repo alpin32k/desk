@@ -99,7 +99,7 @@ impl Lock {
 /// again does not flicker.
 fn cover_screens(app: &AppHandle, on: bool) {
     let mut screens = Vec::new();
-    if on && let Some(main) = app.get_webview_window("main") {
+    if on && let Some(main) = crate::main_window(app) {
         let here = main.current_monitor().ok().flatten().map(|m| *m.position());
         screens = main.available_monitors().unwrap_or_default();
         screens.retain(|m| Some(*m.position()) != here);
@@ -173,7 +173,7 @@ fn above_everything(_window: &tauri::Window) {}
 fn kiosk(app: &AppHandle, on: bool) {
     use objc2::MainThreadMarker;
     use objc2_app_kit::{NSApplication, NSApplicationPresentationOptions as O};
-    if let Some(w) = app.get_webview_window("main") {
+    if let Some(w) = crate::main_window(app) {
         let _ = w.set_simple_fullscreen(on);
         let _ = w.set_focus();
     }
@@ -199,7 +199,7 @@ fn kiosk(app: &AppHandle, on: bool) {
 /// Windows, Linux: the window fills the screen while locked.
 #[cfg(not(target_os = "macos"))]
 fn kiosk(app: &AppHandle, on: bool) {
-    if let Some(w) = app.get_webview_window("main") {
+    if let Some(w) = crate::main_window(app) {
         let _ = w.set_fullscreen(on);
         let _ = w.set_focus();
     }
@@ -262,7 +262,7 @@ fn authenticate(app: &AppHandle, reason: &str, _password: Option<&str>) -> Resul
                 .into(),
         );
     }
-    let window = app.get_webview_window("main").ok_or(tr!("brak okna", "no window"))?;
+    let window = crate::main_window(app).ok_or(tr!("brak okna", "no window"))?;
     let hwnd = window.hwnd().map_err(|e| e.to_string())?;
     let interop = factory::<UserConsentVerifier, IUserConsentVerifierInterop>().map_err(err)?;
     // SAFETY: a valid window handle of this process and a message string.
