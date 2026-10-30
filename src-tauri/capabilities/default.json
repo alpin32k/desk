@@ -58,6 +58,7 @@
     "allow-github-repos",
     "allow-clone-project",
     "allow-dropped-paths",
-    "allow-recent-conversations"
+    "allow-recent-conversations",
+    "allow-quit-desk"
   ]
 }

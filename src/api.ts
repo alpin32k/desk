@@ -205,6 +205,8 @@ export const api = {
   /** `password`: the account password typed on the lock screen (Linux). */
   unlockDesk: (password?: string) => invoke<void>("unlock_desk", { password: password ?? null }),
   isLocked: () => invoke<boolean>("is_locked"),
+  /** Quit desk (the page asks first); refused while locked. */
+  quitDesk: () => invoke<void>("quit_desk"),
   /** Register or drop ⌘` and refit the dropped-down window, as layout.json says. */
   dropdownApply: () => invoke<void>("dropdown_apply"),
   /** From the dropdown back to the ordinary window; the shortcut stays on. */

@@ -18,7 +18,7 @@ import {
   type Usage,
 } from "./api";
 import { detectLanguage, isLanguage, setLanguage, t, type Language } from "./i18n";
-import { actionFor, hints, keysIn, setCustomKeys, type Action } from "./keys";
+import { actionFor, hints, keysIn, keyText, setCustomKeys, type Action } from "./keys";
 import { PLATFORM, shortcut } from "./platform";
 import { Side } from "./side";
 import * as L from "./lanes";
@@ -59,6 +59,8 @@ export class App {
   private projectCache: Promise<Project[]> | null = null;
   private active: string | null = null;
   private opening = new Map<string, Promise<void>>();
+  /** No tmux: sessions end when desk quits. */
+  private tmuxMissing = false;
   /** Tiles about to open a conversation again (⌘S): key → Claude session id. */
   private resuming = new Map<string, string>();
   private earlyExits = new Map<number, string>(); // pty-exit that arrived before attach returned
@@ -251,6 +253,7 @@ export class App {
       if (t === "browser") this.side.browse();
       if (t === "update") void this.installUpdate();
       if (t === "leave") void api.dropdownLeave();
+      if (t === "quit") void this.quit();
     });
     const boot = await api.bootstrap();
     // First launch: the system's language, kept from now on.
@@ -265,6 +268,7 @@ export class App {
     this.chatPath = await api.chatDir().catch(() => "");
     for (const s of boot.states) this.hook.set(s.slug, s);
     for (const s of boot.sessions) this.running.add(keyOf(s));
+    this.tmuxMissing = boot.tmuxMissing;
     if (boot.tmuxMissing) {
       const install = PLATFORM === "mac" ? "brew install tmux" : "sudo apt install tmux";
       toast(t("app.noTmux", { install }), 15000);
@@ -1091,11 +1095,24 @@ export class App {
       : "";
     this.top.innerHTML = `${leave}<span class="brand"${drag}>desk</span>${hide}<span class="dim"${drag}> · ${this.tiles.size} sessions</span>${
       waiting ? `<span class="waiting-pill"${drag}>${t("top.waiting", { n: waiting })}</span>` : ""
-    }<span class="spacer"${drag}></span>${this.updateHtml()}${usageHtml(this.usage, Date.now())}<button class="top-btn" data-top="browser" title="${t("top.browserTitle", { keys: keysIn("⌘W") })}">${t("top.browser")}</button>${this.coffeeHtml()}`;
+    }<span class="spacer"${drag}></span>${this.updateHtml()}${usageHtml(this.usage, Date.now())}<button class="top-btn" data-top="browser" title="${t("top.browserTitle", { keys: keysIn("⌘W") })}">${t("top.browser")}</button>${this.coffeeHtml()}${this.quitHtml()}`;
     this.footer.innerHTML =
       `<span class="hints">${hints()
         .map(([k, label]) => `<span><kbd>${k}</kbd> ${escapeHtml(label)}</span>`)
         .join("")}</span><span class="counts"><b>${this.tiles.size}</b> sessions · <span class="c-working">${count("working")} working</span> · <span class="c-waiting">${waiting} waiting</span> · ${count("idle")} idle</span>${this.pinHtml()}`;
+  }
+
+  /** ⏻ at the end of the top bar: desk has no other way out while docked, and ⌘Q closes a tile. */
+  private quitHtml(): string {
+    const keys = keyText("quit");
+    return `<button class="top-btn quit" data-top="quit" title="${escapeHtml(t("top.quitTitle", { keys: keys ? ` (${keys})` : "" }))}">⏻</button>`;
+  }
+
+  private async quit(): Promise<void> {
+    const sessions = this.tmuxMissing || PLATFORM === "windows" ? t("update.sessionsEnd") : t("update.sessionsStay");
+    if (!(await confirmBox(t("top.quitConfirm", { sessions }), t("top.quit")))) return;
+    await this.saveNow();
+    await api.quitDesk().catch((err) => toast(String(err)));
   }
 
   // ---- updates -----------------------------------------------------------
@@ -1306,6 +1323,11 @@ export class App {
       case "settings":
         this.palette.close();
         void this.settings.toggle();
+        break;
+      case "quit":
+        this.palette.close();
+        this.settings.close();
+        void this.quit();
         break;
       case "preview":
         this.side.toggle();

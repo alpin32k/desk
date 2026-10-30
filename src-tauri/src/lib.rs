@@ -94,6 +94,17 @@ fn list_sessions(app: State<App>) -> Vec<tmux::SessionInfo> {
     app.sessions.list()
 }
 
+/// The ⏻ button or its shortcut (Options), after the page asked: ⌘Q closes a
+/// tile and the menu is gone while docked. Not while locked.
+#[tauri::command]
+fn quit_desk(handle: AppHandle, lock: State<lock::Lock>) -> Result<(), String> {
+    if lock.is_locked() {
+        return Err(tr!("desk jest zablokowany", "desk is locked").into());
+    }
+    handle.exit(0);
+    Ok(())
+}
+
 /// ⌘S: the project's newest Claude conversations, to resume one.
 #[tauri::command(async)]
 fn recent_conversations(path: String) -> Vec<conversations::Conversation> {
@@ -668,6 +679,7 @@ pub fn run() {
             clone_project,
             dropped_paths,
             recent_conversations,
+            quit_desk,
         ])
         .on_window_event(|window, event| {
             if window.label() != "main" {

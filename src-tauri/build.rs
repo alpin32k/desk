@@ -49,6 +49,7 @@ const COMMANDS: &[&str] = &[
     "clone_project",
     "dropped_paths",
     "recent_conversations",
+    "quit_desk",
 ];
 
 fn main() {

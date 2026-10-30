@@ -25,6 +25,7 @@ export type Action =
   | { type: "minimize" }
   | { type: "exitFullscreen" }
   | { type: "settings" }
+  | { type: "quit" }
   | { type: "preview" }
   | { type: "font"; step: 1 | -1 | 0 };
 
@@ -64,6 +65,8 @@ export const BINDINGS: Binding[] = [
   { id: "coffee", group: "window", action: { type: "coffee" }, mac: ["Super+KeyK"] },
   { id: "lock", group: "window", action: { type: "lock" }, mac: ["Super+KeyB"] },
   { id: "settings", group: "window", action: { type: "settings" }, mac: ["Super+KeyO"] },
+  // None by default (⌘Q closes a tile): set one in Options, or use ⏻.
+  { id: "quit", group: "window", action: { type: "quit" }, mac: [] },
   { id: "fullscreen", group: "tiles", action: { type: "fullscreen" }, mac: ["Super+KeyE", "Super+Enter"] },
   { id: "exitFullscreen", group: "tiles", action: { type: "exitFullscreen" }, mac: ["Super+Escape"], other: [] }, // Ctrl+Shift+Esc is the Task Manager
   { id: "minimize", group: "tiles", action: { type: "minimize" }, mac: ["Super+KeyJ"] },

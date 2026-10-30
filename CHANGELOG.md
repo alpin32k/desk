@@ -7,6 +7,9 @@
   rozmowa wraca w nowym kafelku (`claude --resume`), więc zamknięta karta albo sesja zgubiona przez
   desk nie przepada. Rozmowa, która jest już w kafelku, ma dopisek „otwarta” i tylko dostaje fokus.
   W edytorze w podglądzie ⌘S dalej zapisuje plik.
+- **⏻ zamyka desk.** Przycisk na końcu górnego paska pyta, czy zamknąć desk, i mówi, co stanie się
+  z sesjami. Do tej pory desk zamykał się tylko z menu, którego nie ma w dropdownie, a ⌘Q zamyka
+  kafelek. Skrót do zamykania przypiszesz w Opcje → Skróty („zamknij desk”); domyślnie go nie ma.
 
 ## 0.1.18 (2026-10-29)
 

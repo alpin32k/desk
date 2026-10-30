@@ -87,6 +87,18 @@ describe("custom shortcuts", () => {
     }
   });
 
+  it("quit desk has no key until one is set (⌘Q closes a tile)", () => {
+    expect(keyText("quit", "mac")).toBe("");
+    expect(keyText("quit", "windows")).toBe("");
+    setCustomKeys({ quit: "Super+Alt+KeyQ" });
+    try {
+      expect(mac(k("q", { altKey: true }))).toEqual({ type: "quit" });
+      expect(mac(k("q"))).toEqual({ type: "close" });
+    } finally {
+      setCustomKeys({});
+    }
+  });
+
   it("refuse a key that is taken", () => {
     expect(clashWith("palette", "Super+KeyN", "mac")).toBe("nowy projekt (folder + opcjonalnie git init)");
     expect(clashWith("palette", "Super+KeyC", "mac")).toBe("kopiuj");
