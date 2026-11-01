@@ -1,5 +1,12 @@
 # Zmiany
 
+## 0.1.20 (2026-11-01)
+
+- **Terminal zawsze wypełnia swój kafelek.** Gdy kafelek zmienił rozmiar w chwili podpinania się
+  do tmux (start desk, druga sesja dzieląca kolumnę), tmux zostawał przy starym rozmiarze i dolna
+  część kafelka była pusta aż do następnej zmiany układu. Teraz rozmiar jest dosyłany zaraz po
+  podpięciu.
+
 ## 0.1.19 (2026-10-31)
 
 - **⌘` nie gubi się po otwarciu podglądu.** Gdy w panelu bocznym był otwarty link albo plik, desk
