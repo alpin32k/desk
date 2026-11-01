@@ -1,5 +1,13 @@
 # Zmiany
 
+## 0.1.21 (2026-11-01)
+
+- **Kolumny, ramki i kafelki wypełniają całe miejsce.** Kolumna, która została sama po zamknięciu
+  sąsiedniej, zajmowała tylko część okna (np. 3/4, reszta była pusta), a pojedynczy kafelek
+  w ramce potrafił zostawić pusty dół. Działo się tak, gdy przeciągnięte rozmiary sumowały się do
+  mniej niż jednej „całości”. Teraz liczą się tylko proporcje, więc miejsce jest zawsze wypełnione,
+  także w już zapisanym układzie.
+
 ## 0.1.20 (2026-11-01)
 
 - **Terminal zawsze wypełnia swój kafelek.** Gdy kafelek zmienił rozmiar w chwili podpinania się
