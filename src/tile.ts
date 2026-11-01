@@ -306,14 +306,19 @@ export class Tile {
     const ch = new Channel<ArrayBuffer>();
     ch.onmessage = (buf) => this.term.write(new Uint8Array(buf));
     this.ptyId = null;
+    const { cols, rows } = this.term;
     try {
-      this.ptyId = await api.ptyAttach(this.slug, this.term.cols, this.term.rows, ch);
+      this.ptyId = await api.ptyAttach(this.slug, cols, rows, ch);
     } catch (err) {
       this.term.write(`\r\n\x1b[31m${t("tile.attachFailed", { err: String(err) })}\x1b[0m\r\n${t("tile.attachFailedHint")}\r\n`);
       return;
     }
-    if (this.disposed) void api.ptyClose(this.ptyId);
-    else this.onAction(this, "attached");
+    if (this.disposed) return void api.ptyClose(this.ptyId);
+    // The layout may have settled while tmux was attaching (desk starting, a
+    // column splitting): that fit had no PTY to tell, so tmux would keep the
+    // old size and leave the rest of the tile empty.
+    if (this.term.cols !== cols || this.term.rows !== rows) void api.ptyResize(this.ptyId, this.term.cols, this.term.rows);
+    this.onAction(this, "attached");
   }
 
   focus(): void {
