@@ -5,6 +5,7 @@ import {
   autoLanes,
   distribute,
   flatten,
+  grow,
   group,
   groups,
   move,
@@ -153,5 +154,13 @@ describe("lanes", () => {
     expect(split(2, 100, 100, 50, 10)).toEqual([1.5, 0.5]);
     expect(split(2, 100, 100, -500, 10)).toEqual([0.1, 1.9]); // neither side below the minimum
     expect(split(3, 300, 0, 0, 0)).toEqual([3, 0]);
+  });
+
+  it("grow keeps the ratios but never lets a row's weights add up to less than 1", () => {
+    // Flexbox hands out only part of the room when the grow factors add up to
+    // less than 1: a lone column of weight 0.75 filled three quarters of the window.
+    expect(Number(grow(0.75))).toBeGreaterThanOrEqual(1);
+    expect(Number(grow(0.05))).toBeGreaterThanOrEqual(1); // a side squeezed to its minimum
+    expect(Number(grow(0.97)) / Number(grow(0.53))).toBeCloseTo(0.97 / 0.53);
   });
 });

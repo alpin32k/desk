@@ -1,7 +1,7 @@
 // Pointer dragging in the grid: the lines between lanes, cards and tiles, and
 // moving a card or a tile. Pointer events rather than HTML5 drag and drop: the
 // window takes every file drop (app.ts), and the drop mark follows the pointer.
-import { split } from "./lanes";
+import { grow, split } from "./lanes";
 import { holdFits } from "./tile";
 
 /** The weight an element grows by, read from and written to the layout. */
@@ -17,7 +17,7 @@ const MIN = { v: 160, h: 48 };
 /** Let `el` take room by its weight and be resized by the lines next to it. */
 export function sizable(el: HTMLElement, sizer: Sizer): void {
   sizers.set(el, sizer);
-  el.style.flexGrow = String(sizer.get());
+  el.style.flexGrow = grow(sizer.get());
 }
 
 /**
@@ -47,8 +47,8 @@ export function splitLine(dir: "v" | "h", done: () => void): HTMLElement {
       const [wa, wb] = split(total, pa, pb, pos(ev) - start, MIN[dir]);
       sa.set(wa);
       sb.set(wb);
-      a.style.flexGrow = String(wa);
-      b.style.flexGrow = String(wb);
+      a.style.flexGrow = grow(wa);
+      b.style.flexGrow = grow(wb);
     };
     const up = () => {
       line.removeEventListener("pointermove", move);

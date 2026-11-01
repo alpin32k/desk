@@ -142,6 +142,17 @@ export function split(total: number, a: number, b: number, delta: number, min: n
   return [first, total - first];
 }
 
+/**
+ * The CSS flex-grow for a weight. Flexbox hands out only part of the room
+ * when the grow factors of a row add up to less than 1: a column left alone
+ * with weight 0.75 (its neighbour closed) filled three quarters of the window,
+ * a lone tile of 0.76 left the bottom of its card empty. Only the ratios
+ * matter, so the weights are scaled far above that.
+ */
+export function grow(weight: number): string {
+  return String(weight * 1000);
+}
+
 export function remove(lanes: Lanes, path: string): Lanes {
   return lanes.map((l) => l.filter((p) => p !== path));
 }
