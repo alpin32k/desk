@@ -636,9 +636,12 @@ html.dragging-card .tile .term {
   background-color: var(--bg) !important;
 }
 
+/* xterm 6 scrolls with its own scrollbar; the viewport is only a backdrop. Its
+   `overflow-y: scroll` from xterm.css still drew a native WebKit scrollbar: a
+   stub of a thumb in the bottom right corner of every terminal, under xterm's
+   layer and so impossible to click. */
 .tile .term .xterm .xterm-viewport {
-  overflow-x: hidden;
-  scrollbar-color: var(--line-hi) transparent;
+  overflow: hidden;
 }
 
 .tile .state::before {

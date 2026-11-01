@@ -1,5 +1,12 @@
 # Zmiany
 
+## 0.1.22 (2026-11-01)
+
+- **Bez martwego paska w rogu terminala.** W prawym dolnym rogu kafelka wisiała mała kreska,
+  która wyglądała jak kciuk paska przewijania przy ogromnej rozmowie, ale nie dawała się kliknąć.
+  To był zbędny natywny pasek przeglądarki pod terminalem. Już go nie ma, a przewijanie działa
+  jak dotąd.
+
 ## 0.1.21 (2026-11-01)
 
 - **Kolumny, ramki i kafelki wypełniają całe miejsce.** Kolumna, która została sama po zamknięciu
