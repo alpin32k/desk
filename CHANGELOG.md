@@ -1,5 +1,13 @@
 # Zmiany
 
+## 0.1.23 (2026-11-02)
+
+- **Sesje wracają po restarcie komputera.** Po aktualizacji systemu i restarcie desk pokazywał
+  tylko kilka kafelków, a w tych, które wróciły, był pusty Claude. Przy zamykaniu systemu tmux
+  kończy wszystkie sesje naraz, a desk brał to za zwykłe zakończenie sesji i usuwał kafelki z układu.
+  Teraz sesje, które kończą się razem, zostają w układzie i wracają przy następnym starcie,
+  a Claude w każdym kafelku wraca do swojej ostatniej rozmowy (`--resume`).
+
 ## 0.1.22 (2026-11-01)
 
 - **Bez martwego paska w rogu terminala.** W prawym dolnym rogu kafelka wisiała mała kreska,

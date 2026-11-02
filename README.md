@@ -29,7 +29,7 @@ Natywna aplikacja z siatką żywych terminali: po jednej sesji Claude Code
 
 **Sesje przeżywają okno**
 
-Każda sesja żyje w tmux na prywatnym sockecie. Zamykasz desk, otwierasz znowu: kafelki wracają w tym samym układzie.
+Każda sesja żyje w tmux na prywatnym sockecie. Zamykasz desk, otwierasz znowu: kafelki wracają w tym samym układzie. Po restarcie komputera też, a Claude wraca do swojej ostatniej rozmowy.
 
 </td>
 <td width="33%" valign="top">

@@ -120,6 +120,7 @@ fn open_session(
     instance: u32,
     command: Option<String>,
     resume: Option<String>,
+    restore: bool,
 ) -> Result<String, String> {
     let dir = Path::new(&path);
     if !dir.is_dir() {
@@ -135,6 +136,14 @@ fn open_session(
     {
         return Ok(s.slug);
     }
+    let slug = tmux::session_slug(dir, &agent, instance);
+    // A tile of the saved layout whose session tmux lost (the computer
+    // restarted): Claude carries on with the conversation it had.
+    let resume = resume.or_else(|| {
+        (restore && agent == "claude")
+            .then(|| hooks::last_conversation(&app.hooks.state_dir, &slug))
+            .flatten()
+    });
     let command = if agent == RUN_AGENT {
         // Only a command the project itself defines (see project::run_targets).
         let command = command.unwrap_or_default();
@@ -149,7 +158,7 @@ fn open_session(
         }
         command
     } else if let Some(id) = resume {
-        // ⌘S: a conversation picked up again; its id goes into the command line.
+        // ⌘S or a restored tile: a conversation picked up again; its id goes into the command line.
         if agent != "claude" || !conversations::is_session_id(&id) {
             return Err(format!("cannot resume {agent} {id}"));
         }
@@ -158,7 +167,6 @@ fn open_session(
         let custom = layout::load(&app.layout_path).agents;
         agents::command_for(&agent, &custom).ok_or_else(|| format!("unknown agent: {agent}"))?
     };
-    let slug = tmux::session_slug(dir, &agent, instance);
     if app.sessions.has(&slug) {
         return Err(format!(
             "tmux session {slug} already belongs to another folder"

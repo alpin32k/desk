@@ -99,6 +99,16 @@ pub fn read_state(path: &Path) -> Option<SessionState> {
     parse_state(&slug, &std::fs::read_to_string(path).ok()?)
 }
 
+/// The Claude conversation session `slug` had last, while Claude still keeps
+/// its transcript: what a session tmux lost (a restart) resumes.
+pub fn last_conversation(state_dir: &Path, slug: &str) -> Option<String> {
+    let text = std::fs::read_to_string(state_dir.join(format!("{slug}.json"))).ok()?;
+    let r: Record = serde_json::from_str(text.trim()).ok()?;
+    let id = r.payload.get("session_id")?.as_str()?;
+    let transcript = r.payload.get("transcript_path")?.as_str()?;
+    (crate::conversations::is_session_id(id) && Path::new(transcript).is_file()).then(|| id.to_string())
+}
+
 /// `state/<slug>.json` -> slug; temp files (leading dot) are ignored.
 pub fn state_slug(path: &Path) -> Option<String> {
     if path.extension()? != "json" {
@@ -250,6 +260,24 @@ mod tests {
         record(tmp.path(), "p-1", "Stop", "", 8).unwrap();
         let text = std::fs::read_to_string(tmp.path().join("p-1.json")).unwrap();
         assert_eq!(parse_state("p-1", &text).unwrap().state, State::Idle);
+    }
+
+    #[test]
+    fn last_conversation_is_the_one_whose_transcript_is_still_there() {
+        let tmp = tempfile::tempdir().unwrap();
+        let id = "22c3c322-7423-45f8-bd65-47dbbdf8bca7";
+        let transcript = tmp.path().join(format!("{id}.jsonl"));
+        let payload = serde_json::json!({ "session_id": id, "transcript_path": transcript, "reason": "other" });
+        record(tmp.path(), "crm-claude15-f26f62e8", "SessionEnd", &payload.to_string(), 1).unwrap();
+        // Nothing to resume while Claude has no transcript of it.
+        assert_eq!(last_conversation(tmp.path(), "crm-claude15-f26f62e8"), None);
+        std::fs::write(&transcript, "{}\n").unwrap();
+        assert_eq!(last_conversation(tmp.path(), "crm-claude15-f26f62e8").as_deref(), Some(id));
+        // No state for the session, or an id that is not one.
+        assert_eq!(last_conversation(tmp.path(), "crm-claude16-f26f6801"), None);
+        let payload = serde_json::json!({ "session_id": "--help", "transcript_path": transcript });
+        record(tmp.path(), "x", "SessionEnd", &payload.to_string(), 1).unwrap();
+        assert_eq!(last_conversation(tmp.path(), "x"), None);
     }
 
     #[test]

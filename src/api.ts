@@ -185,8 +185,9 @@ export const api = {
   listProjects: (extra: string[]) => invoke<Project[]>("list_projects", { extra }),
   listSessions: () => invoke<SessionInfo[]>("list_sessions"),
   /** `resume`: a Claude conversation's id, to pick it up again (⌘S). */
-  openSession: (path: string, agent: string, instance: number, command?: string, resume?: string) =>
-    invoke<string>("open_session", { path, agent, instance, command: command ?? null, resume: resume ?? null }),
+  /** `restore`: a tile of the saved layout at startup; Claude resumes its last conversation if the session is gone. */
+  openSession: (path: string, agent: string, instance: number, command?: string, resume?: string, restore = false) =>
+    invoke<string>("open_session", { path, agent, instance, command: command ?? null, resume: resume ?? null, restore }),
   /** The project's newest Claude conversations (⌘S). */
   recentConversations: (path: string) => invoke<Conversation[]>("recent_conversations", { path }),
   projectFiles: (path: string) => invoke<string[]>("project_files", { path }),
