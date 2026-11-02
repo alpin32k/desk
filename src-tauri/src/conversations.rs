@@ -4,6 +4,7 @@
 //! `<folder>` is the project's path with every other character a dash. Only
 //! conversations someone typed in are listed (no `claude -p` or SDK runs),
 //! newest first, with the title Claude Code gave them and the first message.
+//! Conversations saved under a name (a named tile) are listed however old.
 
 use crate::claude_projects::modified_ms;
 use serde::Serialize;
@@ -40,8 +41,9 @@ pub fn folder(claude_projects_dir: &Path, cwd: &Path) -> PathBuf {
     claude_projects_dir.join(name)
 }
 
-/// The `limit` newest conversations held in `cwd`.
-pub fn recent(claude_projects_dir: &Path, cwd: &Path, limit: usize) -> Vec<Conversation> {
+/// The `limit` newest conversations held in `cwd`, and the ones in `keep`
+/// (saved under a name) however old.
+pub fn recent(claude_projects_dir: &Path, cwd: &Path, limit: usize, keep: &[String]) -> Vec<Conversation> {
     let Ok(entries) = fs::read_dir(folder(claude_projects_dir, cwd)) else {
         return Vec::new();
     };
@@ -54,11 +56,24 @@ pub fn recent(claude_projects_dir: &Path, cwd: &Path, limit: usize) -> Vec<Conve
         .filter_map(|e| Some((modified_ms(&e.metadata().ok()?), e.path())))
         .collect();
     files.sort_by(|a, b| b.cmp(a));
-    files
-        .into_iter()
-        .filter_map(|(ms, path)| read(&path, cwd, ms))
-        .take(limit)
-        .collect()
+    let kept = |path: &Path| {
+        path.file_stem()
+            .and_then(|s| s.to_str())
+            .is_some_and(|id| keep.iter().any(|k| k == id))
+    };
+    let mut found = Vec::new();
+    let mut newest = 0;
+    for (ms, path) in files {
+        let wanted = kept(&path);
+        if newest >= limit && !wanted {
+            continue;
+        }
+        if let Some(c) = read(&path, cwd, ms) {
+            newest += usize::from(!wanted);
+            found.push(c);
+        }
+    }
+    found
 }
 
 /// A Claude Code session id (a UUID): the only thing `--resume` is given.
@@ -236,7 +251,7 @@ mod tests {
         write(&dir, "21111111-2222-3333-4444-555555555555", 60, &[json!({"type": "summary"})]);
         write(&dir, "not-a-session", 70, &[said(&cwd, "cli", json!("x"))]);
 
-        let found = recent(&root, &cwd, 10);
+        let found = recent(&root, &cwd, 10, &[]);
         assert_eq!(
             found,
             vec![
@@ -256,8 +271,26 @@ mod tests {
                 },
             ]
         );
-        assert_eq!(recent(&root, &cwd, 1).len(), 1);
-        assert!(recent(&root, &temp.path().join("nowhere"), 10).is_empty());
+        assert_eq!(recent(&root, &cwd, 1, &[]).len(), 1);
+        assert!(recent(&root, &temp.path().join("nowhere"), 10, &[]).is_empty());
+    }
+
+    #[test]
+    fn saved_conversations_are_listed_however_old() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("projects");
+        let cwd = temp.path().join("crm");
+        let dir = folder(&root, &cwd);
+        write(&dir, A, 10, &[said(&cwd, "cli", json!("sso"))]);
+        write(&dir, B, 20, &[said(&cwd, "cli", json!("tickety"))]);
+        write(&dir, C, 30, &[said(&cwd, "cli", json!("webhook"))]);
+        let ids = |found: Vec<Conversation>| found.into_iter().map(|c| c.id).collect::<Vec<_>>();
+        // The limit counts the newest ones only; a saved one comes on top of it, in its place by date.
+        assert_eq!(ids(recent(&root, &cwd, 1, &[A.into()])), vec![C.to_string(), A.to_string()]);
+        assert_eq!(ids(recent(&root, &cwd, 1, &[C.into()])), vec![C.to_string(), B.to_string()]);
+        // Saved but gone (transcript deleted): nothing to resume, not listed.
+        let gone = "31111111-2222-3333-4444-555555555555".to_string();
+        assert_eq!(ids(recent(&root, &cwd, 0, &[gone])), Vec::<String>::new());
     }
 
     #[test]

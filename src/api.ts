@@ -48,6 +48,8 @@ export interface Layout {
   minimized: string[];
   /** Names given to tiles by hand, by session key. */
   titles: Record<string, string>;
+  /** Claude conversations saved under a name, by project path, then by conversation id (saved.ts). */
+  saved: Record<string, Record<string, string>>;
   /** ⌘` slides the window down from the top of the screen. */
   dropdown: boolean;
   /** Height of the dropped-down window, percent of the screen. */
@@ -189,7 +191,8 @@ export const api = {
   openSession: (path: string, agent: string, instance: number, command?: string, resume?: string, restore = false) =>
     invoke<string>("open_session", { path, agent, instance, command: command ?? null, resume: resume ?? null, restore }),
   /** The project's newest Claude conversations (⌘S). */
-  recentConversations: (path: string) => invoke<Conversation[]>("recent_conversations", { path }),
+  /** `saved`: ids of the project's saved conversations, listed however old. */
+  recentConversations: (path: string, saved: string[]) => invoke<Conversation[]>("recent_conversations", { path, saved }),
   projectFiles: (path: string) => invoke<string[]>("project_files", { path }),
   openFile: (path: string, file: string) => invoke<void>("open_file", { path, file }),
   previewFile: (path: string, file: string, bounds: PreviewBounds) =>

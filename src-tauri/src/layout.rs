@@ -57,6 +57,9 @@ pub struct Layout {
     pub minimized: Vec<String>,
     /// Names given to tiles by hand, by session key.
     pub titles: std::collections::BTreeMap<String, String>,
+    /// Claude conversations saved under a name (a named tile), by project
+    /// path, then by conversation id: ⌘S lists them first, however old.
+    pub saved: std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
     /// ⌘` slides the window down from the top of the screen (see dropdown.rs).
     pub dropdown: bool,
     /// Height of the dropped-down window, in percent of the screen.
@@ -101,6 +104,7 @@ impl Default for Layout {
             font_size: 11.5,
             minimized: Vec::new(),
             titles: Default::default(),
+            saved: Default::default(),
             // Ctrl+` belongs to editors' terminals on Windows and Linux: opt in there.
             dropdown: cfg!(target_os = "macos"),
             dropdown_height: 50,
