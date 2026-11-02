@@ -26,7 +26,7 @@ import * as L from "./lanes";
 import { label, mark, sizable, splitLine, watchDrag, type Box } from "./drag";
 import { Palette } from "./palette";
 import { ago, pickColor, PROJECT_COLORS, projectColor } from "./projects";
-import { keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
+import { Endings, keyOf, nextInstance, parseKey, sessionsLabel, type Place } from "./sessions";
 import { dropped } from "./address";
 import { DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
 import { repoName } from "./github";
@@ -58,6 +58,8 @@ const EDGE_PX = 40;
 const MAX_LANES = 8;
 /** Closed tiles ⌘⇧T can still reopen. */
 const CLOSED_KEPT = 20;
+/** Sessions ending within this of each other end together (a restart): see Endings. */
+const ENDING_MS = 3000;
 
 export class App {
   private layout!: Layout;
@@ -77,7 +79,9 @@ export class App {
   /** Tiles about to open a conversation again (⌘S): key → Claude session id. */
   private resuming = new Map<string, string>();
   private earlyExits = new Map<number, string>(); // pty-exit that arrived before attach returned
-  private missing: { key: string; lane: number }[] = [];
+  /** Tiles kept in the saved layout though not open: they failed to open at startup or their session ended with others (see Endings). */
+  private missing: Place[] = [];
+  private endings = new Endings(ENDING_MS);
   private creatingProject = false;
   /** GitHub repos for the new project dialog, fetched at most every few minutes. */
   private githubRepos: { at: number; list: Promise<GithubRepo[]> } | null = null;
@@ -353,7 +357,7 @@ export class App {
 
     // Reattach every tile from the saved layout (starting sessions tmux lost) and the autostart ones.
     const keys = L.flatten(this.layout.lanes);
-    const opened = await Promise.all(keys.map((k) => this.createTile(k)));
+    const opened = await Promise.all(keys.map((k) => this.createTile(k, true)));
     keys.forEach((k, i) => {
       if (opened[i]) return;
       // Keep it in the saved layout (volume not mounted, tmux not ready...) for the next start.
@@ -376,13 +380,17 @@ export class App {
 
   // ---- tiles -------------------------------------------------------------
 
-  private async createTile(key: string): Promise<Tile | null> {
+  /** `restore`: a tile of the saved layout at startup, whose Claude takes up its last conversation if tmux lost the session. */
+  private async createTile(key: string, restore = false): Promise<Tile | null> {
     const spec = parseKey(key);
     const resume = this.resuming.get(key);
     this.resuming.delete(key);
     try {
-      const slug = await api.openSession(spec.path, spec.agent, spec.instance, this.layout.runs[key], resume);
+      const slug = await api.openSession(spec.path, spec.agent, spec.instance, this.layout.runs[key], resume, restore);
       this.running.add(key);
+      // Open again: no longer kept in the layout on its behalf.
+      this.missing = this.missing.filter((m) => m.key !== key);
+      this.endings.forget(key);
       this.usageAt = 0; // a new harness may need its limits on the next poll
       if (this.tiles.has(key)) return null; // opened meanwhile (startup restore vs palette)
       const tile = new Tile(spec, slug, (t, a) => void this.onTileAction(t, a));
@@ -646,10 +654,26 @@ export class App {
     if (alive) {
       await tile.attach(); // detached from outside (e.g. tmux detach-client): attach again
     } else {
+      const lane = this.layout.lanes.findIndex((l) => l.includes(tile.key));
       this.running.delete(tile.key);
       this.closeTile(tile.key);
+      this.sessionEnded(tile.key, lane);
       toast(t("app.sessionEnded", { name: tile.name }));
     }
+  }
+
+  /** A session ended on its own. Ending with others (a restart, tmux gone) it
+   *  comes back at the next start; alone, it leaves the saved layout once it is
+   *  clear no others follow, so desk going down meanwhile does not lose it. */
+  private sessionEnded(key: string, lane: number): void {
+    for (const p of this.endings.ended(key, lane, Date.now())) {
+      if (!this.missing.some((m) => m.key === p.key)) this.missing.push(p);
+    }
+    this.save();
+    window.setTimeout(() => {
+      this.endings.settle(Date.now());
+      this.save();
+    }, ENDING_MS);
   }
 
   private setActive(key: string, focus: boolean): void {
@@ -1201,10 +1225,10 @@ export class App {
     this.saveTimer = window.setTimeout(() => void this.persist(), 150);
   }
 
-  /** Write layout.json; tiles that failed to open at startup keep their place. */
+  /** Write layout.json; tiles kept though not open (see `missing`, Endings) keep their place. */
   private persist(): Promise<void> {
     const lanes = L.clone(this.layout.lanes);
-    for (const m of this.missing) {
+    for (const m of [...this.missing, ...this.endings.held]) {
       if (!L.contains(lanes, m.key)) lanes[Math.min(Math.max(m.lane, 0), lanes.length - 1)].push(m.key);
     }
     return api.saveLayout({ ...this.layout, lanes }).catch((err) => toast(t("app.saveLayoutError", { err: String(err) })));

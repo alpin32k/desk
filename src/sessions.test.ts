@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentLabel, keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
+import { Endings, agentLabel, keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
 
 describe("session keys", () => {
   it("keeps the bare path for the main Claude session", () => {
@@ -45,5 +45,40 @@ describe("session keys", () => {
     expect(parseKey("C:\\Users\\jan\\shop")).toEqual({ path: "C:\\Users\\jan\\shop", agent: "claude", instance: 0 });
     expect(parseKey("codex#1:C:\\Users\\jan\\shop")).toEqual({ path: "C:\\Users\\jan\\shop", agent: "codex", instance: 1 });
     expect(keyOf({ path: "C:\\x", agent: "run", instance: 0 })).toBe("run#0:C:\\x");
+  });
+});
+
+describe("sessions that end", () => {
+  it("one ending alone stays in the saved layout only for a while", () => {
+    const e = new Endings(3000);
+    expect(e.ended("/a", 0, 1000)).toEqual([]);
+    expect(e.held).toEqual([{ key: "/a", lane: 0 }]);
+    e.settle(3999);
+    expect(e.held).toEqual([{ key: "/a", lane: 0 }]);
+    e.settle(4000);
+    expect(e.held).toEqual([]);
+  });
+
+  it("several ending together (a restart, tmux gone) are all kept for the next start", () => {
+    const e = new Endings(3000);
+    expect(e.ended("/a", 0, 1000)).toEqual([]);
+    expect(e.ended("/b", 1, 2500)).toEqual([
+      { key: "/a", lane: 0 },
+      { key: "/b", lane: 1 },
+    ]);
+    // The burst goes on as long as they keep coming.
+    expect(e.ended("/c", 1, 5000)).toEqual([{ key: "/c", lane: 1 }]);
+    expect(e.held).toEqual([]);
+    e.settle(10_000);
+    // Long after: alone again.
+    expect(e.ended("/d", 0, 20_000)).toEqual([]);
+    expect(e.held).toEqual([{ key: "/d", lane: 0 }]);
+  });
+
+  it("a tile opened again is not held any more", () => {
+    const e = new Endings(3000);
+    e.ended("/a", 0, 1000);
+    e.forget("/a");
+    expect(e.held).toEqual([]);
   });
 });

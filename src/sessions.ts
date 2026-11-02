@@ -27,6 +27,52 @@ export function nextInstance(taken: Spec[], path: string, agent: string): number
   return n;
 }
 
+/** A tile and the lane it stood in. */
+export interface Place {
+  key: string;
+  lane: number;
+}
+
+/**
+ * Sessions that ended on their own, to tell one that ended alone (`exit`, the
+ * agent quit) from many ending together: a restart or tmux going down takes
+ * them all within seconds, and desk may be gone before it learns more. One
+ * ending alone stays in the saved layout for `window` ms; once another ends
+ * within that time, all of them are kept for the next start.
+ */
+export class Endings {
+  private pending: (Place & { at: number })[] = [];
+  private last = -Infinity;
+
+  constructor(private readonly window: number) {}
+
+  /** Session `key` (in `lane`) ended at `now`; returns the ones to keep for the next start. */
+  ended(key: string, lane: number, now: number): Place[] {
+    const together = now - this.last < this.window;
+    this.last = now;
+    this.pending.push({ key, lane, at: now });
+    if (!together) return [];
+    const kept = this.pending.map(({ key, lane }) => ({ key, lane }));
+    this.pending = [];
+    return kept;
+  }
+
+  /** Those that ended alone `window` ms ago are gone for good. */
+  settle(now: number): void {
+    this.pending = this.pending.filter((p) => now - p.at < this.window);
+  }
+
+  /** The tile is open again. */
+  forget(key: string): void {
+    this.pending = this.pending.filter((p) => p.key !== key);
+  }
+
+  /** Still in the saved layout. */
+  get held(): Place[] {
+    return this.pending.map(({ key, lane }) => ({ key, lane }));
+  }
+}
+
 /** Header label: `claude`, `codex`, `claude #2` (sub-sessions count from 2 for people). */
 export function agentLabel(s: Spec): string {
   return s.instance > 0 ? `${s.agent} #${s.instance + 1}` : s.agent;
