@@ -105,10 +105,11 @@ fn quit_desk(handle: AppHandle, lock: State<lock::Lock>) -> Result<(), String> {
     Ok(())
 }
 
-/// ⌘S: the project's newest Claude conversations, to resume one.
+/// ⌘S: the project's newest Claude conversations and the ones saved under a
+/// name (`saved`, their ids), to resume one.
 #[tauri::command(async)]
-fn recent_conversations(path: String) -> Vec<conversations::Conversation> {
-    conversations::recent(&env::home().join(".claude/projects"), Path::new(&path), 40)
+fn recent_conversations(path: String, saved: Vec<String>) -> Vec<conversations::Conversation> {
+    conversations::recent(&env::home().join(".claude/projects"), Path::new(&path), 40, &saved)
 }
 
 /// Ensure the tmux session for project + agent + sub-session exists; returns its slug.

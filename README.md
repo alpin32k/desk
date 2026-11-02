@@ -124,6 +124,7 @@ Zmieniają okno i terminale od razu.
 | **Druga sesja** | Kilka sesji w jednym projekcie (⌘D), w jednej ramce projektu: pod sobą, obok siebie albo w zakładkach (ikony w nagłówku ramki). ⌘T dokłada do niej zwykły terminal. |
 | **Rozmowa** | ⌘R: czat o czymkolwiek, bez projektu, każdy we własnej ramce i czystym folderze. Zachowanie ustawiasz w `rozmowa/CLAUDE.md` w danych desk. |
 | **Ostatnie rozmowy** | ⌘S: rozmowy Claude z projektu aktywnego kafelka, od najnowszej, z tytułem i branchem. Wybrana wraca w nowym kafelku (`claude --resume`), a otwarta tylko dostaje fokus. |
+| **Zapisane rozmowy** | Nazwa kafelka z Claude (✎) zapisuje jego rozmowę. W ⌘S zapisane stoją na górze, zawsze wszystkie, pod Twoją nazwą, a wybrana wraca z tą nazwą także po zamknięciu kafelka i restarcie. ⌘↵ albo ✎ w ⌘S nazywa rozmowę, ⌘⌫ albo × usuwa ją z zapisanych. Po `/clear` nazwa zostaje przy starej rozmowie. |
 | **Limity** | Górny pasek: zużycie planu (5h / 7d) dla otwartych agentów, z czasem do resetu (↻2h13m). Claude z konta co 5 min i ze status line sesji, Codex z `~/.codex/sessions`. Bursztyn od 70%, czerwień od 90%. |
 | **Układ** | Ramki stoją tam, gdzie je przeciągniesz (przy brzegu kolumny powstaje nowa), a linie między kolumnami, ramkami i sesjami zmieniają rozmiar. Nowy projekt trafia w wolne miejsce, a ⌘L układa wszystko od nowa. W Opcjach wyłączysz dokładanie kolumn i ustawisz ich liczbę ręcznie. |
 | **Okno** | Otwiera się tam, gdzie je zamknięto: ten sam monitor, miejsce i rozmiar. Gdy monitora nie ma, okno otwiera się domyślnie. |
@@ -150,7 +151,7 @@ Zmieniają okno i terminale od razu.
 | ⌘F | pliki projektu | ⌘⇧Q | zabij sesję |
 | ⌘U | uruchom (dev serwer, testy...) | ✎ | nazwij kafelek (albo prawy klik na tytule), pusta nazwa wraca do domyślnej |
 | ⌘R | rozmowa | ⌘L | ułóż ramki od nowa |
-| ⌘S | ostatnie rozmowy Claude w projekcie | ⌘⇧T | przywróć zamknięty kafelek |
+| ⌘S | zapisane i ostatnie rozmowy Claude w projekcie | ⌘⇧T | przywróć zamknięty kafelek |
 | ⌘W | podgląd obok | **Terminal** | |
 | ⌘K | kawa | ⌘= / ⌘- / ⌘0 | czcionka większa / mniejsza / zwykła |
 | ⌘B | blokada | ⌘C / ⌘V | kopiuj zaznaczenie / wklej |

@@ -894,6 +894,52 @@ html.dragging-card .tile .term {
   color: var(--accent);
 }
 
+/* ⌘S: saved conversations on top, under their name */
+.palette.conversations .section {
+  padding: 6px 12px 2px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.palette.conversations .row.saved .name {
+  font-weight: 600;
+}
+
+.palette.conversations .row .name {
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+.palette.conversations .row .name input.rename {
+  width: 260px;
+  margin: 0;
+  font-size: inherit !important;
+  padding: 1px 4px !important;
+}
+
+.palette.conversations .conv-act {
+  border: 0;
+  background: none;
+  color: var(--dim);
+  cursor: pointer;
+  padding: 0 2px;
+  visibility: hidden;
+}
+
+.palette.conversations .row:hover .conv-act,
+.palette.conversations .row.sel .conv-act {
+  visibility: visible;
+}
+
+.palette.conversations .conv-act:hover {
+  color: var(--fg);
+}
+
 .palette .wt {
   color: var(--dim);
 }

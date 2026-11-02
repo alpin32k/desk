@@ -25,7 +25,7 @@ import { Side } from "./side";
 import * as L from "./lanes";
 import { label, mark, sizable, splitLine, watchDrag, type Box } from "./drag";
 import { Palette } from "./palette";
-import { ago, pickColor, PROJECT_COLORS, projectColor } from "./projects";
+import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
 import { Endings, keyOf, nextInstance, parseKey, sessionsLabel, type Place } from "./sessions";
 import { dropped } from "./address";
 import { DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
@@ -42,6 +42,8 @@ import {
   type TileAction,
 } from "./tile";
 import { confirmBox, newProjectBox, pickBox, toast } from "./ui";
+import { conversationBox } from "./conversationbox";
+import { setSaved, syncTile } from "./saved";
 import { usageHtml } from "./usage";
 
 const POLL_MS = 3000;
@@ -312,6 +314,7 @@ export class App {
       fontSize: boot.layout.fontSize || DEFAULT_FONT_SIZE,
       minimized: boot.layout.minimized ?? [],
       titles: boot.layout.titles ?? {},
+      saved: boot.layout.saved ?? {},
       dropdown: boot.layout.dropdown ?? PLATFORM === "mac",
       dropdownHeight: boot.layout.dropdownHeight || 50,
       dropdownAutohide: boot.layout.dropdownAutohide ?? true,
@@ -366,6 +369,8 @@ export class App {
     });
     this.render();
     await Promise.all([...this.tiles.values()].map((t) => t.start().catch((err) => toast(`${t.name}: ${err}`))));
+    // Tiles named before desk saved conversations save theirs now.
+    for (const tile of this.tiles.values()) this.syncSaved(tile);
     this.focusIndex(0);
     this.save();
     void this.poll();
@@ -385,9 +390,15 @@ export class App {
     const spec = parseKey(key);
     const resume = this.resuming.get(key);
     this.resuming.delete(key);
+    const fresh = !this.running.has(key);
+    const startedAt = Math.floor(Date.now() / 1000);
     try {
       const slug = await api.openSession(spec.path, spec.agent, spec.instance, this.layout.runs[key], resume, restore);
       this.running.add(key);
+      // A session started anew under a slug used before: the old state names
+      // another conversation (a name given now would save that one).
+      const stale = this.hook.get(slug);
+      if (fresh && stale && stale.ts < startedAt) this.hook.delete(slug);
       // Open again: no longer kept in the layout on its behalf.
       this.missing = this.missing.filter((m) => m.key !== key);
       this.endings.forget(key);
@@ -500,44 +511,74 @@ export class App {
     await this.openTile(keyOf({ path, agent: "shell", instance: nextInstance(taken, path, "shell") }));
   }
 
-  /** ⌘S: the project's recent Claude conversations. One still in a tile gets
-   *  the focus; another opens in a new tile with `claude --resume`. */
+  /** ⌘S: the project's saved Claude conversations, then its recent ones. One
+   *  still in a tile gets the focus; another opens in a new tile with
+   *  `claude --resume`, under its saved name. */
   private async pickConversation(path: string): Promise<void> {
     const name = path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+    const names = this.layout.saved[path] ?? {};
     let found: Conversation[];
     try {
-      found = await api.recentConversations(path);
+      found = await api.recentConversations(path, Object.keys(names));
     } catch (err) {
       return toast(t("app.conversationsFailed", { err: String(err) }));
     }
     if (!found.length) return toast(t("app.noConversations", { name }));
-    const tileOf = (id: string) =>
-      [...this.tiles.entries()].find(([, tile]) => {
-        const hook = this.hook.get(tile.slug);
-        return tile.path === path && hook?.sessionId === id && hook.state !== "exited";
-      })?.[0];
-    // pickBox picks by text: the same title twice gets a number.
-    const byLabel = new Map<string, Conversation>();
-    for (const c of found) {
-      const label = c.title ?? c.prompt;
-      let unique = label;
-      for (let n = 2; byLabel.has(unique); n++) unique = `${label} (${n})`;
-      byLabel.set(unique, c);
-    }
-    const note = (label: string) => {
-      const c = byLabel.get(label)!;
-      const open = tileOf(c.id) ? t("app.conversationOpen") : "";
-      return [open, ago(c.modifiedMs), c.branch ?? ""].filter(Boolean).join(" · ");
-    };
-    const picked = await pickBox(t("app.conversations", { name }), [...byLabel.keys()], { note });
-    const c = picked && byLabel.get(picked.value);
+    const c = await conversationBox(t("app.conversations", { name }), found, {
+      names,
+      isOpen: (id) => this.tileOfConversation(path, id) !== undefined,
+      onName: (id, given) => this.nameConversation(path, id, given),
+    });
     if (!c) return;
-    const open = tileOf(c.id);
+    const open = this.tileOfConversation(path, c.id);
     if (open) return this.setActive(open, true);
     const taken = [...(await api.listSessions()), ...this.tiles.values()];
     const key = keyOf({ path, agent: "claude", instance: nextInstance(taken, path, "claude") });
+    const saved = this.layout.saved[path]?.[c.id];
+    if (saved) this.layout.titles[key] = saved;
     this.resuming.set(key, c.id);
     await this.openTile(key);
+  }
+
+  /** The tile holding Claude conversation `id` of project `path` right now. */
+  private tileOfConversation(path: string, id: string): string | undefined {
+    return [...this.tiles.entries()].find(([, tile]) => {
+      const hook = this.hook.get(tile.slug);
+      return tile.path === path && hook?.sessionId === id && hook.state !== "exited";
+    })?.[0];
+  }
+
+  /** The Claude conversation in a tile, while Claude runs in it. */
+  private conversationIn(tile: Tile): string | null {
+    const hook = this.hook.get(tile.slug);
+    return tile.agent === "claude" && hook && hook.state !== "exited" ? hook.sessionId : null;
+  }
+
+  /** ⌘S: save a conversation under a name ("" forgets it); a tile holding it takes the name. */
+  private nameConversation(path: string, id: string, name: string): void {
+    this.layout.saved = setSaved(this.layout.saved, path, id, name);
+    const key = this.tileOfConversation(path, id);
+    if (key) {
+      if (name) this.layout.titles[key] = name;
+      else delete this.layout.titles[key];
+      this.tiles.get(key)?.setName(name);
+      this.render();
+    }
+    this.save();
+  }
+
+  /** A Claude tile's name follows the conversation in it (saved.ts): saved
+   *  when named, the default again after /clear. */
+  private syncSaved(tile: Tile): void {
+    const sync = syncTile(this.layout.saved, tile.path, this.layout.titles[tile.key] ?? null, this.conversationIn(tile));
+    if (sync.save !== undefined) this.layout.saved = setSaved(this.layout.saved, tile.path, this.conversationIn(tile)!, sync.save);
+    if (sync.title !== undefined) {
+      if (sync.title) this.layout.titles[tile.key] = sync.title;
+      else delete this.layout.titles[tile.key];
+      tile.setName(sync.title);
+      this.render();
+    }
+    if (sync.save !== undefined || sync.title !== undefined) this.save();
   }
 
   /** Another session of the same agent in the same project, next to it. */
@@ -707,6 +748,9 @@ export class App {
     const tile = this.tiles.get(key);
     if (name) this.layout.titles[key] = name;
     else delete this.layout.titles[key];
+    // Claude's conversation is saved under the name (⌘S), or forgotten with it.
+    const id = tile && this.conversationIn(tile);
+    if (tile && id) this.layout.saved = setSaved(this.layout.saved, tile.path, id, name);
     tile?.setName(name);
     this.save();
     this.render();
@@ -1363,6 +1407,7 @@ export class App {
     const tile = [...this.tiles.values()].find((t) => t.slug === s.slug);
     if (!tile) return;
     tile.update({ state: displayState(s.state) });
+    this.syncSaved(tile);
     this.renderChrome();
     if (s.state === "waiting" && before !== "waiting" && this.layout.notifications && !document.hasFocus()) {
       sendNotification({ title: t("app.waitingNotice", { name: tile.name }), body: s.message ?? t("app.waitingBody") });
