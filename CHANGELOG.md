@@ -1,5 +1,14 @@
 # Zmiany
 
+## 0.1.24 (2026-11-02)
+
+- **Zapisane rozmowy w projekcie.** Nazwa nadana kafelkowi z Claude (✎) zapisuje jego rozmowę.
+  W ⌘S zapisane rozmowy stoją na górze, zawsze wszystkie i pod Twoją nazwą, a wybrana wraca
+  w nowym kafelku z tą samą nazwą, także po zamknięciu kafelka i restarcie. Wcześniej rozmowa
+  była w ⌘S tylko pod tytułem od Claude i znikała z listy po 40 nowszych. ⌘↵ albo ✎ w ⌘S nazywa
+  rozmowę, ⌘⌫ albo × usuwa ją z zapisanych. Po `/clear` nazwa zostaje przy starej rozmowie,
+  a nazwane już kafelki zapiszą swoje rozmowy same przy pierwszym starcie.
+
 ## 0.1.23 (2026-11-02)
 
 - **Sesje wracają po restarcie komputera.** Po aktualizacji systemu i restarcie desk pokazywał
