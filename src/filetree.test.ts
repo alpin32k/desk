@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ancestors, buildTree, filterPaths, findNode, itemsLabel } from "./filetree";
+import { addPaths, ancestors, buildTree, filterPaths, findNode, itemsLabel } from "./filetree";
 
 const FILES = ["src/main.ts", "README.md", ".github/workflows/check.yml", "src/app.ts", "src-tauri/src/lib.rs", "docs/a10.md", "docs/a9.md"];
 
@@ -12,6 +12,18 @@ describe("file tree", () => {
     expect(findNode(root, "src-tauri/src/lib.rs")).toMatchObject({ dir: false, path: "src-tauri/src/lib.rs" });
     expect(findNode(root, "nope/x")).toBeNull();
     expect(findNode(root, "")).toBe(root);
+  });
+
+  it("keeps a folder listed whole closed until its contents arrive", () => {
+    const root = buildTree([".env", ".env.docker", "node_modules/", "src/a.ts"]);
+    expect(root.children.map((c) => c.name)).toEqual(["node_modules", "src", ".env", ".env.docker"]);
+    const nm = findNode(root, "node_modules")!;
+    expect(nm).toMatchObject({ dir: true, lazy: true, children: [] });
+    expect(findNode(root, "src")!.lazy).toBeFalsy();
+    addPaths(root, ["node_modules/x/", "node_modules/a.js"]);
+    expect(nm.lazy).toBe(false);
+    expect(nm.children.map((c) => c.name)).toEqual(["x", "a.js"]);
+    expect(findNode(root, "node_modules/x")).toMatchObject({ dir: true, lazy: true });
   });
 
   it("filters by every word, file-name hits first", () => {

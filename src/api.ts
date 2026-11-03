@@ -194,6 +194,8 @@ export const api = {
   /** `saved`: ids of the project's saved conversations, listed however old. */
   recentConversations: (path: string, saved: string[]) => invoke<Conversation[]>("recent_conversations", { path, saved }),
   projectFiles: (path: string) => invoke<string[]>("project_files", { path }),
+  /** One folder of a project: files, and folders as `rel/name/`. */
+  projectDir: (path: string, rel: string) => invoke<string[]>("project_dir", { path, rel }),
   openFile: (path: string, file: string) => invoke<void>("open_file", { path, file }),
   previewFile: (path: string, file: string, bounds: PreviewBounds) =>
     invoke<string>("preview_file", { path, file, bounds }),

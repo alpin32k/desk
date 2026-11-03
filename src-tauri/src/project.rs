@@ -15,36 +15,72 @@ const SKIP_DIRS: &[&str] = &[
     "__pycache__",
 ];
 
-/// Files relative to the project: `git ls-files` (tracked and untracked,
-/// without ignored ones) in a repository, otherwise a bounded walk.
+/// Everything in the project, relative to it: hidden and git-ignored files
+/// too (`.env`, `.env.docker`). In a repository, `git ls-files` lists the
+/// files and a git-ignored folder comes as `folder/`, otherwise a bounded
+/// walk does the same for heavy folders (`node_modules`, `.venv`...). A
+/// `folder/` entry is listed when it is opened ([`dir`]). Only `.git` is left out.
 pub fn files(root: &Path) -> Vec<String> {
-    let git = std::process::Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args([
-            "--no-optional-locks",
-            "-c",
-            "core.fsmonitor=false",
-            "ls-files",
-            "--cached",
-            "--others",
-            "--exclude-standard",
-        ])
-        .output();
-    if let Ok(out) = git
-        && out.status.success()
-    {
+    let git = |extra: &[&str]| {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args([
+                "--no-optional-locks",
+                "-c",
+                "core.fsmonitor=false",
+                "ls-files",
+                "--others",
+                "--exclude-standard",
+            ])
+            .args(extra)
+            .output()
+            .ok()
+            .filter(|out| out.status.success())
+    };
+    if let Some(out) = git(&["--cached"]) {
         let mut v: Vec<String> = String::from_utf8_lossy(&out.stdout)
             .lines()
-            .take(MAX_FILES)
             .map(str::to_string)
             .collect();
+        // Ignored files one by one, ignored folders whole (opened on demand).
+        if let Some(ignored) = git(&["--ignored", "--directory"]) {
+            v.extend(String::from_utf8_lossy(&ignored.stdout).lines().map(str::to_string));
+        }
+        v.sort();
         v.dedup();
+        v.truncate(MAX_FILES);
         return v;
     }
     let mut out = Vec::new();
     walk(root, root, 0, &mut out);
     out
+}
+
+/// One level of `rel` (a folder inside `root`): its files, and its folders
+/// as `rel/name/`. For a folder [`files`] listed as `rel/`.
+pub fn dir(root: &Path, rel: &str) -> Result<Vec<String>, String> {
+    let rel = rel.trim_end_matches('/');
+    let base = root.canonicalize().map_err(|e| e.to_string())?;
+    let full = base.join(rel).canonicalize().map_err(|e| format!("{rel}: {e}"))?;
+    if !full.starts_with(&base) || !full.is_dir() {
+        return Err(tr!(
+            format!("{rel} nie jest folderem tego projektu"),
+            format!("{rel} is not a folder of this project")
+        ));
+    }
+    let mut out: Vec<String> = std::fs::read_dir(&full)
+        .map_err(|e| format!("{rel}: {e}"))?
+        .flatten()
+        .take(MAX_FILES)
+        .map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            let slash = if e.path().is_dir() { "/" } else { "" };
+            format!("{rel}/{name}{slash}")
+        })
+        .collect();
+    out.sort();
+    Ok(out)
 }
 
 fn walk(root: &Path, dir: &Path, depth: usize, out: &mut Vec<String>) {
@@ -58,17 +94,21 @@ fn walk(root: &Path, dir: &Path, depth: usize, out: &mut Vec<String>) {
             return;
         }
         let name = e.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') {
-            continue;
-        }
         let path = e.path();
+        let Ok(rel) = path.strip_prefix(root) else {
+            continue;
+        };
+        let rel = rel.to_string_lossy().replace('\\', "/");
         let Ok(kind) = e.file_type() else { continue };
-        if kind.is_dir() {
-            if depth < 8 && !SKIP_DIRS.contains(&name.as_str()) {
-                walk(root, &path, depth + 1, out);
-            }
-        } else if let Ok(rel) = path.strip_prefix(root) {
-            out.push(rel.to_string_lossy().replace('\\', "/"));
+        if !kind.is_dir() {
+            out.push(rel);
+        } else if name == ".git" {
+            // git's own data, never project files.
+        } else if depth < 8 && !name.starts_with('.') && !SKIP_DIRS.contains(&name.as_str()) {
+            walk(root, &path, depth + 1, out);
+        } else {
+            // Heavy or hidden folders (node_modules, .venv): listed when opened.
+            out.push(format!("{rel}/"));
         }
     }
 }
@@ -409,6 +449,29 @@ mod tests {
     }
 
     #[test]
+    fn lists_git_ignored_files_and_folders() {
+        let tmp = tempfile::tempdir().unwrap();
+        let d = tmp.path();
+        std::process::Command::new("git")
+            .arg("init")
+            .arg("-q")
+            .arg(d)
+            .status()
+            .unwrap();
+        std::fs::create_dir_all(d.join("node_modules/x")).unwrap();
+        std::fs::create_dir_all(d.join("src")).unwrap();
+        std::fs::write(d.join(".gitignore"), ".env*\nnode_modules/\n").unwrap();
+        std::fs::write(d.join(".env"), "").unwrap();
+        std::fs::write(d.join(".env.docker"), "").unwrap();
+        std::fs::write(d.join("src/a.ts"), "").unwrap();
+        std::fs::write(d.join("node_modules/x/i.js"), "").unwrap();
+        assert_eq!(
+            files(d),
+            [".env", ".env.docker", ".gitignore", "node_modules/", "src/a.ts"]
+        );
+    }
+
+    #[test]
     fn reads_make_targets() {
         let mk =
             ".PHONY: all\nall: build\nbuild:\n\tcc x.c\nCC := gcc\n%.o: %.c\ntest-unit: build\n";
@@ -424,8 +487,15 @@ mod tests {
         std::fs::create_dir_all(d.join(".hidden")).unwrap();
         std::fs::write(d.join("src/a.ts"), "").unwrap();
         std::fs::write(d.join("node_modules/x/i.js"), "").unwrap();
+        std::fs::create_dir_all(d.join(".git")).unwrap();
         std::fs::write(d.join(".hidden/s"), "").unwrap();
-        assert_eq!(files(d), ["src/a.ts"]);
+        std::fs::write(d.join(".env"), "").unwrap();
+        // Hidden files show; heavy and hidden folders come whole, opened on demand.
+        assert_eq!(files(d), [".env", ".hidden/", "node_modules/", "src/a.ts"]);
+        assert_eq!(dir(d, "node_modules/").unwrap(), ["node_modules/x/"]);
+        assert_eq!(dir(d, "node_modules/x").unwrap(), ["node_modules/x/i.js"]);
+        assert!(dir(d, "..").is_err());
+        assert!(dir(d, "src/a.ts").is_err());
         assert!(inside(d, "src/a.ts").is_ok());
         assert!(inside(d, "../outside").is_err());
         assert!(inside(d, "src").is_err());

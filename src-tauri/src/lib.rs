@@ -393,6 +393,14 @@ async fn project_files(path: String) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// One folder of the project, opened in the tree (`node_modules/`...).
+#[tauri::command]
+async fn project_dir(path: String, rel: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || project::dir(Path::new(&path), &rel))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 async fn search_files(path: String, query: String) -> Vec<String> {
     tauri::async_runtime::spawn_blocking(move || project::search(Path::new(&path), &query))
@@ -660,6 +668,7 @@ pub fn run() {
             tile_info,
             git_branches,
             project_files,
+            project_dir,
             search_files,
             reveal_path,
             browser_name,
