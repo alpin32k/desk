@@ -13,6 +13,7 @@ const COMMANDS: &[&str] = &[
     "tile_info",
     "git_branches",
     "project_files",
+    "project_dir",
     "search_files",
     "reveal_path",
     "browser_name",

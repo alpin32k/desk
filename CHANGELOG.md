@@ -1,5 +1,13 @@
 # Zmiany
 
+## 0.1.25 (2026-11-03)
+
+- **Drzewko plików pokazuje wszystko.** Plików z `.gitignore`, takich jak `.env` czy `.env.docker`,
+  wcześniej w drzewku nie było. Teraz są, razem z innymi ignorowanymi i ukrytymi plikami,
+  i otwierają się w panelu jak każdy plik tekstowy. Duże foldery (`node_modules`, `target`,
+  `.venv`, `dist`) też są widoczne, a ich zawartość wczytuje się dopiero po rozwinięciu.
+  Pominięty zostaje tylko `.git`.
+
 ## 0.1.24 (2026-11-02)
 
 - **Zapisane rozmowy w projekcie.** Nazwa nadana kafelkowi z Claude (✎) zapisuje jego rozmowę.

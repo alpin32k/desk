@@ -2,7 +2,7 @@
 // filter, and `?text` to search inside the files.
 
 import { api } from "./api";
-import { ancestors, buildTree, filterPaths, findNode, type TreeNode } from "./filetree";
+import { addPaths, ancestors, buildTree, filterPaths, findNode, type TreeNode } from "./filetree";
 export { itemsLabel } from "./filetree";
 import { t } from "./i18n";
 import { escapeHtml } from "./tile";
@@ -91,7 +91,7 @@ export class FileTree {
     const ticket = ++this.loading;
     const files = await api.projectFiles(path).catch(() => []);
     if (ticket !== this.loading) return; // another project was picked meanwhile
-    this.files = files;
+    this.files = files.filter((f) => !f.endsWith("/"));
     this.root = buildTree(files);
     this.render();
   }
@@ -115,6 +115,8 @@ export class FileTree {
 
   private pick(rel: string, dir: boolean): void {
     this.selected = rel;
+    const node = dir ? findNode(this.root, rel) : null;
+    if (node?.lazy && !this.expanded.has(rel)) return void this.openLazy(node);
     if (dir) {
       if (this.expanded.has(rel)) this.expanded.delete(rel);
       else this.expanded.add(rel);
@@ -124,6 +126,18 @@ export class FileTree {
     }
     this.render();
     this.list.querySelector<HTMLElement>(`.tree-row[data-path="${CSS.escape(rel)}"]`)?.focus();
+  }
+
+  /** A folder listed whole (`node_modules/`): read it, then open it. */
+  private async openLazy(node: TreeNode): Promise<void> {
+    const project = this.project;
+    if (!project) return;
+    const entries = await api.projectDir(project, node.path).catch(() => []);
+    if (this.project !== project) return; // another project was picked meanwhile
+    node.lazy = false;
+    addPaths(this.root, entries);
+    this.files.push(...entries.filter((f) => !f.endsWith("/")));
+    if (this.selected === node.path) this.pick(node.path, true);
   }
 
   private onFilter(): void {

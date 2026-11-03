@@ -23,6 +23,7 @@
     "allow-tile-info",
     "allow-git-branches",
     "allow-project-files",
+    "allow-project-dir",
     "allow-search-files",
     "allow-reveal-path",
     "allow-browser-name",

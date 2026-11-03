@@ -8,6 +8,8 @@ export interface TreeNode {
   path: string;
   dir: boolean;
   children: TreeNode[];
+  /** A folder listed whole (`node_modules/`): its contents load when it is opened. */
+  lazy?: boolean;
 }
 
 /** Folders first, then files, each by name (dotfiles first, like Finder). */
@@ -16,30 +18,45 @@ function sortNodes(nodes: TreeNode[]): void {
   for (const n of nodes) if (n.dir) sortNodes(n.children);
 }
 
+/** A path ending in "/" is a folder whose contents are not listed yet. */
 export function buildTree(paths: string[]): TreeNode {
   const root: TreeNode = { name: "", path: "", dir: true, children: [] };
+  addPaths(root, paths);
+  return root;
+}
+
+/** Put `paths` into the tree (a folder's contents once it was opened). */
+export function addPaths(root: TreeNode, paths: string[]): void {
   const dirs = new Map<string, TreeNode>([["", root]]);
+  const child = (parent: TreeNode, name: string, path: string, dir: boolean): TreeNode => {
+    let node = parent.children.find((c) => c.name === name && c.dir === dir);
+    if (!node) {
+      node = { name, path, dir, children: [] };
+      parent.children.push(node);
+    }
+    return node;
+  };
   for (const p of paths) {
+    const folder = p.endsWith("/");
     const parts = p.split("/").filter(Boolean);
     let parent = root;
     for (let i = 0; i < parts.length; i++) {
       const path = parts.slice(0, i + 1).join("/");
-      const last = i === parts.length - 1;
-      if (last) {
-        parent.children.push({ name: parts[i], path, dir: false, children: [] });
-      } else {
-        let dir = dirs.get(path);
-        if (!dir) {
-          dir = { name: parts[i], path, dir: true, children: [] };
-          dirs.set(path, dir);
-          parent.children.push(dir);
-        }
-        parent = dir;
+      if (i === parts.length - 1 && !folder) {
+        child(parent, parts[i], path, false);
+        break;
       }
+      let dir = dirs.get(path);
+      if (!dir) {
+        dir = child(parent, parts[i], path, true);
+        dirs.set(path, dir);
+      }
+      if (i === parts.length - 1 && !dir.children.length) dir.lazy = true;
+      else if (i < parts.length - 1) dir.lazy = false;
+      parent = dir;
     }
   }
   sortNodes(root.children);
-  return root;
 }
 
 export function findNode(root: TreeNode, path: string): TreeNode | null {
