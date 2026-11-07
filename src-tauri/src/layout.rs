@@ -78,7 +78,20 @@ pub struct Layout {
     /// Interface language, "pl" or "en" (src/i18n.ts). Empty until the first
     /// launch takes the system's; layouts from before it stay Polish.
     pub language: String,
+    /// Ctrl+G in Claude rewrites the prompt with the company LLM (prompt_ai.rs).
+    pub prompt_ai: PromptAi,
 }
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PromptAi {
+    pub enabled: bool,
+    /// OpenAI-compatible server: base, `/v1` or the full chat endpoint. No
+    /// default: desk is open source, each user enters their own.
+    pub url: String,
+    pub model: String,
+}
+
 
 impl Default for Layout {
     fn default() -> Self {
@@ -114,6 +127,7 @@ impl Default for Layout {
             keys: Default::default(),
             tmux_menu: false,
             language: String::new(),
+            prompt_ai: PromptAi::default(),
         }
     }
 }

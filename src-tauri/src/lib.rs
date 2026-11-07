@@ -24,9 +24,11 @@ pub mod new_project;
 mod pam;
 pub mod preview;
 pub mod project;
+pub mod prompt_ai;
 pub mod pty;
 pub mod state_watch;
 pub mod tmux;
+pub mod wg_tunnel;
 mod window_place;
 pub mod update;
 pub mod usage;
@@ -45,6 +47,8 @@ struct App {
     sessions: backend::Backend,
     hooks: hooks::HookFiles,
     layout_path: PathBuf,
+    /// Claude's `$VISUAL` wrapper for Ctrl+G (prompt_ai.rs); None if not written.
+    prompt_editor: Option<PathBuf>,
     /// tmux's right-click menu is on (Options); see `Tmux::reload_config`.
     tmux_menu: AtomicBool,
     _watcher: Mutex<Option<notify::RecommendedWatcher>>,
@@ -181,6 +185,10 @@ fn open_session(
             "DESK_STATUSLINE",
             usage::user_statusline(&env::home()).unwrap_or_default(),
         ),
+        (
+            "DESK_PROMPT_EDITOR",
+            app.prompt_editor.as_ref().map(|p| p.display().to_string()).unwrap_or_default(),
+        ),
     ];
     app.sessions.start(
         &slug,
@@ -192,6 +200,18 @@ fn open_session(
         instance,
     )?;
     Ok(slug)
+}
+
+/// The server of the VPN config saved for prompt rewriting (never the key).
+#[tauri::command]
+fn prompt_ai_vpn(app: State<App>) -> Option<String> {
+    prompt_ai::vpn_endpoint(&app.layout_path)
+}
+
+/// Saves (or with "" removes) the WireGuard config pasted in Options.
+#[tauri::command]
+fn set_prompt_ai_vpn(app: State<App>, conf: String) -> Result<Option<String>, String> {
+    prompt_ai::save_vpn(&app.layout_path, &conf)
 }
 
 #[tauri::command]
@@ -646,6 +666,7 @@ pub fn run() {
                 sessions,
                 hooks,
                 layout_path: support.join("layout.json"),
+                prompt_editor: prompt_ai::install(&support).ok(),
                 tmux_menu: AtomicBool::new(saved.tmux_menu),
                 _watcher: Mutex::new(watcher),
             });
@@ -658,6 +679,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             bootstrap,
+            prompt_ai_vpn,
+            set_prompt_ai_vpn,
             open_session,
             kill_session,
             pty_attach,

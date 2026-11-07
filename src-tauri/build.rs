@@ -3,6 +3,8 @@
 // call them. The link preview window loads untrusted pages and gets none.
 const COMMANDS: &[&str] = &[
     "bootstrap",
+    "prompt_ai_vpn",
+    "set_prompt_ai_vpn",
     "open_session",
     "kill_session",
     "pty_attach",

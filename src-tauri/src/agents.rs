@@ -137,8 +137,10 @@ type Install = Option<(&'static str, &'static str)>;
 fn script(id: &str, command: &str, hooks_settings: &Path, install: Install) -> String {
     let shell = shell_quote(&crate::env::user_shell());
     let run = if id == "claude" {
+        // Ctrl+G: desk's prompt rewriter when desk set DESK_PROMPT_EDITOR
+        // (prompt_ai.rs); the user's own editor is kept for when it is off.
         format!(
-            "{} --settings {}{}",
+            "DESK_ORIG_VISUAL=\"${{VISUAL:-$EDITOR}}\" VISUAL=\"${{DESK_PROMPT_EDITOR:-$VISUAL}}\" {} --settings {}{}",
             shell_quote(crate::env::claude_bin()),
             shell_quote(&hooks_settings.display().to_string()),
             claude_args(command)
@@ -335,6 +337,10 @@ mod tests {
             "{claude}"
         );
         assert!(claude.ends_with(" -l"));
+        assert!(
+            claude.starts_with("DESK_ORIG_VISUAL=\"${VISUAL:-$EDITOR}\" VISUAL=\"${DESK_PROMPT_EDITOR:-$VISUAL}\" "),
+            "{claude}"
+        );
         let resumed = script("claude", "claude --resume 0f096eef-0a11-4750-93d4-7f09562dc824", hooks, None);
         assert!(
             resumed.contains("--settings '/s/claude-hooks.json' --resume 0f096eef-0a11-4750-93d4-7f09562dc824;"),

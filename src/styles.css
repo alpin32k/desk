@@ -1121,6 +1121,25 @@ html.dragging-card .tile .term {
   flex: 1;
 }
 
+.settings .prompt-ai .line input[type="text"] {
+  flex: 1;
+}
+
+.settings .prompt-ai .line.col {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.settings .prompt-ai .vpn-error {
+  color: var(--danger);
+  white-space: pre-wrap;
+}
+
+.settings .prompt-ai textarea {
+  font: inherit;
+  resize: vertical;
+}
+
 .settings .folders {
   display: flex;
   flex-direction: column;
