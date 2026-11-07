@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-prompt-ai-vpn"
+description = "Enables the prompt_ai_vpn command without any pre-configured scope."
+commands.allow = ["prompt_ai_vpn"]
+
+[[permission]]
+identifier = "deny-prompt-ai-vpn"
+description = "Denies the prompt_ai_vpn command without any pre-configured scope."
+commands.deny = ["prompt_ai_vpn"]

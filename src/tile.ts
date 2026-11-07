@@ -256,6 +256,12 @@ export class Tile {
         }
         return false;
       }
+      if (PLATFORM === "mac" && clip && e.code === "KeyG") {
+        // ⌘G = Ctrl+G (Claude Code's prompt editor, rewritten by the LLM in prompt_ai.rs):
+        // macOS never sends ⌘ keys to the program, so send the Ctrl+G byte.
+        if (e.type === "keydown" && this.ptyId !== null) void api.ptyWrite(this.ptyId, "\x07");
+        return false;
+      }
       if (e.type === "keydown" && e.key === "Enter" && e.shiftKey && !e.metaKey && !e.ctrlKey) {
         // Shift+Enter = newline in Claude Code (sent as Meta+Enter).
         if (this.ptyId !== null) void api.ptyWrite(this.ptyId, "\x1b\r");

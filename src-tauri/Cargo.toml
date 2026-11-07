@@ -31,6 +31,10 @@ percent-encoding = "2"
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 tauri-plugin-clipboard-manager = "2.5.0"
 tauri-plugin-global-shortcut = "2"
+# Userspace WireGuard for the prompt rewriter (wg_tunnel.rs): no system VPN.
+onetun = { version = "0.3.10", default-features = false }
+tokio = { version = "1", features = ["rt", "time", "net"] }
+base64 = "0.21"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

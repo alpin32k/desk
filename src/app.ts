@@ -206,6 +206,10 @@ export class App {
         this.layout.autoLayout = on;
         this.changed();
       },
+      setPromptAi: (change) => {
+        this.layout.promptAi = { ...this.layout.promptAi, ...change };
+        this.save();
+      },
       setTmuxMenu: (on) => {
         this.layout.tmuxMenu = on;
         this.save();

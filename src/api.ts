@@ -66,6 +66,15 @@ export interface Layout {
   tmuxMenu: boolean;
   /** Interface language, "pl" or "en" (i18n.ts); "" until the first launch picks one. */
   language: string;
+  /** Ctrl+G in Claude rewrites the prompt with the company LLM (prompt_ai.rs). */
+  promptAi: PromptAi;
+}
+
+export interface PromptAi {
+  enabled: boolean;
+  /** OpenAI-compatible server: base, /v1 or the full chat endpoint. */
+  url: string;
+  model: string;
 }
 
 /** A newer desk release. */
@@ -184,6 +193,10 @@ export interface PtyExit {
 
 export const api = {
   bootstrap: () => invoke<Bootstrap>("bootstrap"),
+  /** Server of the saved prompt-rewriting VPN config, null when none (the key never leaves Rust). */
+  promptAiVpn: () => invoke<string | null>("prompt_ai_vpn"),
+  /** Save a pasted WireGuard .conf ("" removes it); returns its server. */
+  setPromptAiVpn: (conf: string) => invoke<string | null>("set_prompt_ai_vpn", { conf }),
   listProjects: (extra: string[]) => invoke<Project[]>("list_projects", { extra }),
   listSessions: () => invoke<SessionInfo[]>("list_sessions"),
   /** `resume`: a Claude conversation's id, to pick it up again (⌘S). */

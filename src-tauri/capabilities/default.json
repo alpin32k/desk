@@ -13,6 +13,8 @@
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
     "allow-bootstrap",
+    "allow-prompt-ai-vpn",
+    "allow-set-prompt-ai-vpn",
     "allow-open-session",
     "allow-kill-session",
     "allow-pty-attach",

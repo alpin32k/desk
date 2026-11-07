@@ -2,7 +2,7 @@
 // hand-added folders.
 import { getVersion } from "@tauri-apps/api/app";
 import { DEFAULT_THEME, THEMES } from "./themes";
-import type { AgentInfo, CoffeeStatus, Layout, Project } from "./api";
+import { api, type AgentInfo, type CoffeeStatus, type Layout, type Project, type PromptAi } from "./api";
 import { rows, shortPath } from "./projects";
 import { escapeHtml } from "./tile";
 import { acceleratorFor, DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
@@ -30,6 +30,7 @@ export interface SettingsContext {
   checkUpdate: () => Promise<void>;
   setNotifications: (on: boolean) => void;
   setTmuxMenu: (on: boolean) => void;
+  setPromptAi: (change: Partial<PromptAi>) => void;
   toggleAutostart: (path: string) => void;
   addFolder: () => Promise<void>;
   removeFolder: (path: string) => void;
@@ -41,6 +42,51 @@ export interface SettingsContext {
 }
 
 export class Settings {
+  /** Pasted WireGuard config for prompt rewriting: saved by Rust to an
+   *  owner-only file; the field is emptied after saving, only the server shows. */
+  private bindVpn(box: HTMLElement): void {
+    const area = box.querySelector<HTMLTextAreaElement>('[data-k="prompt-ai-vpn"]')!;
+    const status = box.querySelector<HTMLElement>('[data-k="prompt-ai-vpn-status"]')!;
+    const rm = box.querySelector<HTMLButtonElement>('[data-k="prompt-ai-vpn-rm"]')!;
+    const saveBtn = box.querySelector<HTMLButtonElement>('[data-k="prompt-ai-vpn-save"]')!;
+    const error = box.querySelector<HTMLElement>('[data-k="prompt-ai-vpn-error"]')!;
+    // A paste saves at once and clears the field (the private key is not left
+    // on screen), so an empty field with a saved config is not an error.
+    let saved: string | null = null;
+    const show = (server: string | null) => {
+      saved = server;
+      status.textContent = server ? t("settings.promptAiVpnSaved", { server }) : t("settings.promptAiVpnNone");
+      rm.hidden = !server;
+    };
+    // The error stays under the field until the next try: a toast was missed.
+    const save = (conf: string) => {
+      error.textContent = "";
+      return api
+        .setPromptAiVpn(conf)
+        .then((server) => {
+          area.value = "";
+          show(server);
+          if (server) toast(t("settings.promptAiVpnSaved", { server }));
+        })
+        .catch((err) => {
+          error.textContent = String(err);
+        });
+    };
+    void api.promptAiVpn().then(show).catch(() => show(null));
+    // Saved right after a paste (the value is there on the next tick), on
+    // leaving the field, or with the button.
+    area.addEventListener("paste", () => setTimeout(() => area.value.trim() && void save(area.value)));
+    area.addEventListener("change", () => {
+      if (area.value.trim()) void save(area.value);
+    });
+    saveBtn.addEventListener("click", () => {
+      if (area.value.trim()) void save(area.value);
+      else if (saved) toast(t("settings.promptAiVpnSaved", { server: saved }));
+      else error.textContent = t("settings.promptAiVpnEmpty");
+    });
+    rm.addEventListener("click", () => void save(""));
+  }
+
   private el: HTMLElement | null = null;
   private projects: Project[] = [];
   private filter = "";
@@ -173,6 +219,15 @@ export class Settings {
       ]
         .map(([v, label]) => `<option value="${v}" ${(layout.browser || "auto") === v ? "selected" : ""}>${label}</option>`)
         .join("")}</select></label>
+      <h3>${t("settings.promptAi")} <span class="dim">${t("settings.promptAiHint")}</span></h3>
+      <div class="prompt-ai">
+      <label class="line"><input type="checkbox" data-k="prompt-ai-on" ${layout.promptAi?.enabled ? "checked" : ""}/> ${t("settings.promptAiOn")}</label>
+      <label class="line">${t("settings.promptAiUrl")} <input type="text" data-k="prompt-ai-url" value="${escapeHtml(layout.promptAi?.url ?? "")}" placeholder="http://host:port/v1" spellcheck="false" /></label>
+      <label class="line">${t("settings.promptAiModel")} <input type="text" data-k="prompt-ai-model" value="${escapeHtml(layout.promptAi?.model ?? "")}" spellcheck="false" /></label>
+      <label class="line col">${t("settings.promptAiVpn")} <span class="dim" data-k="prompt-ai-vpn-status"></span>
+        <textarea data-k="prompt-ai-vpn" rows="3" spellcheck="false" placeholder="${t("settings.promptAiVpnHint")}"></textarea></label>
+      <div class="line"><button data-k="prompt-ai-vpn-save">${t("settings.promptAiVpnSave")}</button><button data-k="prompt-ai-vpn-rm" hidden>${t("settings.promptAiVpnRemove")}</button><span class="vpn-error" data-k="prompt-ai-vpn-error"></span></div>
+      </div>
       <h3>${t("settings.theme")}</h3>
       <div class="themes">${THEMES.map(
         (t) => `<button class="theme ${t.id === (layout.theme || DEFAULT_THEME) ? "sel" : ""}" data-theme="${t.id}" style="background:${t.bg};color:${t.fg}">
@@ -346,6 +401,18 @@ export class Settings {
     box.querySelector<HTMLInputElement>('[data-k="tmux-menu"]')!.addEventListener("change", (e) => {
       this.ctx.setTmuxMenu((e.target as HTMLInputElement).checked);
     });
+    box.querySelector<HTMLInputElement>('[data-k="prompt-ai-on"]')!.addEventListener("change", (e) => {
+      this.ctx.setPromptAi({ enabled: (e.target as HTMLInputElement).checked });
+    });
+    for (const [k, field] of [
+      ["prompt-ai-url", "url"],
+      ["prompt-ai-model", "model"],
+    ] as const) {
+      box.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-k="${k}"]`)!.addEventListener("change", (e) => {
+        this.ctx.setPromptAi({ [field]: (e.target as HTMLInputElement).value.trim() });
+      });
+    }
+    this.bindVpn(box);
     box.querySelectorAll<HTMLInputElement>("[data-auto]").forEach((cb) =>
       cb.addEventListener("change", () => this.ctx.toggleAutostart(cb.dataset.auto!)),
     );
