@@ -1,5 +1,17 @@
 # Zmiany
 
+## 0.1.26 (2026-11-07)
+
+- **⌘G poprawia prompt w Claude.** W kafelku z Claude ⌘G (Ctrl+G) wysyła wpisany prompt do
+  firmowego modelu językowego i wstawia z powrotem lepszą wersję: z poprawioną pisownią, a przy
+  zgłoszeniu błędu, nowej funkcji albo pomyśle także z celem, oczekiwanym efektem, makietą do
+  akceptacji i tym, po czym agent pozna, że skończył. Pytania i polecenia dalszego ciągu rozmowy
+  zostają, jak były, tylko poprawione językowo. Włącza się w Opcjach (⌘O), gdzie wpisuje się adres
+  serwera zgodnego z OpenAI i nazwę modelu. Gdy funkcja jest wyłączona, Ctrl+G otwiera Twój edytor jak dotąd.
+- **Własny tunel VPN do serwera modelu.** W Opcjach można wkleić konfigurację WireGuard (`.conf`).
+  Gdy serwer nie odpowiada bezpośrednio, desk łączy się z nim przez własny tunel tylko na czas
+  jednej poprawki, bez włączania systemowego VPN i bez uprawnień administratora.
+
 ## 0.1.25 (2026-11-03)
 
 - **Drzewko plików pokazuje wszystko.** Plików z `.gitignore`, takich jak `.env` czy `.env.docker`,
