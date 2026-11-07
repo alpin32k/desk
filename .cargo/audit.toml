@@ -1,0 +1,13 @@
+# cargo audit (security.yml) reads this from the repo root.
+[advisories]
+ignore = [
+  # Both come from boringtun 0.6 under onetun 0.3.10, the userspace
+  # WireGuard of the prompt rewriter's optional tunnel (wg_tunnel.rs); onetun
+  # has no release on a newer boringtun yet.
+  # Timing variability in curve25519-dalek scalar subtraction: needs an
+  # attacker timing desk's own key operations on the same machine.
+  "RUSTSEC-2024-0344",
+  # ring 0.16 AES may panic with overflow checks on: release builds have
+  # them off, and a panic would only end that one rewrite.
+  "RUSTSEC-2025-0009",
+]

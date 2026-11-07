@@ -429,6 +429,8 @@ mod tests {
         PromptAi { enabled: true, url: "http://10.0.0.5:8000".into(), model: "test-model".into() }
     }
 
+    // Unix paths: on Windows `join` puts backslashes in them.
+    #[cfg(unix)]
     #[test]
     fn wrapper_path_has_no_spaces() {
         let tmp = Path::new("/tmp");
