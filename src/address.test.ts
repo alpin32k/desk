@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dropped, mention, normalize, rendered } from "./address";
+import { dropped, inProject, isLocal, mention, normalize, rendered, staleView } from "./address";
 
 describe("address bar", () => {
   it("turns what was typed into a link", () => {
@@ -37,5 +37,33 @@ describe("address bar", () => {
     expect(dropped(["/Users/me/żółw.jpg"])).toBe("/Users/me/żółw.jpg ");
     expect(dropped(["/tmp/a\nrm -rf ~\n.png"])).toBe("");
     expect(dropped([])).toBe("");
+  });
+
+  it("tells a path inside a project from one beside it", () => {
+    expect(inProject("/p/app", "/p/app")).toBe(true);
+    expect(inProject("/p/app", "/p/app/src/a.ts")).toBe(true);
+    expect(inProject("/p/app", "/p/application/x.ts")).toBe(false);
+    expect(inProject("/p/app", "/p/other")).toBe(false);
+    expect(inProject("C:\\p", "C:\\p\\src\\a.ts")).toBe(true);
+    expect(isLocal("/p/a.md")).toBe(true);
+    expect(isLocal("C:\\p\\a.md")).toBe(true);
+    expect(isLocal("https://example.com")).toBe(false);
+  });
+
+  it("lets the panel follow the active project", () => {
+    const view = (folder: string | null, shown = "") => ({ folder, shown });
+    // A tile of another project: its folder card gives way, whatever opened the panel.
+    expect(staleView("/p/b", view("/p/a"), false)).toBe(true);
+    expect(staleView("/p/b", view("/p/a"), true)).toBe(true);
+    expect(staleView("/p/b", view("/p/b/src"), true)).toBe(false);
+    // Switching tiles leaves a file or an empty panel alone...
+    expect(staleView("/p/b", view(null, "/p/a/README.md"), false)).toBe(false);
+    expect(staleView("/p/b", view(null), false)).toBe(false);
+    // ...⌘F / ⌘W open on the project instead.
+    expect(staleView("/p/b", view(null, "/p/a/README.md"), true)).toBe(true);
+    expect(staleView("/p/b", view(null), true)).toBe(true);
+    expect(staleView("/p/b", view(null, "/p/b/.env"), true)).toBe(false);
+    // A web page stays.
+    expect(staleView("/p/b", view(null, "https://example.com"), true)).toBe(false);
   });
 });

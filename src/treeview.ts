@@ -29,6 +29,8 @@ export class FileTree {
   private found: string[] | null = null;
   private searchTimer: number | undefined;
   private loading = 0;
+  /** The files of `project` are in (or failed to come). */
+  private ready: Promise<void> = Promise.resolve();
 
   constructor(private on: TreeEvents) {
     this.el = document.createElement("div");
@@ -77,9 +79,12 @@ export class FileTree {
     });
   }
 
-  /** Show `path`'s files; keeps the state when it is already shown. */
-  async load(path: string | null, force = false): Promise<void> {
-    if (path === this.project && !force) return;
+  /**
+   * Show `path`'s files; keeps the state when it is already shown. Resolves
+   * once they are in, also for a second call while they are still coming.
+   */
+  load(path: string | null, force = false): Promise<void> {
+    if (path === this.project && !force) return this.ready;
     this.project = path;
     this.expanded.clear();
     this.selected = null;
@@ -87,8 +92,12 @@ export class FileTree {
     this.files = [];
     this.root = buildTree([]);
     this.render();
-    if (!path) return;
     const ticket = ++this.loading;
+    this.ready = path ? this.fetch(path, ticket) : Promise.resolve();
+    return this.ready;
+  }
+
+  private async fetch(path: string, ticket: number): Promise<void> {
     const files = await api.projectFiles(path).catch(() => []);
     if (ticket !== this.loading) return; // another project was picked meanwhile
     this.files = files.filter((f) => !f.endsWith("/"));

@@ -19,6 +19,29 @@ const RENDERED = new Set(
   "md markdown mdx mmd mermaid csv tsv html htm pdf png jpg jpeg gif webp avif bmp ico svg".split(" "),
 );
 
+/** A local file or folder (not a web page). */
+export function isLocal(address: string): boolean {
+  return address.startsWith("/") || /^[a-z]:[\\/]/i.test(address);
+}
+
+/** `path` is `project` or inside it. */
+export function inProject(project: string, path: string): boolean {
+  const sep = path.includes("\\") ? "\\" : "/";
+  return path === project || path.startsWith(project + sep);
+}
+
+/**
+ * The side panel's view gives way to `project`'s folder card: a folder card
+ * of another project always (the active tile moved), and when ⌘F / ⌘W open
+ * the panel (`opening`) also an empty view or another project's file. A web
+ * page stays. `shown`: the file or page shown, "" for none.
+ */
+export function staleView(project: string, view: { folder: string | null; shown: string }, opening: boolean): boolean {
+  if (view.folder) return !inProject(project, view.folder);
+  if (!opening) return false;
+  return !view.shown || (isLocal(view.shown) && !inProject(project, view.shown));
+}
+
 /**
  * `@path` for Claude Code: relative to the project when inside it, quoted when
  * it has spaces. "" for a name with control characters or quotes: it is typed
@@ -27,9 +50,8 @@ const RENDERED = new Set(
 export function mention(project: string | null, path: string): string {
   // eslint-disable-next-line no-control-regex
   if (/[\x00-\x1f\x7f"]/.test(path)) return "";
-  const sep = path.includes("\\") ? "\\" : "/";
   let rel = path;
-  if (project && (path === project || path.startsWith(project + sep))) rel = path.slice(project.length + 1) || ".";
+  if (project && inProject(project, path)) rel = path.slice(project.length + 1) || ".";
   return /\s/.test(rel) ? `@"${rel}" ` : `@${rel} `;
 }
 

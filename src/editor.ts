@@ -23,6 +23,7 @@ import {
   lineNumbers,
 } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
+import { dotenv, isDotenv } from "./dotenv";
 
 /** ANSI color `n` of the active theme. */
 const ansi = (n: number) => `var(--ansi-${n})`;
@@ -41,7 +42,7 @@ const colors = HighlightStyle.define([
   { tag: t.emphasis, fontStyle: "italic" },
   { tag: t.strong, fontWeight: "bold" },
   { tag: t.strikethrough, textDecoration: "line-through" },
-  { tag: [t.processingInstruction, t.escape], color: ansi(13) },
+  { tag: [t.processingInstruction, t.escape, t.special(t.variableName)], color: ansi(13) },
 ]);
 
 const look = EditorView.theme({
@@ -77,6 +78,7 @@ export function createEditor(
   on: { change(): void; save(): void },
 ): Editor {
   const language = new Compartment();
+  const desc = LanguageDescription.matchFilename(languages, fileName);
   const view = new EditorView({
     parent,
     state: EditorState.create({
@@ -96,7 +98,7 @@ export function createEditor(
         EditorState.tabSize.of(2),
         // Prose wraps; code keeps its lines (and scrolls sideways).
         /\.(md|markdown|mdx|txt|rst|adoc)$/i.test(fileName) ? EditorView.lineWrapping : [],
-        language.of([]),
+        language.of(!desc && isDotenv(fileName) ? dotenv : []),
         syntaxHighlighting(colors),
         look,
         keymap.of([
@@ -111,7 +113,6 @@ export function createEditor(
     }),
   });
   // Languages load on demand (one chunk each), so the editor shows at once.
-  const desc = LanguageDescription.matchFilename(languages, fileName);
   void desc?.load().then((lang) => view.dispatch({ effects: language.reconfigure(lang) }));
   return {
     view,

@@ -9,7 +9,7 @@ import { t } from "./i18n";
 import { keysIn } from "./keys";
 import { PLATFORM, shortcut } from "./platform";
 import { toast } from "./ui";
-import { mention, normalize, rendered } from "./address";
+import { isLocal, mention, normalize, rendered, staleView } from "./address";
 import { FileTree, itemsLabel } from "./treeview";
 import { escapeHtml } from "./tile";
 import { createEditor, type Editor } from "./editor";
@@ -45,11 +45,6 @@ export function previewFile(path: string, file: string): Promise<void> {
 /** A link outside desk: a web page in Brave / Chrome (Options), a file in its default app. */
 export function openOutside(link: string): Promise<void> {
   return api.openExternal(link, Side.current?.browserPref());
-}
-
-/** A local file (not a web page) is what the address bar shows. */
-function isLocal(address: string): boolean {
-  return address.startsWith("/") || /^[a-z]:[\\/]/i.test(address);
 }
 
 export class Side {
@@ -236,12 +231,19 @@ export class Side {
     this.address.select();
   }
 
-  /** ⌘W: show or hide; an empty panel starts at its address bar. */
+  /**
+   * ⌘W: show or hide. It opens on the active project (see `follow`), at the
+   * address bar while no page was opened, ready for a link.
+   */
   toggle(): void {
     if (this.isOpen) return this.close();
     this.show();
     this.sync();
-    if (!this.created) this.address.focus();
+    void this.follow(true).then(() => {
+      if (this.created || !this.isOpen) return;
+      this.address.focus();
+      this.address.select();
+    });
   }
 
   close(): void {
@@ -262,15 +264,26 @@ export class Side {
   showFiles(): void {
     this.show();
     if (this.tree.el.hidden) this.toggleTree();
-    void this.tree.load(this.ctx.project()).then(() => {
-      if (!this.created && !this.folder) void this.showFolder("");
-    });
+    void this.follow(true);
     this.tree.focusFilter();
   }
 
   /** The active session moved to another project: its files in the tree. */
   projectChanged(): void {
-    if (this.isOpen && !this.tree.el.hidden) void this.tree.load(this.ctx.project());
+    if (this.isOpen) void this.follow(false);
+  }
+
+  /**
+   * The tree on the active project, and the view with it: a folder card of
+   * another project gives way to this project's, and so does an empty view
+   * or another project's file when ⌘F / ⌘W open the panel (`opening`).
+   */
+  private async follow(opening: boolean): Promise<void> {
+    const project = this.ctx.project();
+    await this.tree.load(project);
+    if (!project || this.tree.project !== project || !this.isOpen) return;
+    const shown = this.editing?.path ?? (this.created ? this.address.value : "");
+    if (staleView(project, { folder: this.folder, shown }, opening)) await this.showFolder("");
   }
 
   private toggleTree(): void {
