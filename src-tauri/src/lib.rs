@@ -28,6 +28,7 @@ pub mod project;
 pub mod prompt_ai;
 pub mod pty;
 pub mod state_watch;
+pub mod thermal;
 pub mod tmux;
 pub mod wg_tunnel;
 mod window_place;
@@ -39,7 +40,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::ipc::{Channel, Response};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Manager, RunEvent, State};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State};
 
 /// Coffee state lives in its own managed value so the guard thread can reach it.
 pub struct AppCoffee(pub coffee::Coffee);
@@ -433,7 +434,8 @@ fn pty_close(app: State<App>, id: u32) {
 }
 
 #[tauri::command]
-fn save_layout(app: State<App>, layout: layout::Layout) -> Result<(), String> {
+fn save_layout(app: State<App>, guard: State<thermal::Guard>, layout: layout::Layout) -> Result<(), String> {
+    guard.set_limit(layout.thermal_limit);
     if app.tmux_menu.swap(layout.tmux_menu, Ordering::Relaxed) != layout.tmux_menu {
         app.sessions.reload_config(layout.tmux_menu);
     }
@@ -556,6 +558,11 @@ fn tile_info(paths: Vec<String>) -> Vec<TileInfo> {
             path,
         })
         .collect()
+}
+
+#[tauri::command]
+fn thermal_status(guard: State<thermal::Guard>) -> thermal::Status {
+    guard.status()
 }
 
 #[tauri::command]
@@ -713,6 +720,14 @@ pub fn run() {
                 tmux_menu: AtomicBool::new(saved.tmux_menu),
                 _watcher: Mutex::new(watcher),
             });
+            app.manage(thermal::Guard::new(saved.thermal_limit));
+            let handle = app.handle().clone();
+            thermal::spawn(move |celsius, pressure| {
+                let roots = || handle.state::<App>().sessions.pids();
+                if let Some(s) = handle.state::<thermal::Guard>().tick(celsius, pressure, roots) {
+                    let _ = handle.emit("thermal", s);
+                }
+            });
             app.manage(dropdown::Dropdown::new(support.join("layout.json")));
             // Taken by another app: desk still starts, Options shows why.
             if let Err(e) = dropdown::apply(app.handle()) {
@@ -746,6 +761,7 @@ pub fn run() {
             git_switch,
             list_projects,
             list_sessions,
+            thermal_status,
             coffee_status,
             coffee_set,
             coffee_restore,
@@ -818,8 +834,11 @@ pub fn run() {
                 api.prevent_exit();
             }
             if let RunEvent::Exit = event {
+                // Sessions slowed while hot get full speed back (tmux keeps them).
+                let app = handle.state::<App>();
+                handle.state::<thermal::Guard>().shutdown(&app.sessions.pids());
                 // Detach every tile; tmux sessions keep running, native ones end.
-                handle.state::<App>().sessions.shutdown();
+                app.sessions.shutdown();
                 // Sleep goes back to normal (the lid watchdog also notices desk is gone).
                 handle.state::<AppCoffee>().0.shutdown(None);
             }

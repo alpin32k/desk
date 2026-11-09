@@ -37,6 +37,7 @@
     "allow-git-switch",
     "allow-list-projects",
     "allow-list-sessions",
+    "allow-thermal-status",
     "allow-coffee-status",
     "allow-coffee-set",
     "allow-coffee-restore",

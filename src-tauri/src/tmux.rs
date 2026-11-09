@@ -150,6 +150,13 @@ impl Tmux {
         .unwrap_or_default()
     }
 
+    /// The process in each pane of every session; none without a server.
+    pub fn pane_pids(&self) -> Vec<u32> {
+        self.run(&["list-panes", "-a", "-F", "#{pane_pid}"])
+            .map(|s| s.lines().filter_map(|l| l.trim().parse().ok()).collect())
+            .unwrap_or_default()
+    }
+
     /// Write the config, with tmux's right-click menus when `menu` (Options),
     /// and give it to the running server: one from an older desk (sessions
     /// outlive it) keeps the config it started with.

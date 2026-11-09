@@ -74,6 +74,8 @@ export interface Layout {
   tileAccounts: Record<string, string>;
   /** The account new Claude sessions of a project use, by project path. */
   projectAccounts: Record<string, string>;
+  /** Slow the sessions while the CPU is hotter than this, °C; 0: never (thermal.ts). */
+  thermalLimit: number;
 }
 
 /** A Claude Code config folder with its own login (accounts.rs). */
@@ -197,6 +199,20 @@ export interface CoffeeStatus {
   stoppedBecause: string | null;
 }
 
+/** CPU temperature and desk slowing its sessions while hot (thermal.rs). */
+export interface ThermalStatus {
+  /** Hottest CPU sensor, °C; null when desk cannot read one here. */
+  celsius: number | null;
+  /** From Options; 0: never slow. */
+  limit: number;
+  /** Too hot: desk is slowing its sessions. */
+  slowed: boolean;
+  /** Processes slowed (the sessions and everything they started). */
+  processes: number;
+  /** Why desk cannot slow anything here, if it cannot. */
+  cannotSlow: string | null;
+}
+
 export interface UsageWindow {
   label: string;
   usedPercent: number;
@@ -263,6 +279,7 @@ export const api = {
   droppedPaths: () => invoke<string[]>("dropped_paths"),
   ptyResize: (id: number, cols: number, rows: number) => invoke<void>("pty_resize", { id, cols, rows }),
   ptyClose: (id: number) => invoke<void>("pty_close", { id }),
+  thermalStatus: () => invoke<ThermalStatus>("thermal_status"),
   coffeeStatus: () => invoke<CoffeeStatus>("coffee_status"),
   coffeeSet: (level: CoffeeLevel) => invoke<CoffeeStatus>("coffee_set", { level }),
   coffeeRestore: () => invoke<CoffeeStatus>("coffee_restore"),

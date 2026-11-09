@@ -87,6 +87,9 @@ pub struct Layout {
     pub tile_accounts: std::collections::BTreeMap<String, String>,
     /// The account new Claude sessions of a project use, by project path.
     pub project_accounts: std::collections::BTreeMap<String, String>,
+    /// Slow the sessions while the CPU is hotter than this, °C; 0: never
+    /// (thermal.rs).
+    pub thermal_limit: u32,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -138,6 +141,7 @@ impl Default for Layout {
             claude_accounts: Vec::new(),
             tile_accounts: Default::default(),
             project_accounts: Default::default(),
+            thermal_limit: crate::thermal::DEFAULT_LIMIT,
         }
     }
 }

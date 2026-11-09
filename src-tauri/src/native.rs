@@ -211,6 +211,12 @@ impl Native {
         s.child.lock().unwrap().kill().map_err(|e| e.to_string())
     }
 
+    /// The process of each running session.
+    pub fn pids(&self) -> Vec<u32> {
+        let all: Vec<Arc<Session>> = self.sessions.lock().unwrap().values().cloned().collect();
+        all.iter().filter_map(|s| s.child.lock().unwrap().process_id()).collect()
+    }
+
     pub fn kill_all(&self) {
         let all: Vec<Arc<Session>> = self.sessions.lock().unwrap().values().cloned().collect();
         for s in all {

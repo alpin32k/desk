@@ -156,6 +156,15 @@ impl Backend {
         }
     }
 
+    /// The process each session runs (tmux: each pane's), for slowing them
+    /// when the computer is hot (thermal.rs).
+    pub fn pids(&self) -> Vec<u32> {
+        match self {
+            Self::Tmux { tmux, .. } => tmux.pane_pids(),
+            Self::Native(n) => n.pids(),
+        }
+    }
+
     /// desk is quitting: tmux sessions stay, native ones end.
     pub fn shutdown(&self) {
         match self {
