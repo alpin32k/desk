@@ -17,7 +17,7 @@
 //!
 //! pub struct DiscoverOptions {
 //!     pub home: PathBuf,
-//!     pub claude_projects_dir: PathBuf, // normally ~/.claude/projects
+//!     pub claude_projects_dirs: Vec<PathBuf>, // normally ~/.claude/projects
 //!     pub max_depth: usize,             // 3 = ~/a/b/c
 //!     pub extra: Vec<PathBuf>,          // folders added by hand; always included if they exist
 //! }
@@ -43,7 +43,7 @@ pub struct Project {
 
 pub struct DiscoverOptions {
     pub home: PathBuf,
-    pub claude_projects_dir: PathBuf,
+    pub claude_projects_dirs: Vec<PathBuf>,
     pub max_depth: usize,
     pub extra: Vec<PathBuf>,
 }
@@ -202,7 +202,8 @@ pub fn discover(opts: &DiscoverOptions) -> Vec<Project> {
         .home
         .canonicalize()
         .unwrap_or_else(|_| opts.home.clone());
-    for project in claude_projects::scan(&opts.claude_projects_dir) {
+    let claude = opts.claude_projects_dirs.iter().flat_map(|d| claude_projects::scan(d));
+    for project in claude {
         if !excluded_claude(&project.cwd, &home) {
             add_project(
                 &mut projects,
@@ -232,7 +233,7 @@ mod tests {
         fs::create_dir_all(&home).unwrap();
         DiscoverOptions {
             home,
-            claude_projects_dir: root.join("claude"),
+            claude_projects_dirs: vec![root.join("claude")],
             max_depth: depth,
             extra: vec![],
         }
@@ -328,7 +329,7 @@ mod tests {
         assert_eq!(projects[0].last_active_ms, 20_000);
         opts.max_depth = 0;
         session(
-            &opts.claude_projects_dir,
+            &opts.claude_projects_dirs[0],
             "-branch",
             &worktree.canonicalize().unwrap(),
             30,
@@ -352,25 +353,25 @@ mod tests {
             repo(path);
         }
         session(
-            &opts.claude_projects_dir,
+            &opts.claude_projects_dirs[0],
             "-a",
             &a.canonicalize().unwrap(),
             10,
         );
         session(
-            &opts.claude_projects_dir,
+            &opts.claude_projects_dirs[0],
             "-a-again",
             &a.canonicalize().unwrap().join("."),
             20,
         );
         session(
-            &opts.claude_projects_dir,
+            &opts.claude_projects_dirs[0],
             "-b",
             &b.canonicalize().unwrap(),
             20,
         );
         session(
-            &opts.claude_projects_dir,
+            &opts.claude_projects_dirs[0],
             "-c",
             &c.canonicalize().unwrap(),
             30,
@@ -387,7 +388,7 @@ mod tests {
                 fs::create_dir_all(&path).unwrap();
             }
             session(
-                &opts.claude_projects_dir,
+                &opts.claude_projects_dirs[0],
                 name,
                 &path.canonicalize().unwrap_or(path),
                 40,

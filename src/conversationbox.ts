@@ -17,6 +17,8 @@ export interface ConversationBoxOptions {
   isOpen: (id: string) => boolean;
   /** Save under a name, or forget the name with "". */
   onName: (id: string, name: string) => void;
+  /** The Claude account it is on, named when there are two or more. */
+  account?: (c: Conversation) => string | null;
 }
 
 /** Resolves to the conversation picked, or null on Esc. */
@@ -45,7 +47,9 @@ export function conversationBox(title: string, found: Conversation[], opts: Conv
       // Under a name: what Claude called it; else the first message, when the title is not it.
       const claude = c.title && c.title !== r.name ? c.title : c.prompt;
       const second = r.name ? claude : c.title ? c.prompt : "";
-      const note = [opts.isOpen(c.id) ? t("app.conversationOpen") : "", ago(c.modifiedMs), c.branch ?? ""].filter(Boolean).join(" · ");
+      const note = [opts.isOpen(c.id) ? t("app.conversationOpen") : "", opts.account?.(c) ?? "", ago(c.modifiedMs), c.branch ?? ""]
+        .filter(Boolean)
+        .join(" · ");
       const forget = r.name ? `<button class="conv-act" data-act="forget" title="${keysIn(t("conv.forgetTitle"))}">×</button>` : "";
       return `<div class="row${n === sel ? " sel" : ""}${r.name ? " saved" : ""}" data-i="${n}"><span class="name">${escapeHtml(label)}</span><span class="path">${escapeHtml(second)}</span><span class="dim">${escapeHtml(note)}</span><button class="conv-act" data-act="name" title="${keysIn(t("conv.nameTitle"))}">✎</button>${forget}</div>`;
     };

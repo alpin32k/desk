@@ -62,6 +62,7 @@
     "allow-clone-project",
     "allow-dropped-paths",
     "allow-recent-conversations",
+    "allow-claude-accounts",
     "allow-quit-desk"
   ]
 }

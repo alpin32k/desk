@@ -25,7 +25,25 @@ const LINK_ROWS = 4;
 
 export type TileState = Exclude<HookState, "exited"> | "shell" | "starting";
 
-export type TileAction = "close" | "kill" | "fullscreen" | "minimize" | "focus" | "color" | "attached" | "sub" | "terminal" | "branch" | "run";
+export type TileAction =
+  | "close"
+  | "kill"
+  | "fullscreen"
+  | "minimize"
+  | "focus"
+  | "color"
+  | "attached"
+  | "sub"
+  | "terminal"
+  | "branch"
+  | "run"
+  | "account";
+
+/** The Claude account a tile runs on, as its header shows it. */
+export interface TileAccount {
+  name: string;
+  color: string;
+}
 
 /** Terminal colors of the chosen theme (Options); new tiles start with them. */
 let termTheme: ITheme = terminalTheme(themeById(DEFAULT_THEME));
@@ -89,6 +107,8 @@ export class Tile {
   onRename: (name: string) => void = () => {};
   /** A ⌘R conversation, labelled "rozmowa" instead of the agent. */
   chat = false;
+  /** The Claude account, shown with two or more of them (accounts.ts). */
+  private account: TileAccount | null = null;
 
   private term: Terminal;
   private fit = new FitAddon();
@@ -378,6 +398,21 @@ export class Tile {
     this.el.style.setProperty("--proj", color);
   }
 
+  /** The Claude account: a label in the header and the left edge in its
+   *  color (the project keeps its color on the dot and the name). */
+  setAccount(account: TileAccount | null): void {
+    if (account?.name === this.account?.name && account?.color === this.account?.color) return;
+    this.account = account;
+    this.el.classList.toggle("has-account", account !== null);
+    if (account) this.el.style.setProperty("--acct", account.color);
+    else this.el.style.removeProperty("--acct");
+    this.render();
+  }
+
+  get accountName(): string | null {
+    return this.account?.name ?? null;
+  }
+
   setActive(active: boolean): void {
     this.el.classList.toggle("active", active);
   }
@@ -463,10 +498,14 @@ export class Tile {
     this.el.className = this.el.className.replace(/\bstate-\S+/, `state-${this.state}`);
     this.badge.textContent = this.index > 0 && this.index < 10 ? String(this.index) : "";
     this.el.classList.toggle("grouped", this.grouped);
+    const label = this.grouped
+      ? `<b>${escapeHtml(this.label())}</b>`
+      : `<span class="${this.customName ? "named" : "agent"}">${escapeHtml(this.label())}</span>`;
+    const account = this.account
+      ? ` <span class="account" data-a="account" title="${escapeHtml(keysIn(t("tile.account", { name: this.account.name })))}">${escapeHtml(this.account.name)}</span>`
+      : "";
     const parts = [
-      this.grouped
-        ? `<b>${escapeHtml(this.label())}</b>`
-        : `<span class="${this.customName ? "named" : "agent"}">${escapeHtml(this.label())}</span>`,
+      label + account,
       this.grouped ? "" : `<b>${escapeHtml(this.name)}</b>`,
       this.branch && !this.grouped
         ? `<span class="branch" data-a="branch" title="${t("common.changeBranch")}">${escapeHtml(this.branch)}</span>`

@@ -570,6 +570,38 @@ html.dragging-card .tile .term {
   color: var(--dim);
 }
 
+/* The Claude account (with two or more): its label, and the left edge in its color. */
+.tile.has-account {
+  border-left-color: var(--acct);
+}
+
+.tile .account {
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--acct) 45%, transparent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--acct) 14%, transparent);
+  color: var(--acct);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tile .account:hover {
+  border-color: var(--acct);
+}
+
+.usage .acct {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 4px;
+  border-radius: 50%;
+  vertical-align: 0;
+}
+
+.usage b {
+  font-weight: 600;
+}
+
 /* a name given by hand reads first */
 .tile .named {
   color: var(--fg);
@@ -1118,6 +1150,34 @@ html.dragging-card .tile .term {
 }
 
 .settings .agents .line input {
+  flex: 1;
+}
+
+.settings .accounts {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings .account-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.settings .account-row .acct {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.settings .account-row input {
+  width: 9em;
+}
+
+.settings .accounts .line input {
   flex: 1;
 }
 

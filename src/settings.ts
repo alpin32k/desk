@@ -2,7 +2,8 @@
 // hand-added folders.
 import { getVersion } from "@tauri-apps/api/app";
 import { DEFAULT_THEME, THEMES } from "./themes";
-import { api, type AgentInfo, type CoffeeStatus, type Layout, type Project, type PromptAi } from "./api";
+import { api, type AccountInfo, type AgentInfo, type ClaudeAccount, type CoffeeStatus, type Layout, type Project, type PromptAi } from "./api";
+import { accountColor, withAccount, withoutAccount } from "./accounts";
 import { rows, shortPath } from "./projects";
 import { escapeHtml } from "./tile";
 import { acceleratorFor, DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
@@ -39,7 +40,12 @@ export interface SettingsContext {
   agents: () => AgentInfo[];
   addAgent: (id: string, command: string) => Promise<void>;
   removeAgent: (id: string) => Promise<void>;
+  /** Claude accounts changed (accounts.ts): saved at once, Rust reads them. */
+  setAccounts: (change: Pick<Layout, "claudeAccounts" | "tileAccounts" | "projectAccounts">) => Promise<void>;
 }
+
+/** A folder for an account: in the home folder (~/...) or a full path. */
+const ACCOUNT_DIR = /^(~[\\/]|\/|[a-z]:[\\/]|\\\\)/i;
 
 export class Settings {
   /** Pasted WireGuard config for prompt rewriting: saved by Rust to an
@@ -85,6 +91,55 @@ export class Settings {
       else error.textContent = t("settings.promptAiVpnEmpty");
     });
     rm.addEventListener("click", () => void save(""));
+  }
+
+  /** The accounts as Options lists them: with none set, the default one alone. */
+  private accountRows(layout: Layout): ClaudeAccount[] {
+    return layout.claudeAccounts?.length ? layout.claudeAccounts : [{ id: "main", name: t("settings.accountMain"), dir: "" }];
+  }
+
+  /** Names, removal, a new account, and who is logged in on each. */
+  private bindAccounts(box: HTMLElement): void {
+    const layout = this.ctx.layout();
+    const rows = this.accountRows(layout);
+    const change = (claudeAccounts: ClaudeAccount[]) =>
+      this.ctx.setAccounts({ claudeAccounts, tileAccounts: layout.tileAccounts, projectAccounts: layout.projectAccounts }).then(() => this.render());
+    box.querySelectorAll<HTMLInputElement>("[data-acct-name]").forEach((input) =>
+      input.addEventListener("change", () => {
+        const name = input.value.trim();
+        const id = input.dataset.acctName!;
+        if (!name || rows.some((a) => a.id !== id && a.name.toLowerCase() === name.toLowerCase())) {
+          if (name) toast(t("settings.accountExists"));
+          input.value = rows.find((a) => a.id === id)?.name ?? "";
+          return;
+        }
+        void change(rows.map((a) => (a.id === id ? { ...a, name } : a)));
+      }),
+    );
+    box.querySelectorAll<HTMLButtonElement>("[data-rm-acct]").forEach((b) =>
+      b.addEventListener("click", () => {
+        void this.ctx.setAccounts(withoutAccount(layout, b.dataset.rmAcct!)).then(() => this.render());
+      }),
+    );
+    box.querySelector<HTMLButtonElement>('[data-k="acct-add"]')!.addEventListener("click", () => {
+      const name = box.querySelector<HTMLInputElement>('[data-k="acct-name"]')!.value.trim();
+      const dir = box.querySelector<HTMLInputElement>('[data-k="acct-dir"]')!.value.trim();
+      if (!name) return;
+      if (rows.some((a) => a.name.toLowerCase() === name.toLowerCase())) return toast(t("settings.accountExists"));
+      if (dir && !ACCOUNT_DIR.test(dir)) return toast(t("settings.accountDirBad"));
+      void change(withAccount(layout.claudeAccounts ?? [], name, dir, t("settings.accountMain")));
+    });
+    // Who is logged in, read from each account's own Claude config.
+    void api
+      .claudeAccounts()
+      .then((infos: AccountInfo[]) => {
+        for (const a of rows) {
+          const el = this.el?.querySelector<HTMLElement>(`[data-acct-email="${CSS.escape(a.id)}"]`);
+          const info = infos.find((i) => i.id === a.id) ?? (rows.length === 1 ? infos[0] : undefined);
+          if (el) el.textContent = info?.email ? `· ${info.email}` : `· ${t("settings.accountNoLogin")}`;
+        }
+      })
+      .catch(() => {});
   }
 
   private el: HTMLElement | null = null;
@@ -246,6 +301,21 @@ export class Settings {
               .join("")
           : `<div class="dim">${t("common.searchingProjects")}</div>`
       }</div>
+      <h3>${t("settings.accounts")} <span class="dim">${t("settings.accountsHint")}</span></h3>
+      <p class="dim small">${keysIn(t("settings.accountsAbout"))}</p>
+      <div class="accounts">${this.accountRows(layout)
+        .map(
+          (a, i) => `<div class="account-row"><i class="acct" style="background:${accountColor(layout, a.id)}"></i><input type="text" data-acct-name="${escapeHtml(
+            a.id,
+          )}" value="${escapeHtml(a.name)}" spellcheck="false" /> <span class="dim">${escapeHtml(a.dir || t("settings.accountDefaultDir"))}</span> <span class="dim" data-acct-email="${escapeHtml(
+            a.id,
+          )}"></span>${i > 0 ? ` <button data-rm-acct="${escapeHtml(a.id)}">${t("common.remove")}</button>` : ""}</div>`,
+        )
+        .join("")}
+        <div class="line"><input type="text" data-k="acct-name" placeholder="${t("settings.accountName")}" spellcheck="false" /><input type="text" data-k="acct-dir" placeholder="${t(
+          "settings.accountDir",
+        )}" spellcheck="false" /><button data-k="acct-add">${t("settings.accountAdd")}</button></div>
+      </div>
       <h3>${t("settings.agents")} <span class="dim">${t("settings.agentsHint")}</span></h3>
       <div class="agents">${this.ctx
         .agents()
@@ -426,6 +496,7 @@ export class Settings {
       await this.ctx.uninstallCoffee();
       this.render();
     });
+    this.bindAccounts(box);
     box.querySelectorAll<HTMLButtonElement>("[data-rm-agent]").forEach((b) =>
       b.addEventListener("click", async () => {
         await this.ctx.removeAgent(b.dataset.rmAgent!);

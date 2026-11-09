@@ -1,6 +1,7 @@
 // First: its tr! macro is used by the modules below.
 #[macro_use]
 pub mod i18n;
+pub mod accounts;
 pub mod agents;
 pub mod backend;
 pub mod browser;
@@ -110,14 +111,39 @@ fn quit_desk(handle: AppHandle, lock: State<lock::Lock>) -> Result<(), String> {
 }
 
 /// ⌘S: the project's newest Claude conversations and the ones saved under a
-/// name (`saved`, their ids), to resume one.
+/// name (`saved`, their ids), to resume one: from every Claude account, each
+/// marked with its account (it resumes on that one).
 #[tauri::command(async)]
-fn recent_conversations(path: String, saved: Vec<String>) -> Vec<conversations::Conversation> {
-    conversations::recent(&env::home().join(".claude/projects"), Path::new(&path), 40, &saved)
+fn recent_conversations(app: State<App>, path: String, saved: Vec<String>) -> Vec<conversations::Conversation> {
+    let home = env::home();
+    let accounts = accounts::effective(&layout::load(&app.layout_path).claude_accounts);
+    let mut all: Vec<conversations::Conversation> = accounts
+        .iter()
+        .flat_map(|a| {
+            let dir = accounts::config_dir(&a.dir, &home).join("projects");
+            conversations::recent(&dir, Path::new(&path), 40, &saved)
+                .into_iter()
+                .map(|c| conversations::Conversation { account: a.id.clone(), ..c })
+        })
+        .collect();
+    all.sort_by_key(|c| std::cmp::Reverse(c.modified_ms));
+    let mut kept = 0;
+    all.retain(|c| {
+        kept += 1;
+        kept <= 40 || saved.contains(&c.id)
+    });
+    all
+}
+
+/// Each Claude account's folder and the email it is logged in with (Options).
+#[tauri::command(async)]
+fn claude_accounts(app: State<App>) -> Vec<accounts::AccountInfo> {
+    accounts::info(&accounts::effective(&layout::load(&app.layout_path).claude_accounts), &env::home())
 }
 
 /// Ensure the tmux session for project + agent + sub-session exists; returns its slug.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 fn open_session(
     app: State<App>,
     path: String,
@@ -126,6 +152,7 @@ fn open_session(
     command: Option<String>,
     resume: Option<String>,
     restore: bool,
+    account: Option<String>,
 ) -> Result<String, String> {
     let dir = Path::new(&path);
     if !dir.is_dir() {
@@ -142,6 +169,14 @@ fn open_session(
         return Ok(s.slug);
     }
     let slug = tmux::session_slug(dir, &agent, instance);
+    let layout = layout::load(&app.layout_path);
+    let home = env::home();
+    // The Claude account it runs on: its own config folder (accounts.rs).
+    let account_dir = if agent == "claude" {
+        accounts::find(&layout.claude_accounts, account.as_deref()).map_or("", |a| a.dir.as_str())
+    } else {
+        ""
+    };
     // A tile of the saved layout whose session tmux lost (the computer
     // restarted): Claude carries on with the conversation it had.
     let resume = resume.or_else(|| {
@@ -169,27 +204,29 @@ fn open_session(
         }
         format!("claude --resume {id}")
     } else {
-        let custom = layout::load(&app.layout_path).agents;
-        agents::command_for(&agent, &custom).ok_or_else(|| format!("unknown agent: {agent}"))?
+        agents::command_for(&agent, &layout.agents).ok_or_else(|| format!("unknown agent: {agent}"))?
     };
     if app.sessions.has(&slug) {
         return Err(format!(
             "tmux session {slug} already belongs to another folder"
         ));
     }
-    let env = [
+    let mut env = vec![
         ("DESK_SLUG", slug.clone()),
         ("DESK_STATE_DIR", app.hooks.state_dir.display().to_string()),
         // desk's --settings replaces the status line; the wrapper runs this one.
         (
             "DESK_STATUSLINE",
-            usage::user_statusline(&env::home()).unwrap_or_default(),
+            usage::user_statusline(&accounts::config_dir(account_dir, &home)).unwrap_or_default(),
         ),
         (
             "DESK_PROMPT_EDITOR",
             app.prompt_editor.as_ref().map(|p| p.display().to_string()).unwrap_or_default(),
         ),
     ];
+    if let Some(config) = accounts::session_env(account_dir, &home) {
+        env.push(("CLAUDE_CONFIG_DIR", config));
+    }
     app.sessions.start(
         &slug,
         dir,
@@ -329,7 +366,8 @@ fn preview_nav(handle: AppHandle, action: String) -> Result<(), String> {
 async fn usage(app: State<'_, App>, agents: Vec<String>) -> Result<Vec<usage::Usage>, String> {
     // Off the main thread: every 5 minutes this asks Anthropic (up to 10 s).
     let state = app.hooks.state_dir.clone();
-    tauri::async_runtime::spawn_blocking(move || usage::usage(&agents, &state, &env::home()))
+    let accounts = layout::load(&app.layout_path).claude_accounts;
+    tauri::async_runtime::spawn_blocking(move || usage::usage(&agents, &accounts, &state, &env::home()))
         .await
         .map_err(|e| e.to_string())
 }
@@ -541,21 +579,26 @@ fn coffee_restore(coffee: State<AppCoffee>) -> Result<coffee::Status, String> {
     coffee.0.restore_sleep()
 }
 
-/// Git repos under ~ (3 levels) plus projects from ~/.claude/projects and
-/// hand-added folders. Read-only and local; runs off the main thread.
+/// Git repos under ~ (3 levels) plus projects from every Claude account's
+/// `projects` folder and hand-added folders. Read-only and local; runs off the main thread.
 #[tauri::command]
-async fn list_projects(extra: Vec<String>) -> Vec<discovery::Project> {
+async fn list_projects(app: State<'_, App>, extra: Vec<String>) -> Result<Vec<discovery::Project>, String> {
     let home = env::home();
-    tauri::async_runtime::spawn_blocking(move || {
+    // Projects Claude was used in, on every account.
+    let claude_projects_dirs = accounts::effective(&layout::load(&app.layout_path).claude_accounts)
+        .iter()
+        .map(|a| accounts::config_dir(&a.dir, &home).join("projects"))
+        .collect();
+    Ok(tauri::async_runtime::spawn_blocking(move || {
         discovery::discover(&discovery::DiscoverOptions {
-            claude_projects_dir: home.join(".claude/projects"),
+            claude_projects_dirs,
             home,
             max_depth: 3,
             extra: extra.into_iter().map(PathBuf::from).collect(),
         })
     })
     .await
-    .unwrap_or_default()
+    .unwrap_or_default())
 }
 
 /// While locked only Edit remains: no Hide, Minimize, Full Screen or Quit
@@ -728,6 +771,7 @@ pub fn run() {
             clone_project,
             dropped_paths,
             recent_conversations,
+            claude_accounts,
             quit_desk,
         ])
         .on_window_event(|window, event| {

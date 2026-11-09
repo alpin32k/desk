@@ -9,6 +9,7 @@
 //! Anthropic itself every 5 minutes (`account`): the same usage request
 //! `/usage` makes, with Claude Code's own login. No model, no tokens.
 
+use crate::accounts::ClaudeAccount;
 use serde::Serialize;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -96,6 +97,8 @@ pub struct Window {
 #[serde(rename_all = "camelCase")]
 pub struct Usage {
     pub agent: String,
+    /// The Claude account (accounts.rs) with two or more of them, else None.
+    pub account: Option<String>,
     pub windows: Vec<Window>,
 }
 
@@ -105,45 +108,36 @@ fn now() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-pub fn usage(agents: &[String], state_dir: &Path, home: &Path) -> Vec<Usage> {
+pub fn usage(agents: &[String], accounts: &[ClaudeAccount], state_dir: &Path, home: &Path) -> Vec<Usage> {
     let now = now();
+    let accounts = crate::accounts::effective(accounts);
+    let split = accounts.len() > 1;
     agents
         .iter()
-        .filter_map(|a| {
-            let windows = match a.as_str() {
-                "claude" => claude(state_dir, home, now),
-                "codex" => codex(&home.join(".codex/sessions"), now),
-                _ => None,
-            }?;
-            Some(Usage {
-                agent: a.clone(),
-                windows,
-            })
+        .flat_map(|a| match a.as_str() {
+            "claude" => claude(state_dir, &accounts, home, now)
+                .into_iter()
+                .map(|(account, windows)| Usage {
+                    agent: a.clone(),
+                    account: split.then_some(account),
+                    windows,
+                })
+                .collect(),
+            "codex" => codex(&home.join(".codex/sessions"), now)
+                .map(|windows| Usage {
+                    agent: a.clone(),
+                    account: None,
+                    windows,
+                })
+                .into_iter()
+                .collect::<Vec<_>>(),
+            _ => Vec::new(),
         })
         .collect()
 }
 
 const USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
 const ACCOUNT_EVERY: std::time::Duration = std::time::Duration::from_secs(5 * 60);
-
-/// Claude Code's login: the access token while it is valid. desk never
-/// refreshes it (that would rotate the refresh token under Claude Code).
-fn claude_token(home: &Path, now: u64) -> Option<String> {
-    let json = if cfg!(target_os = "macos") {
-        let out = std::process::Command::new("/usr/bin/security")
-            .args(["find-generic-password", "-s", "Claude Code-credentials", "-w"])
-            .output()
-            .ok()?;
-        out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
-    } else {
-        None
-    }
-    .or_else(|| {
-        let dir = std::env::var_os("CLAUDE_CONFIG_DIR").map_or_else(|| home.join(".claude"), PathBuf::from);
-        std::fs::read_to_string(dir.join(".credentials.json")).ok()
-    })?;
-    token_from(&serde_json::from_str(&json).ok()?, now)
-}
 
 pub fn token_from(creds: &Value, now: u64) -> Option<String> {
     let o = creds.get("claudeAiOauth")?;
@@ -210,35 +204,51 @@ pub fn iso_seconds(s: &str) -> Option<u64> {
     u64::try_from(days * 86_400 + h * 3600 + min * 60 + sec - offset).ok()
 }
 
-/// The account's limits, asked for at most every 5 minutes (also after a failure).
-fn account(home: &Path, now: u64) -> Option<Vec<Window>> {
+/// The account's limits, asked for at most every 5 minutes (also after a
+/// failure), each account on its own.
+fn account(dir: &str, home: &Path, now: u64) -> Option<Vec<Window>> {
+    use std::collections::HashMap;
     use std::sync::Mutex;
     use std::time::Instant;
-    static LAST: Mutex<Option<(Instant, Option<Value>)>> = Mutex::new(None);
+    type Asked = HashMap<PathBuf, (Instant, Option<Value>)>;
+    static LAST: Mutex<Option<Asked>> = Mutex::new(None);
+    let key = crate::accounts::config_dir(dir, home);
     let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
-    if last.as_ref().is_none_or(|(at, _)| at.elapsed() >= ACCOUNT_EVERY) {
-        let got = claude_token(home, now).and_then(|t| fetch_account(&t));
-        *last = Some((Instant::now(), got));
+    let last = last.get_or_insert_with(HashMap::new);
+    if last.get(&key).is_none_or(|(at, _)| at.elapsed() >= ACCOUNT_EVERY) {
+        let got = crate::accounts::token(dir, home, now).and_then(|t| fetch_account(&t));
+        last.insert(key.clone(), (Instant::now(), got));
     }
-    account_windows(last.as_ref()?.1.as_ref()?, now)
+    account_windows(last.get(&key)?.1.as_ref()?, now)
 }
 
-/// The plan's limits from every session's status line input. Each Claude Code
-/// session keeps the limits it last fetched, so an idle one shows old numbers:
-/// per window, the freshest reading wins (see `freshest`).
-fn claude(state_dir: &Path, home: &Path, now: u64) -> Option<Vec<Window>> {
-    let readings = std::fs::read_dir(state_dir)
+/// The plan's limits of each Claude account, from the status line input of
+/// its sessions (by where their transcript is, see `accounts::owner_of`) and
+/// from Anthropic. Each Claude Code session keeps the limits it last fetched,
+/// so an idle one shows old numbers: per window, the freshest reading wins
+/// (see `freshest`). Accounts with nothing known are left out.
+fn claude(state_dir: &Path, accounts: &[ClaudeAccount], home: &Path, now: u64) -> Vec<(String, Vec<Window>)> {
+    let statuses: Vec<Value> = std::fs::read_dir(state_dir)
         .into_iter()
         .flatten()
         .flatten()
         .filter(|e| e.path().extension().is_some_and(|x| x == "status"))
-        .filter_map(|e| {
-            let v: Value = serde_json::from_str(&std::fs::read_to_string(e.path()).ok()?).ok()?;
-            claude_windows(&v, now)
+        .filter_map(|e| serde_json::from_str(&std::fs::read_to_string(e.path()).ok()?).ok())
+        .collect();
+    accounts
+        .iter()
+        .filter_map(|a| {
+            let own = statuses.iter().filter(|v| {
+                let transcript = v.get("transcript_path").and_then(Value::as_str).unwrap_or_default();
+                crate::accounts::owner_of(accounts, Path::new(transcript), home).is_some_and(|o| o.id == a.id)
+            });
+            let readings = own
+                .filter_map(|v| claude_windows(v, now))
+                .chain(account(&a.dir, home, now));
+            let w = freshest(readings);
+            (!w.is_empty()).then(|| (a.id.clone(), w))
         })
-        .chain(account(home, now));
-    let w = freshest(readings);
-    (!w.is_empty()).then_some(w)
+        .collect()
 }
 
 /// Per window label, the latest reading: within a window usage only grows, and
@@ -356,12 +366,13 @@ fn window(label: &str, used: f64, resets_at: &Value, now: u64) -> Option<Window>
     })
 }
 
-/// The user's own status line command from ~/.claude/settings.json. desk's
-/// `--settings` replaces it, so the wrapper runs it. A project's
-/// `.claude/settings*.json` is not followed: desk would run a command chosen
-/// by whoever wrote that repository.
-pub fn user_statusline(home: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(home.join(".claude/settings.json")).ok()?;
+/// The user's own status line command from the account's `settings.json`
+/// (`config_dir`: ~/.claude for the default account). desk's `--settings`
+/// replaces it, so the wrapper runs it. A project's `.claude/settings*.json`
+/// is not followed: desk would run a command chosen by whoever wrote that
+/// repository.
+pub fn user_statusline(config_dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(config_dir.join("settings.json")).ok()?;
     let v: Value = serde_json::from_str(&text).ok()?;
     let sl = v.get("statusLine")?;
     (sl.get("type")?.as_str()? == "command")
@@ -417,12 +428,41 @@ mod tests {
         .unwrap();
         let u = usage(
             &["claude".into(), "codex".into(), "shell".into()],
+            &[],
             &state,
             tmp.path(),
         );
         assert_eq!(u.len(), 2);
         assert_eq!(u[0].windows[0].used_percent, 50.0);
+        assert_eq!(u[0].account, None, "one account: no label");
         assert_eq!(u[1].windows[0].used_percent, 7.0);
+    }
+
+    #[test]
+    fn each_account_gets_the_limits_of_its_own_sessions() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = tmp.path();
+        let state = home.join("state");
+        std::fs::create_dir_all(&state).unwrap();
+        let later = u64::MAX / 2;
+        let status = |transcript: &str, used: u32| {
+            json!({"transcript_path": transcript,
+                   "rate_limits": {"five_hour": {"used_percentage": used, "resets_at": later}}})
+            .to_string()
+        };
+        let work = home.join(".claude-work/projects/-p/a.jsonl").display().to_string();
+        let own = home.join(".claude-own/projects/-p/b.jsonl").display().to_string();
+        std::fs::write(state.join("w.status"), status(&work, 60)).unwrap();
+        std::fs::write(state.join("o.status"), status(&own, 20)).unwrap();
+        // Folders of their own: no Keychain item, no login file, no request.
+        let accounts = [
+            ClaudeAccount { id: "work".into(), name: "Firma".into(), dir: "~/.claude-work".into() },
+            ClaudeAccount { id: "own".into(), name: "Prywatne".into(), dir: "~/.claude-own".into() },
+            ClaudeAccount { id: "idle".into(), name: "Inne".into(), dir: "~/.claude-idle".into() },
+        ];
+        let u = usage(&["claude".into()], &accounts, &state, home);
+        let got: Vec<_> = u.iter().map(|u| (u.account.as_deref(), u.windows[0].used_percent)).collect();
+        assert_eq!(got, vec![(Some("work"), 60.0), (Some("own"), 20.0)], "nothing known of idle");
     }
 
     #[test]
@@ -471,9 +511,10 @@ mod tests {
     fn live_usage() {
         let home = crate::env::home();
         let state = crate::env::support_dir().join("state");
+        let layout = crate::layout::load(&crate::env::support_dir().join("layout.json"));
         println!(
             "{:?}",
-            usage(&["claude".into(), "codex".into()], &state, &home)
+            usage(&["claude".into(), "codex".into()], &layout.claude_accounts, &state, &home)
         );
     }
 
@@ -482,14 +523,14 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let home = tmp.path().join("home");
         std::fs::create_dir_all(home.join(".claude")).unwrap();
-        assert_eq!(user_statusline(&home), None);
+        assert_eq!(user_statusline(&home.join(".claude")), None);
         std::fs::write(
             home.join(".claude/settings.json"),
             r#"{"statusLine":{"type":"command","command":"~/.claude/statusline.sh"}}"#,
         )
         .unwrap();
         assert_eq!(
-            user_statusline(&home).as_deref(),
+            user_statusline(&home.join(".claude")).as_deref(),
             Some("~/.claude/statusline.sh")
         );
     }

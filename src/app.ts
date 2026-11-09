@@ -7,6 +7,7 @@ import {
   api,
   type AgentInfo,
   type CardMode,
+  type ClaudeAccount,
   type CoffeeLevel,
   type CoffeeStatus,
   type Conversation,
@@ -45,6 +46,7 @@ import { confirmBox, newProjectBox, pickBox, toast } from "./ui";
 import { conversationBox } from "./conversationbox";
 import { setSaved, syncTile } from "./saved";
 import { usageHtml } from "./usage";
+import { accountById, accountColor, accountFor, hasAccounts } from "./accounts";
 
 const POLL_MS = 3000;
 /** desk asks GitHub for a newer release once a day (and from Options on demand). */
@@ -243,6 +245,7 @@ export class App {
         this.layout.agents = this.layout.agents.filter((a) => a.id !== id);
         await this.saveNow();
       },
+      setAccounts: (change) => this.setAccounts(change),
     });
   }
 
@@ -304,6 +307,9 @@ export class App {
       ...boot.layout,
       colors: boot.layout.colors ?? {},
       agents: boot.layout.agents ?? [],
+      claudeAccounts: boot.layout.claudeAccounts ?? [],
+      tileAccounts: boot.layout.tileAccounts ?? {},
+      projectAccounts: boot.layout.projectAccounts ?? {},
       runs: boot.layout.runs ?? {},
       // Conversations used to sit in the active project's card: back to their own.
       cards: Object.fromEntries(Object.entries(boot.layout.cards ?? {}).filter(([k]) => parseKey(k).path !== this.chatPath)),
@@ -396,8 +402,18 @@ export class App {
     this.resuming.delete(key);
     const fresh = !this.running.has(key);
     const startedAt = Math.floor(Date.now() / 1000);
+    // A Claude session runs on its account (accounts.ts): kept for its key, so
+    // a restart or a restore starts it on the same one. One running with none
+    // kept was started before there were accounts: on the default one.
+    let account = "";
+    if (spec.agent === "claude") {
+      const main = this.layout.claudeAccounts[0]?.id;
+      if (!fresh && main && !this.layout.tileAccounts[key]) this.layout.tileAccounts[key] = main;
+      account = accountFor(this.layout, key, spec.path);
+      if (account && fresh) this.layout.tileAccounts[key] = account;
+    }
     try {
-      const slug = await api.openSession(spec.path, spec.agent, spec.instance, this.layout.runs[key], resume, restore);
+      const slug = await api.openSession(spec.path, spec.agent, spec.instance, this.layout.runs[key], resume, restore, account);
       this.running.add(key);
       // A session started anew under a slug used before: the old state names
       // another conversation (a name given now would save that one).
@@ -423,6 +439,7 @@ export class App {
         .filter((i) => i !== undefined);
       this.layout.colors[spec.path] = pickColor(spec.path, this.layout.colors, taken);
       tile.setColor(projectColor(spec.path, this.layout.colors));
+      this.showAccount(tile);
       this.tiles.set(key, tile);
       return tile;
     } catch (err) {
@@ -532,6 +549,7 @@ export class App {
       names,
       isOpen: (id) => this.tileOfConversation(path, id) !== undefined,
       onName: (id, given) => this.nameConversation(path, id, given),
+      account: (c) => (hasAccounts(this.layout) ? (accountById(this.layout, c.account)?.name ?? null) : null),
     });
     if (!c) return;
     const open = this.tileOfConversation(path, c.id);
@@ -540,6 +558,8 @@ export class App {
     const key = keyOf({ path, agent: "claude", instance: nextInstance(taken, path, "claude") });
     const saved = this.layout.saved[path]?.[c.id];
     if (saved) this.layout.titles[key] = saved;
+    // A conversation is kept by the account it was held on: it resumes there.
+    if (c.account) this.layout.tileAccounts[key] = c.account;
     this.resuming.set(key, c.id);
     await this.openTile(key);
   }
@@ -585,12 +605,82 @@ export class App {
     if (sync.save !== undefined || sync.title !== undefined) this.save();
   }
 
-  /** Another session of the same agent in the same project, next to it. */
+  /** Another session of the same agent in the same project, next to it. A
+   *  Claude one asks which account (with two or more), its tile's first. */
   private async openSub(tile: Tile): Promise<void> {
     const sessions = await api.listSessions();
     const taken = [...sessions, ...[...this.tiles.values()]];
     const key = keyOf({ path: tile.path, agent: tile.agent, instance: nextInstance(taken, tile.path, tile.agent) });
+    if (tile.agent === "claude") {
+      const current = accountFor(this.layout, tile.key, tile.path);
+      const account = hasAccounts(this.layout) ? await this.askAccount(t("app.accountNew", { name: tile.name }), current) : current;
+      if (account === null) return;
+      if (account) this.layout.tileAccounts[key] = account;
+      if (account !== current) this.layout.projectAccounts[tile.path] = account;
+    }
     await this.openTile(key);
+  }
+
+  /** Pick a Claude account, `current` first (↵ keeps it); null on Esc. */
+  private async askAccount(title: string, current: string): Promise<string | null> {
+    const list = this.layout.claudeAccounts;
+    const first = accountById(this.layout, current);
+    const ordered = [...(first ? [first] : []), ...list.filter((a) => a.id !== first?.id)];
+    const picked = await pickBox(title, ordered.map(accountLabel), { current: first ? accountLabel(first) : null });
+    if (!picked) return null;
+    return ordered.find((a) => accountLabel(a) === picked.value)?.id ?? null;
+  }
+
+  /** The tile's account label and edge (Claude tiles, two or more accounts). */
+  private showAccount(tile: Tile): void {
+    const a = tile.agent === "claude" && hasAccounts(this.layout) ? accountById(this.layout, accountFor(this.layout, tile.key, tile.path)) : undefined;
+    tile.setAccount(a ? { name: a.name, color: accountColor(this.layout, a.id) } : null);
+  }
+
+  /** Click on a tile's account label or ⌘⇧A: run its Claude on another account. */
+  private async switchAccount(tile: Tile): Promise<void> {
+    if (tile.agent !== "claude") return toast(t("app.accountOnlyClaude"));
+    if (!hasAccounts(this.layout)) return toast(keysIn(t("app.accountNone")));
+    const from = accountById(this.layout, accountFor(this.layout, tile.key, tile.path))!;
+    const to = accountById(this.layout, await this.askAccount(t("app.accountPick", { name: tile.name }), from.id));
+    if (!to || to.id === from.id) return;
+    const ok = await confirmBox(t("app.accountSwitchConfirm", { name: tile.name, to: to.name, from: from.name }), t("app.accountSwitch"));
+    if (!ok || this.tiles.get(tile.key) !== tile) return;
+    // The tile stays where it is: its session ends and starts again on `to`,
+    // and the terminal attaches to the new one. The old pty's exit is not a
+    // session ending (no tile has its id any more).
+    const old = tile.ptyId;
+    tile.ptyId = null;
+    if (old !== null) await api.ptyClose(old);
+    await api.killSession(tile.slug).catch(() => {});
+    this.hook.delete(tile.slug);
+    this.layout.tileAccounts[tile.key] = to.id;
+    this.layout.projectAccounts[tile.path] = to.id;
+    this.save();
+    try {
+      await api.openSession(tile.path, tile.agent, tile.instance, undefined, undefined, false, to.id);
+    } catch (err) {
+      return toast(t("app.openFailed", { agent: tile.agent, path: tile.path, err: String(err) }));
+    }
+    this.running.add(tile.key);
+    tile.update({ state: "starting" });
+    this.showAccount(tile);
+    await tile.attach();
+    if (old !== null) this.earlyExits.delete(old);
+    this.usageAt = 0;
+    this.renderChrome();
+    toast(t("app.accountSwitched", { name: tile.name, account: to.name }));
+  }
+
+  /** Options changed the accounts: tiles and the top bar show them anew. */
+  private setAccounts(change: Pick<Layout, "claudeAccounts" | "tileAccounts" | "projectAccounts">): Promise<void> {
+    Object.assign(this.layout, change);
+    for (const tile of this.tiles.values()) this.showAccount(tile);
+    this.usageAt = 0;
+    this.renderChrome();
+    // Rust reads the accounts from the file when a session starts.
+    clearTimeout(this.saveTimer);
+    return this.persist();
   }
 
   /** Close the tile; the tmux session keeps running in the background. */
@@ -644,12 +734,13 @@ export class App {
     if (slug) await api.killSession(slug).catch((err) => toast(String(err)));
     this.running.delete(key);
     this.closed = this.closed.filter((c) => c.key !== key); // killed: nothing to reopen
-    const forgotten = [this.layout.runs, this.layout.cards, this.layout.titles, this.layout.sizes].some((m) => key in m);
+    const forgotten = [this.layout.runs, this.layout.cards, this.layout.titles, this.layout.sizes, this.layout.tileAccounts].some((m) => key in m);
     if (forgotten || this.layout.minimized.includes(key)) {
       delete this.layout.runs[key];
       delete this.layout.cards[key];
       delete this.layout.titles[key];
       delete this.layout.sizes[key];
+      delete this.layout.tileAccounts[key];
       this.layout.minimized = this.layout.minimized.filter((k) => k !== key);
       this.save();
     }
@@ -670,6 +761,7 @@ export class App {
     if (action === "terminal") return this.openTerminal(tile.path);
     if (action === "run") return this.runInProject(tile.path);
     if (action === "branch") return this.switchBranch(tile.path);
+    if (action === "account") return this.switchAccount(tile);
     if (action === "attached" && tile.ptyId !== null) {
       const slug = this.earlyExits.get(tile.ptyId);
       if (slug !== undefined) {
@@ -1463,7 +1555,10 @@ export class App {
       : "";
     this.top.innerHTML = `${leave}<span class="brand"${drag}>desk</span>${hide}<span class="dim"${drag}> · ${this.tiles.size} sessions</span>${
       waiting ? `<span class="waiting-pill"${drag}>${t("top.waiting", { n: waiting })}</span>` : ""
-    }<span class="spacer"${drag}></span>${this.updateHtml()}${usageHtml(this.usage, Date.now())}<button class="top-btn" data-top="browser" title="${t("top.browserTitle", { keys: keysIn("⌘W") })}">${t("top.browser")}</button>${this.coffeeHtml()}${this.quitHtml()}`;
+    }<span class="spacer"${drag}></span>${this.updateHtml()}${usageHtml(this.usage, Date.now(), (id) => {
+      const a = this.layout.claudeAccounts.find((x) => x.id === id);
+      return a ? { name: a.name, color: accountColor(this.layout, a.id) } : null;
+    })}<button class="top-btn" data-top="browser" title="${t("top.browserTitle", { keys: keysIn("⌘W") })}">${t("top.browser")}</button>${this.coffeeHtml()}${this.quitHtml()}`;
     this.footer.innerHTML =
       `<span class="hints">${hints()
         .map(([k, label]) => `<span><kbd>${k}</kbd> ${escapeHtml(label)}</span>`)
@@ -1715,6 +1810,15 @@ export class App {
       case "reopen":
         void this.reopenClosed();
         break;
+      case "account": {
+        const tile = this.tiles.get(this.active ?? "");
+        if (!tile) {
+          toast(t("app.pickTileFirst"));
+          break;
+        }
+        void this.switchAccount(tile);
+        break;
+      }
       case "coffee":
         void this.cycleCoffee();
         break;
@@ -1794,6 +1898,11 @@ interface CardDrop {
   box: Box;
   zone?: boolean;
   label: string;
+}
+
+/** An account in the picker: its name, and its folder when it has its own. */
+function accountLabel(a: ClaudeAccount): string {
+  return a.dir ? `${a.name} · ${a.dir}` : a.name;
 }
 
 function average(xs: number[]): number {

@@ -68,6 +68,27 @@ export interface Layout {
   language: string;
   /** Ctrl+G in Claude rewrites the prompt with the company LLM (prompt_ai.rs). */
   promptAi: PromptAi;
+  /** Claude accounts (accounts.ts); the first one is the default. */
+  claudeAccounts: ClaudeAccount[];
+  /** The account each Claude session was started with, by session key. */
+  tileAccounts: Record<string, string>;
+  /** The account new Claude sessions of a project use, by project path. */
+  projectAccounts: Record<string, string>;
+}
+
+/** A Claude Code config folder with its own login (accounts.rs). */
+export interface ClaudeAccount {
+  id: string;
+  name: string;
+  /** As typed in Options ("~/.claude-prywatne"); "" = Claude Code's default. */
+  dir: string;
+}
+
+/** Where an account lives and who is logged in on it. */
+export interface AccountInfo {
+  id: string;
+  dir: string;
+  email: string | null;
 }
 
 export interface PromptAi {
@@ -147,6 +168,8 @@ export interface Conversation {
   prompt: string;
   branch: string | null;
   modifiedMs: number;
+  /** The Claude account it was held on; it resumes there. */
+  account: string;
 }
 
 export interface Bootstrap {
@@ -183,6 +206,8 @@ export interface UsageWindow {
 
 export interface Usage {
   agent: string;
+  /** The Claude account, with two or more of them. */
+  account: string | null;
   windows: UsageWindow[];
 }
 
@@ -201,8 +226,17 @@ export const api = {
   listSessions: () => invoke<SessionInfo[]>("list_sessions"),
   /** `resume`: a Claude conversation's id, to pick it up again (⌘S). */
   /** `restore`: a tile of the saved layout at startup; Claude resumes its last conversation if the session is gone. */
-  openSession: (path: string, agent: string, instance: number, command?: string, resume?: string, restore = false) =>
-    invoke<string>("open_session", { path, agent, instance, command: command ?? null, resume: resume ?? null, restore }),
+  /** `account`: the Claude account (accounts.ts) a new Claude session starts on. */
+  openSession: (path: string, agent: string, instance: number, command?: string, resume?: string, restore = false, account?: string) =>
+    invoke<string>("open_session", {
+      path,
+      agent,
+      instance,
+      command: command ?? null,
+      resume: resume ?? null,
+      restore,
+      account: account || null,
+    }),
   /** The project's newest Claude conversations (⌘S). */
   /** `saved`: ids of the project's saved conversations, listed however old. */
   recentConversations: (path: string, saved: string[]) => invoke<Conversation[]>("recent_conversations", { path, saved }),
@@ -267,4 +301,6 @@ export const api = {
   gitBranches: (path: string) => invoke<string[]>("git_branches", { path }),
   gitSwitch: (path: string, branch: string) => invoke<void>("git_switch", { path, branch }),
   usage: (agents: string[]) => invoke<Usage[]>("usage", { agents }),
+  /** Each Claude account's folder and login (Options). */
+  claudeAccounts: () => invoke<AccountInfo[]>("claude_accounts"),
 };

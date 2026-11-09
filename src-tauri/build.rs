@@ -52,6 +52,7 @@ const COMMANDS: &[&str] = &[
     "clone_project",
     "dropped_paths",
     "recent_conversations",
+    "claude_accounts",
     "quit_desk",
 ];
 

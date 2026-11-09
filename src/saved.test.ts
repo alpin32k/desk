@@ -12,6 +12,7 @@ const conv = (id: string, modifiedMs: number, title: string | null = null, promp
   prompt,
   branch,
   modifiedMs,
+  account: "",
 });
 
 describe("saving a conversation under a name", () => {
