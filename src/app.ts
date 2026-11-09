@@ -16,6 +16,7 @@ import {
   type Project,
   type PtyExit,
   type SessionState,
+  type ThermalStatus,
   type Update,
   type Usage,
 } from "./api";
@@ -46,6 +47,7 @@ import { confirmBox, newProjectBox, pickBox, toast } from "./ui";
 import { conversationBox } from "./conversationbox";
 import { setSaved, syncTile } from "./saved";
 import { usageHtml } from "./usage";
+import { DEFAULT_LIMIT, slowing, thermalHtml } from "./thermal";
 import { accountById, accountColor, accountFor, hasAccounts } from "./accounts";
 
 const POLL_MS = 3000;
@@ -103,6 +105,8 @@ export class App {
   private update: Update | null = null;
   private usageAt = 0;
   private coffee: CoffeeStatus = { level: "off", helperInstalled: false, sleepDisabled: false, stoppedBecause: null };
+  /** CPU temperature in the top bar (thermal.ts); null until the first reading. */
+  private thermal: ThermalStatus | null = null;
   private fullscreen: string | null = null;
   private locked = false;
   /** Docked at the top of the screen (⌘`, dropdown.rs). */
@@ -228,6 +232,11 @@ export class App {
         this.projectCache = null;
         this.save();
       },
+      setThermalLimit: (celsius) => {
+        this.layout.thermalLimit = celsius;
+        this.save();
+        if (this.thermal) this.onThermal({ ...this.thermal, limit: celsius });
+      },
       coffee: () => this.coffee,
       uninstallCoffee: async () => {
         this.coffee = await api.coffeeUninstall().catch((err) => {
@@ -280,6 +289,7 @@ export class App {
       if (a === "restore") void this.restoreSleep();
       const t = (e.target as HTMLElement).closest<HTMLElement>("[data-top]")?.dataset.top;
       if (t === "browser") this.side.browse();
+      if (t === "thermal") void this.settings.toggle();
       if (t === "update") void this.installUpdate();
       if (t === "leave") void api.dropdownLeave();
       if (t === "quit") void this.quit();
@@ -332,6 +342,7 @@ export class App {
       dropdownAnimation: boot.layout.dropdownAnimation ?? 200,
       keys: boot.layout.keys ?? {},
       tmuxMenu: boot.layout.tmuxMenu ?? false,
+      thermalLimit: boot.layout.thermalLimit ?? DEFAULT_LIMIT,
       language,
       lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length),
     };
@@ -341,6 +352,9 @@ export class App {
     // Another app (iTerm's hotkey window...) may hold ⌘` already.
     if (this.layout.dropdown) void api.dropdownApply().catch((err) => toast(`Dropdown: ${err}`, 10000));
     setTerminalFontSize(this.layout.fontSize);
+    // Every 5 s from Rust while the temperature or the slowing changes.
+    await listen<ThermalStatus>("thermal", (e) => this.onThermal(e.payload));
+    this.thermal = await api.thermalStatus().catch(() => null);
 
     window.addEventListener("keydown", (e) => this.onKey(e), true);
     for (const type of ["paste", "drop", "keypress", "input"]) {
@@ -1558,7 +1572,7 @@ export class App {
     }<span class="spacer"${drag}></span>${this.updateHtml()}${usageHtml(this.usage, Date.now(), (id) => {
       const a = this.layout.claudeAccounts.find((x) => x.id === id);
       return a ? { name: a.name, color: accountColor(this.layout, a.id) } : null;
-    })}<button class="top-btn" data-top="browser" title="${t("top.browserTitle", { keys: keysIn("⌘W") })}">${t("top.browser")}</button>${this.coffeeHtml()}${this.quitHtml()}`;
+    })}<button class="top-btn" data-top="browser" title="${t("top.browserTitle", { keys: keysIn("⌘W") })}">${t("top.browser")}</button>${thermalHtml(this.thermal)}${this.coffeeHtml()}${this.quitHtml()}`;
     this.footer.innerHTML =
       `<span class="hints">${hints()
         .map(([k, label]) => `<span><kbd>${k}</kbd> ${escapeHtml(label)}</span>`)
@@ -1636,6 +1650,22 @@ export class App {
     } catch (err) {
       toast(t("update.error", { err: String(err) }));
     }
+  }
+
+  // ---- temperature -------------------------------------------------------
+
+  private onThermal(s: ThermalStatus): void {
+    const was = slowing(this.thermal);
+    this.thermal = s;
+    // Only the chip: the whole bar is not redrawn every 5 s.
+    const chip = this.top.querySelector("[data-thermal]");
+    const html = thermalHtml(s);
+    if (chip) chip.outerHTML = html;
+    else if (html) this.renderChrome();
+    const c = s.celsius ?? "?";
+    if (slowing(s) && !was) toast(t("thermal.slowing", { c }));
+    // Turned off in Options is not "cooled down".
+    else if (was && !s.slowed && s.limit) toast(t("thermal.cooled", { c }));
   }
 
   // ---- coffee ------------------------------------------------------------

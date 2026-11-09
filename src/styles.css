@@ -141,6 +141,21 @@ button:hover {
   font-weight: 600;
 }
 
+.thermal {
+  padding: 0 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.thermal.warm {
+  color: var(--waiting);
+  border-color: color-mix(in srgb, var(--waiting) 60%, var(--bg));
+}
+
+.thermal.hot {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
 .coffee {
   margin-right: 8px;
   padding: 0 8px;

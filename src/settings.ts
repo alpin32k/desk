@@ -10,6 +10,7 @@ import { acceleratorFor, DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
 import { LANGUAGES, language, t, type Language } from "./i18n";
 import { acceleratorsOf, bindingLabel, BINDINGS, clashWith, FIXED, groupLabel, GROUPS, keysIn, keyText } from "./keys";
 import { shortcut } from "./platform";
+import { clampLimit, DEFAULT_LIMIT, MAX_LIMIT, MIN_LIMIT } from "./thermal";
 import { toast } from "./ui";
 
 export interface SettingsContext {
@@ -35,6 +36,8 @@ export interface SettingsContext {
   toggleAutostart: (path: string) => void;
   addFolder: () => Promise<void>;
   removeFolder: (path: string) => void;
+  /** °C above which desk slows its sessions; 0: never (thermal.ts). */
+  setThermalLimit: (celsius: number) => void;
   coffee: () => CoffeeStatus;
   uninstallCoffee: () => Promise<void>;
   agents: () => AgentInfo[];
@@ -343,6 +346,10 @@ export class Settings {
           ? `${t("settings.coffeeHelper")} <button data-k="coffee-rm">${t("settings.coffeeRemove")}</button>`
           : t("settings.coffeeAsk")
       }</div>
+      <h3>${t("settings.thermal")}</h3>
+      <label class="line"><input type="checkbox" data-k="thermal-on" ${layout.thermalLimit ? "checked" : ""}/> ${t("settings.thermalOn")}</label>
+      <label class="line">${t("settings.thermalLimit")} <input type="number" min="${MIN_LIMIT}" max="${MAX_LIMIT}" step="1" value="${layout.thermalLimit || DEFAULT_LIMIT}" data-k="thermal-limit" ${layout.thermalLimit ? "" : "disabled"}/> °C</label>
+      <p class="dim small">${t("settings.thermalAbout")}</p>
       <h3>${t("settings.updates")}</h3>
       <div class="line"><span class="dim">desk <span data-k="version"></span> · ${t("settings.updatesHow")}</span> <button data-k="update">${t("settings.checkNow")}</button></div>
       </div>
@@ -467,6 +474,17 @@ export class Settings {
     });
     box.querySelector<HTMLInputElement>('[data-k="notify"]')!.addEventListener("change", (e) => {
       this.ctx.setNotifications((e.target as HTMLInputElement).checked);
+    });
+    const thermalLimit = box.querySelector<HTMLInputElement>('[data-k="thermal-limit"]')!;
+    box.querySelector<HTMLInputElement>('[data-k="thermal-on"]')!.addEventListener("change", (e) => {
+      const on = (e.target as HTMLInputElement).checked;
+      this.ctx.setThermalLimit(on ? clampLimit(Number(thermalLimit.value)) : 0);
+      this.render();
+    });
+    thermalLimit.addEventListener("change", () => {
+      const celsius = clampLimit(Number(thermalLimit.value));
+      thermalLimit.value = String(celsius);
+      this.ctx.setThermalLimit(celsius);
     });
     box.querySelector<HTMLInputElement>('[data-k="tmux-menu"]')!.addEventListener("change", (e) => {
       this.ctx.setTmuxMenu((e.target as HTMLInputElement).checked);

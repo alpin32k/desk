@@ -27,6 +27,7 @@ const COMMANDS: &[&str] = &[
     "git_switch",
     "list_projects",
     "list_sessions",
+    "thermal_status",
     "coffee_status",
     "coffee_set",
     "coffee_restore",
