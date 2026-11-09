@@ -8,14 +8,36 @@ describe("usage chips", () => {
     expect(level(95)).toBe("high");
     const html = usageHtml(
       [
-        { agent: "claude", windows: [{ label: "5h", usedPercent: 42.4, resetsAt: 7200 }, { label: "7d", usedPercent: 91, resetsAt: 90000 }] },
-        { agent: "codex", windows: [] },
+        {
+          agent: "claude",
+          account: null,
+          windows: [{ label: "5h", usedPercent: 42.4, resetsAt: 7200 }, { label: "7d", usedPercent: 91, resetsAt: 90000 }],
+        },
+        { agent: "codex", account: null, windows: [] },
       ],
       0,
     );
     expect(html).toContain('claude 5h 42% <span class="reset">↻2h00m</span> · 7d 91% <span class="reset">↻1d1h</span>');
     expect(html).toContain('class="usage high"');
     expect(html).not.toContain("codex");
+  });
+
+  it("names each Claude account by its own name and color", () => {
+    const names: Record<string, { name: string; color: string }> = {
+      work: { name: "Firma", color: "#e3b341" },
+      own: { name: "<Prywatne>", color: "#56d4dd" },
+    };
+    const html = usageHtml(
+      [
+        { agent: "claude", account: "work", windows: [{ label: "5h", usedPercent: 94, resetsAt: 7200 }] },
+        { agent: "claude", account: "own", windows: [{ label: "5h", usedPercent: 12, resetsAt: 7200 }] },
+      ],
+      0,
+      (id) => names[id] ?? null,
+    );
+    expect(html).toContain('<i class="acct" style="background:#e3b341"></i><b>Firma</b> 5h 94%');
+    expect(html).toContain("<b>&#60;Prywatne&#62;</b> 5h 12%");
+    expect(html).not.toContain("claude 5h");
   });
 
   it("formats time to reset", () => {

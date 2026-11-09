@@ -80,6 +80,13 @@ pub struct Layout {
     pub language: String,
     /// Ctrl+G in Claude rewrites the prompt with the company LLM (prompt_ai.rs).
     pub prompt_ai: PromptAi,
+    /// Claude accounts (accounts.rs); the first one is the default. Empty or
+    /// one: every session uses Claude Code's default account, as before.
+    pub claude_accounts: Vec<crate::accounts::ClaudeAccount>,
+    /// The account each Claude session was started with, by session key.
+    pub tile_accounts: std::collections::BTreeMap<String, String>,
+    /// The account new Claude sessions of a project use, by project path.
+    pub project_accounts: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -128,6 +135,9 @@ impl Default for Layout {
             tmux_menu: false,
             language: String::new(),
             prompt_ai: PromptAi::default(),
+            claude_accounts: Vec::new(),
+            tile_accounts: Default::default(),
+            project_accounts: Default::default(),
         }
     }
 }

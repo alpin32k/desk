@@ -23,6 +23,8 @@ pub struct Conversation {
     pub branch: Option<String>,
     /// Last written, Unix milliseconds.
     pub modified_ms: u64,
+    /// The Claude account it was held on (accounts.rs); "" = the default.
+    pub account: String,
 }
 
 /// Lines read for the first message (hooks and attachments come before it).
@@ -97,6 +99,7 @@ fn read(path: &Path, cwd: &Path, modified_ms: u64) -> Option<Conversation> {
         prompt,
         branch,
         modified_ms,
+        account: String::new(),
     })
 }
 
@@ -261,6 +264,7 @@ mod tests {
                     prompt: "dropdown znika".into(),
                     branch: Some("main".into()),
                     modified_ms: 30_000,
+                    account: String::new(),
                 },
                 Conversation {
                     id: A.into(),
@@ -268,6 +272,7 @@ mod tests {
                     prompt: "odpal mi apke".into(),
                     branch: Some("main".into()),
                     modified_ms: 10_000,
+                    account: String::new(),
                 },
             ]
         );
