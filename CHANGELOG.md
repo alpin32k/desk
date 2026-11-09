@@ -1,5 +1,20 @@
 # Zmiany
 
+## 0.1.27 (2026-11-09)
+
+- **Dwa konta Claude.** W Opcjach (⌘O) można dodać drugie konto Claude Code, z własnym
+  logowaniem, rozmowami i limitami planu. Kafelek z Claude pokazuje w nagłówku swoje konto
+  (etykieta i lewa krawędź w kolorze konta). Klik w etykietę albo ⌘⇧A przełącza kafelek na inne
+  konto, ⌘D pyta, na którym koncie zacząć nową sesję (projekt pamięta ostatnie), a ⌘S pokazuje
+  rozmowy ze wszystkich kont. Górny pasek pokazuje limity 5h/7d każdego konta. Z jednym kontem
+  nic się nie zmienia.
+- **⌘F i ⌘W otwierają folder aktywnego projektu.** Po przejściu do kafelka innego projektu panel
+  boczny pokazywał dalej kartę folderu albo plik poprzedniego projektu, a „Terminal tutaj”
+  i „Pokaż w Finderze” działały na tamtym folderze. Teraz ⌘F i ⌘W otwierają panel na projekcie
+  aktywnego kafelka. Otwarty plik tego samego projektu i strona WWW zostają.
+- **Kolory w plikach `.env`.** `.env`, `.env.local`, `.env.docker` i podobne mają w edytorze
+  panelu kolorowane klucze, wartości, komentarze i odwołania `${ZMIENNA}`.
+
 ## 0.1.26 (2026-11-07)
 
 - **⌘G poprawia prompt w Claude.** W kafelku z Claude ⌘G (Ctrl+G) wysyła wpisany prompt do
