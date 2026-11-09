@@ -183,7 +183,9 @@ mod tests {
         let home = Path::new("/Users/k");
         assert_eq!(session_env("", home), None);
         assert_eq!(session_env("  ", home), None);
-        assert_eq!(session_env("~/.claude-work/", home).as_deref(), Some("/Users/k/.claude-work"));
+        // Joined the system's way: `\.claude-work` on Windows.
+        let work = home.join(".claude-work").display().to_string();
+        assert_eq!(session_env("~/.claude-work/", home), Some(work));
         assert_eq!(session_env("/opt/claude", home).as_deref(), Some("/opt/claude"));
         assert_eq!(config_dir("~/.claude-work", home), Path::new("/Users/k/.claude-work"));
     }
