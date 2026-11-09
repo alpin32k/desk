@@ -1,5 +1,16 @@
 # Zmiany
 
+## 0.1.28 (2026-11-09)
+
+- **Temperatura procesora na górnym pasku.** desk co 5 s odczytuje najgorętszy czujnik procesora
+  i pokazuje go obok kawy: na żółto 10°C przed progiem, na czerwono od progu. Gdy przez 15 s
+  temperatura trzyma się na progu albo wyżej (domyślnie 75°C), desk zwalnia programy w swoich
+  sesjach: testy, buildy i agenci działają dalej, tylko wolniej, a przy temperaturze pojawia się ↓.
+  Pełna moc wraca 7°C niżej, po wyłączeniu w Opcjach i przy zamknięciu desk. Innych programów
+  (przeglądarka, Docker) desk nie rusza. Próg ustawisz albo wyłączysz w Opcje → Ogólne →
+  Temperatura, a klik w temperaturę otwiera Opcje. Działa na macOS (bez hasła administratora),
+  Windows i Linuksie (zwalnianie przez systemd).
+
 ## 0.1.27 (2026-11-09)
 
 - **Dwa konta Claude.** W Opcjach (⌘O) można dodać drugie konto Claude Code, z własnym
