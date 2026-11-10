@@ -1,5 +1,14 @@
 # Zmiany
 
+## 0.1.30 (2026-11-10)
+
+- **Sesje w tle widać i można je zabić.** ⌘Q zamyka kafelek, ale sesja działa dalej i zużywa
+  zasoby, a dotąd nie było widać, które to sesje. Gdy takie są, górny pasek pokazuje „N w tle”.
+  ⌘Y albo klik w licznik otwiera listę z projektem, agentem i stanem: ↵ otwiera sesję w kafelku,
+  ⌘⌫ albo ✕ ją zabija, „Zabij wszystkie” (dwa kliknięcia) kończy resztę. Okno zamykania desk (⏻)
+  wypisuje sesje, które zostaną, i ma przycisk „Zabij wszystkie i zamknij”; kafelki wrócą przy
+  następnym starcie z nowymi sesjami.
+
 ## 0.1.29 (2026-11-10)
 
 - **Option+klik w link nie przywołuje już historii.** Option+klik w link nad promptem otwierał go
