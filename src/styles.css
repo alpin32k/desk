@@ -130,6 +130,11 @@ button:hover {
   color: var(--dim);
 }
 
+.top-btn.background {
+  margin-left: 8px;
+  color: var(--waiting);
+}
+
 .top-btn:hover {
   color: var(--fg);
 }
@@ -1016,6 +1021,60 @@ html.dragging-card .tile .term {
   color: var(--dim);
   display: flex;
   gap: 10px;
+}
+
+/* ⌘Y: sessions running without a tile */
+.palette.background header {
+  padding: 8px 12px;
+  color: var(--dim);
+}
+
+.palette.background .row .agent {
+  min-width: 90px;
+  color: var(--dim);
+}
+
+.palette.background .row .kill {
+  padding: 0 6px;
+  line-height: 16px;
+  color: var(--dim);
+  border-color: transparent;
+  background: none;
+}
+
+.palette.background .row .kill:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.palette.background .empty {
+  padding: 14px 12px;
+  color: var(--dim);
+}
+
+.palette.background footer {
+  align-items: center;
+}
+
+.palette.background footer .spacer {
+  flex: 1;
+}
+
+/* Three answers side by side */
+.confirm.wide {
+  width: 560px;
+}
+
+.confirm .buttons button {
+  white-space: nowrap;
+}
+
+.confirm .details {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  max-height: 30vh;
+  overflow-y: auto;
+  color: var(--dim);
 }
 
 .tag {

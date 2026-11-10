@@ -5,15 +5,29 @@ import { t } from "./i18n";
 import { escapeHtml } from "./tile";
 
 export function confirmBox(message: string, okLabel = t("common.yes")): Promise<boolean> {
+  return choiceBox(message, okLabel).then((v) => v === "ok");
+}
+
+export interface ChoiceOptions {
+  /** A second, stronger answer; chosen by click only (↵ stays the first). */
+  altLabel?: string;
+  /** Lines listed under the message. */
+  details?: string[];
+}
+
+/** A confirm dialog that may offer a second answer ("alt"); null on Esc. */
+export function choiceBox(message: string, okLabel: string, opts: ChoiceOptions = {}): Promise<"ok" | "alt" | null> {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "overlay";
+    const details = opts.details?.length ? `<ul class="details">${opts.details.map((d) => `<li>${escapeHtml(d)}</li>`).join("")}</ul>` : "";
+    const alt = opts.altLabel ? `<button data-v="alt" class="danger">${escapeHtml(opts.altLabel)}</button>` : "";
     overlay.innerHTML = `
-      <div class="dialog confirm">
-        <p>${escapeHtml(message)}</p>
-        <div class="buttons"><button data-v="0">${t("common.cancel")} <kbd>esc</kbd></button><button data-v="1" class="danger">${escapeHtml(okLabel)} <kbd>↵</kbd></button></div>
+      <div class="dialog confirm${alt ? " wide" : ""}">
+        <p>${escapeHtml(message)}</p>${details}
+        <div class="buttons"><button data-v="">${t("common.cancel")} <kbd>esc</kbd></button>${alt}<button data-v="ok" class="danger">${escapeHtml(okLabel)} <kbd>↵</kbd></button></div>
       </div>`;
-    const done = (v: boolean) => {
+    const done = (v: "ok" | "alt" | null) => {
       window.removeEventListener("keydown", onKey, true);
       overlay.remove();
       resolve(v);
@@ -22,16 +36,112 @@ export function confirmBox(message: string, okLabel = t("common.yes")): Promise<
       if (e.key === "Escape" || e.key === "Enter") {
         e.preventDefault();
         e.stopPropagation();
-        done(e.key === "Enter");
+        done(e.key === "Enter" ? "ok" : null);
       }
     };
     overlay.addEventListener("click", (e) => {
       const v = (e.target as HTMLElement).closest("button")?.dataset.v;
-      if (v !== undefined) done(v === "1");
-      else if (e.target === overlay) done(false);
+      if (v !== undefined) done(v === "ok" || v === "alt" ? v : null);
+      else if (e.target === overlay) done(null);
     });
     window.addEventListener("keydown", onKey, true);
     document.body.appendChild(overlay);
+  });
+}
+
+export interface BackgroundRow {
+  key: string;
+  name: string;
+  /** Agent and sub-session: "claude", "codex #2". */
+  label: string;
+  path: string;
+  /** Tile state ("working", "waiting"...) and its text. */
+  state: string;
+  stateLabel: string;
+}
+
+/** Sessions running without a tile: ↑↓, ↵ opens one in a tile (resolves to
+ *  its key), ⌘⌫ or ✕ kills it, the button kills them all. Null on Esc. */
+export function backgroundBox(load: () => Promise<BackgroundRow[]>, kill: (keys: string[]) => Promise<void>, killKeys: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "overlay";
+    overlay.innerHTML = `
+      <div class="dialog palette background">
+        <header>${t("background.title")}</header>
+        <div class="list"></div>
+        <footer><kbd>↵</kbd> ${t("background.open")} <kbd>${escapeHtml(killKeys)}</kbd> ${t("background.kill")} <kbd>esc</kbd> ${t("common.close")}<span class="spacer"></span><button class="danger" data-all hidden></button></footer>
+      </div>`;
+    const list = overlay.querySelector<HTMLElement>(".list")!;
+    const all = overlay.querySelector<HTMLButtonElement>("[data-all]")!;
+    let rows: BackgroundRow[] = [];
+    let sel = 0;
+    let sure = false; // "kill all" was clicked once
+    let busy = false;
+    const draw = () => {
+      sel = Math.min(sel, Math.max(0, rows.length - 1));
+      list.innerHTML = rows.length
+        ? rows
+            .map(
+              (r, n) =>
+                `<div class="row ${n === sel ? "sel" : ""}" data-i="${n}"><span class="name">${escapeHtml(r.name)}</span><span class="agent">${escapeHtml(r.label)}</span><span class="path">${escapeHtml(r.path)}</span><span class="c-${escapeHtml(r.state)}">${escapeHtml(r.stateLabel)}</span><button class="kill" data-kill="${n}" title="${t("background.kill")}">✕</button></div>`,
+            )
+            .join("")
+        : `<div class="empty">${t("background.none")}</div>`;
+      all.hidden = rows.length < 2;
+      all.textContent = t(sure ? "background.killAllSure" : "background.killAll", { n: rows.length });
+      list.querySelector(".sel")?.scrollIntoView({ block: "nearest" });
+    };
+    const reload = async () => {
+      rows = await load().catch(() => rows);
+      draw();
+    };
+    const killRows = async (keys: string[]) => {
+      if (busy || !keys.length) return;
+      busy = true;
+      sure = false;
+      await kill(keys).catch((err) => toast(String(err)));
+      await reload();
+      busy = false;
+    };
+    const done = (v: string | null) => {
+      window.removeEventListener("keydown", onKey, true);
+      overlay.remove();
+      resolve(v);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      const keys: Record<string, () => void> = {
+        Escape: () => done(null),
+        Enter: () => rows[sel] && done(rows[sel].key),
+        ArrowDown: () => ((sel = Math.min(sel + 1, rows.length - 1)), draw()),
+        ArrowUp: () => ((sel = Math.max(sel - 1, 0)), draw()),
+        Backspace: () => mod && rows[sel] && void killRows([rows[sel].key]),
+      };
+      const f = keys[e.key];
+      if (!f) return;
+      e.preventDefault();
+      e.stopPropagation();
+      f();
+    };
+    overlay.addEventListener("click", (e) => {
+      const el = e.target as HTMLElement;
+      const k = el.closest<HTMLElement>("[data-kill]")?.dataset.kill;
+      const i = el.closest<HTMLElement>(".row")?.dataset.i;
+      if (el.closest("[data-all]")) {
+        if (sure) void killRows(rows.map((r) => r.key));
+        else {
+          sure = true;
+          draw();
+        }
+      } else if (k !== undefined) void killRows([rows[Number(k)].key]);
+      else if (i !== undefined) done(rows[Number(i)].key);
+      else if (e.target === overlay) done(null);
+    });
+    window.addEventListener("keydown", onKey, true);
+    document.body.appendChild(overlay);
+    draw();
+    void reload();
   });
 }
 

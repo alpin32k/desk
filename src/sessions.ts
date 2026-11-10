@@ -82,3 +82,11 @@ export function agentLabel(s: Spec): string {
 export function sessionsLabel(n: number): string {
   return tn("card.sessions", n);
 }
+
+/** Sessions running without a tile, by project name, then agent and sub-session. */
+export function background<T extends Spec>(sessions: T[], hasTile: (key: string) => boolean): T[] {
+  const name = (s: Spec) => (s.path.split(/[\\/]/).pop() ?? s.path).toLowerCase();
+  return sessions
+    .filter((s) => !hasTile(keyOf(s)))
+    .sort((a, b) => name(a).localeCompare(name(b)) || a.path.localeCompare(b.path) || a.agent.localeCompare(b.agent) || a.instance - b.instance);
+}

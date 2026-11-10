@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Endings, agentLabel, keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
+import { Endings, agentLabel, background, keyOf, nextInstance, parseKey, sessionsLabel } from "./sessions";
 
 describe("session keys", () => {
   it("keeps the bare path for the main Claude session", () => {
@@ -80,5 +80,19 @@ describe("sessions that end", () => {
     e.ended("/a", 0, 1000);
     e.forget("/a");
     expect(e.held).toEqual([]);
+  });
+});
+
+describe("sessions in the background", () => {
+  it("are the ones without a tile, by project name", () => {
+    const sessions = [
+      { slug: "z", path: "/w/zeta", agent: "claude", instance: 0 },
+      { slug: "a2", path: "/w/alpha", agent: "claude", instance: 1 },
+      { slug: "a", path: "/w/alpha", agent: "claude", instance: 0 },
+      { slug: "ac", path: "/w/alpha", agent: "codex", instance: 0 },
+    ];
+    const open = new Set(["/w/alpha"]);
+    expect(background(sessions, (key) => open.has(key)).map((s) => s.slug)).toEqual(["a2", "ac", "z"]);
+    expect(background(sessions, () => true)).toEqual([]);
   });
 });
