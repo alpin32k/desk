@@ -169,6 +169,9 @@ export class Tile {
       scrollback: 1000,
       macOptionIsMeta: false, // keep Option for Polish letters
       macOptionClickForcesSelection: true,
+      // Option-click opens links outside desk. xterm would also "move the cursor"
+      // there by sending arrow keys, and Up in a prompt recalls shell/Claude history.
+      altClickMovesCursor: false,
       drawBoldTextInBrightColors: false,
     });
     this.term.loadAddon(this.fit);
