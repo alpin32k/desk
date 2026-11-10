@@ -28,7 +28,7 @@ import * as L from "./lanes";
 import { label, mark, sizable, splitLine, watchDrag, type Box } from "./drag";
 import { Palette } from "./palette";
 import { pickColor, PROJECT_COLORS, projectColor } from "./projects";
-import { Endings, keyOf, nextInstance, parseKey, sessionsLabel, type Place } from "./sessions";
+import { agentLabel, background, Endings, keyOf, nextInstance, parseKey, sessionsLabel, type Place } from "./sessions";
 import { dropped } from "./address";
 import { DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
 import { repoName } from "./github";
@@ -43,7 +43,7 @@ import {
   Tile,
   type TileAction,
 } from "./tile";
-import { confirmBox, newProjectBox, pickBox, toast } from "./ui";
+import { backgroundBox, choiceBox, confirmBox, newProjectBox, pickBox, toast, type BackgroundRow } from "./ui";
 import { conversationBox } from "./conversationbox";
 import { setSaved, syncTile } from "./saved";
 import { usageHtml } from "./usage";
@@ -293,6 +293,7 @@ export class App {
       if (t === "update") void this.installUpdate();
       if (t === "leave") void api.dropdownLeave();
       if (t === "quit") void this.quit();
+      if (t === "background") void this.showBackground();
     });
     const boot = await api.bootstrap();
     // First launch: the system's language, kept from now on.
@@ -742,6 +743,12 @@ export class App {
     const spec = parseKey(key);
     const name = spec.path.split(/[\\/]/).pop() ?? spec.path;
     if (!(await confirmBox(t("app.killConfirm", { agent: spec.agent, name }), t("app.kill")))) return;
+    await this.endSession(key);
+    this.palette.refresh();
+  }
+
+  /** Kill the session and forget what desk kept for its tile. */
+  private async endSession(key: string): Promise<void> {
     const tile = this.tiles.get(key);
     if (tile) this.closeTile(key);
     const slug = tile?.slug ?? (await api.listSessions()).find((s) => keyOf(s) === key)?.slug;
@@ -758,7 +765,28 @@ export class App {
       this.layout.minimized = this.layout.minimized.filter((k) => k !== key);
       this.save();
     }
+  }
+
+  /** ⌘Y: the sessions running without a tile (closed with ⌘Q, or left from
+   *  before), to open or kill. */
+  private async showBackground(): Promise<void> {
+    if (document.querySelector(".overlay")) return;
+    const load = async (): Promise<BackgroundRow[]> => {
+      const sessions = await api.listSessions();
+      this.running = new Set(sessions.map((s) => keyOf(s)));
+      this.renderChrome();
+      return background(sessions, (key) => this.tiles.has(key)).map((s) => {
+        const state = displayState(this.hook.get(s.slug)?.state);
+        return { key: keyOf(s), name: s.path.split(/[\\/]/).pop() ?? s.path, label: agentLabel(s), path: s.path, state, stateLabel: t(`state.${state}`) };
+      });
+    };
+    const kill = async (keys: string[]) => {
+      for (const key of keys) await this.endSession(key);
+    };
+    const key = await backgroundBox(load, kill, keysIn("⌘⌫"));
     this.palette.refresh();
+    this.renderChrome();
+    if (key) await this.openTile(key);
   }
 
   private async onTileAction(tile: Tile, action: TileAction): Promise<void> {
@@ -1567,7 +1595,7 @@ export class App {
     const hide = this.docked
       ? `<span class="dim"> · </span><span class="dropdown-hint" title="${t("top.hideTitle")}"><kbd>${hotkey}</kbd> ${t("top.hide")}</span>`
       : "";
-    this.top.innerHTML = `${leave}<span class="brand"${drag}>desk</span>${hide}<span class="dim"${drag}> · ${this.tiles.size} sessions</span>${
+    this.top.innerHTML = `${leave}<span class="brand"${drag}>desk</span>${hide}<span class="dim"${drag}> · ${this.tiles.size} sessions</span>${this.backgroundHtml()}${
       waiting ? `<span class="waiting-pill"${drag}>${t("top.waiting", { n: waiting })}</span>` : ""
     }<span class="spacer"${drag}></span>${this.updateHtml()}${usageHtml(this.usage, Date.now(), (id) => {
       const a = this.layout.claudeAccounts.find((x) => x.id === id);
@@ -1586,10 +1614,26 @@ export class App {
     return `<button class="top-btn quit" data-top="quit" title="${escapeHtml(t("top.quitTitle", { keys: keys ? ` (${keys})` : "" }))}">⏻</button>`;
   }
 
+  /** In the top bar while sessions run without a tile: how many, and the way to them. */
+  private backgroundHtml(): string {
+    const n = [...this.running].filter((key) => !this.tiles.has(key)).length;
+    if (!n) return "";
+    const title = escapeHtml(t("top.backgroundTitle", { keys: keyText("background") }));
+    return `<button class="top-btn background" data-top="background" title="${title}">${t("top.background", { n })}</button>`;
+  }
+
   private async quit(): Promise<void> {
-    const sessions = this.tmuxMissing || PLATFORM === "windows" ? t("update.sessionsEnd") : t("update.sessionsStay");
-    if (!(await confirmBox(t("top.quitConfirm", { sessions }), t("top.quit")))) return;
+    const stay = !(this.tmuxMissing || PLATFORM === "windows");
+    // What keeps running after desk is gone, by name; all of it can go too.
+    const left = stay ? await api.listSessions().catch(() => []) : [];
+    const answer = await choiceBox(t("top.quitConfirm", { sessions: t(stay ? "update.sessionsStay" : "update.sessionsEnd") }), t("top.quit"), {
+      altLabel: left.length ? t("top.quitKill", { n: left.length }) : undefined,
+      details: left.map((s) => `${s.path.split(/[\\/]/).pop() ?? s.path} · ${agentLabel(s)}`),
+    });
+    if (!answer) return;
     await this.saveNow();
+    // The layout is saved first: the tiles come back on the next start, with new sessions.
+    if (answer === "alt") await Promise.all(left.map((s) => api.killSession(s.slug).catch(() => {})));
     await api.quitDesk().catch((err) => toast(String(err)));
   }
 
@@ -1857,6 +1901,9 @@ export class App {
         break;
       case "chat":
         void this.openChat();
+        break;
+      case "background":
+        void this.showBackground();
         break;
       case "sessions": {
         const tile = this.tiles.get(this.active ?? "");

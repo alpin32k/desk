@@ -19,6 +19,7 @@ export type Action =
   | { type: "lock" }
   | { type: "chat" }
   | { type: "sessions" }
+  | { type: "background" }
   | { type: "terminal" }
   | { type: "files" }
   | { type: "run" }
@@ -64,6 +65,7 @@ export const BINDINGS: Binding[] = [
   { id: "run", group: "window", action: { type: "run" }, mac: ["Super+KeyU"] },
   { id: "chat", group: "window", action: { type: "chat" }, mac: ["Super+KeyR"] },
   { id: "sessions", group: "window", action: { type: "sessions" }, mac: ["Super+KeyS"] },
+  { id: "background", group: "window", action: { type: "background" }, mac: ["Super+KeyY"] },
   { id: "preview", group: "window", action: { type: "preview" }, mac: ["Super+KeyW"] },
   { id: "coffee", group: "window", action: { type: "coffee" }, mac: ["Super+KeyK"] },
   { id: "lock", group: "window", action: { type: "lock" }, mac: ["Super+KeyB"] },
