@@ -1,5 +1,12 @@
 # Zmiany
 
+## 0.1.29 (2026-11-10)
+
+- **Option+klik w link nie przywołuje już historii.** Option+klik w link nad promptem otwierał go
+  w przeglądarce, ale do pola wpisywania trafiał ostatni wpis z historii (w Claude Code
+  „History 100/100”), bo terminal przy takim kliknięciu wysyłał do programu strzałki w górę.
+  Teraz Option+klik tylko otwiera link poza desk.
+
 ## 0.1.28 (2026-11-09)
 
 - **Temperatura procesora na górnym pasku.** desk co 5 s odczytuje najgorętszy czujnik procesora
