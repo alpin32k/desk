@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileLinks, rowLinks, type Row } from "./links";
+import { fileLinks, rowLinks, type Row, linkTarget } from "./links";
 
 describe("fileLinks", () => {
   it("finds absolute paths to previewable files", () => {
@@ -72,5 +72,41 @@ describe("fileLinks", () => {
       { text: "  b.html", wrapped: false },
     ];
     expect(rowLinks(apart, 1, 80)).toEqual([]);
+  });
+});
+
+describe("linkTarget", () => {
+  const none = { alt: false, mod: false };
+  const alt = { alt: true, mod: false };
+  const mod = { alt: false, mod: true };
+  const both = { alt: true, mod: true };
+
+  it("desk mode: click opens in desk, alt-click in the browser", () => {
+    expect(linkTarget("desk", none)).toBe("desk");
+    expect(linkTarget("desk", alt)).toBe("browser");
+    expect(linkTarget("desk", mod)).toBe("desk");
+  });
+
+  it("browser mode: the other way round", () => {
+    expect(linkTarget("browser", none)).toBe("browser");
+    expect(linkTarget("browser", alt)).toBe("desk");
+    expect(linkTarget("browser", mod)).toBe("browser");
+  });
+
+  it("none mode: a plain click does nothing", () => {
+    expect(linkTarget("none", none)).toBeNull();
+    expect(linkTarget("none", alt)).toBe("browser");
+    expect(linkTarget("none", mod)).toBe("desk");
+  });
+
+  it("alt wins over mod", () => {
+    expect(linkTarget("desk", both)).toBe("browser");
+    expect(linkTarget("browser", both)).toBe("desk");
+    expect(linkTarget("none", both)).toBe("browser");
+  });
+
+  it("an unknown mode is desk", () => {
+    expect(linkTarget("", none)).toBe("desk");
+    expect(linkTarget("whatever", alt)).toBe("browser");
   });
 });
