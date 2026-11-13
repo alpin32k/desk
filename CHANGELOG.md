@@ -1,5 +1,15 @@
 # Zmiany
 
+## 0.1.33 (2026-11-13)
+
+- **Ctrl+G / ⌘G układa zadanie według stałego szablonu.** Poprawiony prompt zgłoszenia błędu albo
+  nowej funkcji zaczyna się od „Cel:” i „Kontekst:”, a Twoje zgody i zakazy są zapisane wprost:
+  „Tak, możesz zmienić …”, „Zostaw … w spokoju.”, a zakaz („nigdy nie zmieniaj cen”) staje się
+  prośbą o zgodę z powodem: „Zapytaj mnie, zanim zmienisz ceny: …”. Na końcu są dwa stałe akapity:
+  agent ma skończyć całą pracę bez proponowania kontynuacji i zakończyć podsumowaniem dla kogoś,
+  kto nie widział pracy. Dalszy ciąg rozmowy, pytania i pomysły do rozważenia są poprawiane jak
+  dotąd, bez szablonu.
+
 ## 0.1.32 (2026-11-13)
 
 - **Jedyna sesja projektu zwija się zawsze.** ⌘J nic nie robiło z jedyną sesją projektu, którego

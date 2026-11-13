@@ -24,19 +24,33 @@ Najpierw rozpoznaj rodzaj szkicu:
 
 A. Dalszy ciąg rozmowy, polecenie operacyjne albo pytanie: odwołuje się do czegoś wcześniej ("to", "tego", "dalej", "lec dalej", "daj w realizacji"), każe wykonać prostą czynność (commit, push, release, wdróż, uruchom, kontynuuj) albo o coś pyta (znak zapytania, "co jeśli", "czy", "jak", "dlaczego" bez prośby o naprawę). Rozważania autora ("zastanawiam się", "myślę o", "może by") to nie A, tylko D; każde inne pytanie to A, także "a co, jeśli ...?". Pytanie zostaje pytaniem, nawet gdy mówi o problemie. Popraw tylko język i zachowaj każde zdanie oraz każdą informację, bo sens zna tylko agent z rozmowy; dodany plan albo pytania tylko by go spowolniły.
 
-B. Zgłoszenie błędu: coś nie działa, działa źle albo wygląda źle. Napisz:
-- cel w pierwszym zdaniu ("Napraw ...", "Sprawdź, dlaczego ..."),
-- objaw i każdy szczegół ze szkicu (gdzie, kiedy, po czym), a jeśli autor podał, jak ma być: "Oczekiwane: ...",
-- na końcu: "Odtwórz błąd (jeśli się da, testem, który go pokazuje), napraw przyczynę i sprawdź, że objaw zniknął." (przy "sprawdź, dlaczego" bez prośby o naprawę: "Znajdź przyczynę i opisz ją.").
+B. Zgłoszenie błędu: coś nie działa, działa źle albo wygląda źle. Napisz po kolei:
+- "Cel:" i jedno zdanie o tym, co naprawić ("Cel: Napraw ...", "Cel: Sprawdź, dlaczego ..."),
+- "Kontekst:" i objaw z każdym szczegółem ze szkicu (gdzie, kiedy, po czym), a jeśli autor podał, jak ma być: "Oczekiwane: ...",
+- zgody i zakazy autora (opis niżej),
+- "Odtwórz błąd (jeśli się da, testem, który go pokazuje), napraw przyczynę i sprawdź, że objaw zniknął." (przy "sprawdź, dlaczego" bez prośby o naprawę: "Znajdź przyczynę i opisz ją."),
+- zakończenie (opis niżej).
 
-C. Nowa funkcja lub zmiana działania. Napisz:
-- cel w pierwszym zdaniu,
-- kontekst ze szkicu (dlaczego, gdzie),
-- wymagania autora jako listę, po jednej rzeczy w punkcie,
-- "Najpierw sprawdź, jak to działa teraz." Plan przed implementacją tylko przy dużym lub niejasnym zakresie,
-- gdy autor chce najpierw makietę (makieta, mockup, projekt, "pokaż jak to będzie wyglądać"): pierwszy krok to makieta do akceptacji, a potem zdanie "Nie implementuj, dopóki nie zaakceptuję makiety." Przy poprawie wyglądu sekcji wypisz elementy UI/UX, które autor wymienił,
+C. Nowa funkcja lub zmiana działania. Napisz po kolei:
+- "Cel:" i jedno zdanie o wyniku, którego chce autor, z terminem lub liczbą, jeśli je podał,
+- "Kontekst:" tylko gdy szkic go zawiera (dlaczego, gdzie, co już istnieje),
+- gdy autor wymienił co najmniej dwa wymagania: listę, po jednej rzeczy w punkcie,
+- zgody i zakazy autora (opis niżej),
+- "Sposób wykonania wybierz sam. Najpierw sprawdź, jak to działa teraz." Plan przed implementacją tylko przy dużym lub niejasnym zakresie,
+- gdy autor chce najpierw makietę (makieta, mockup, projekt, "pokaż jak to będzie wyglądać"): pierwszy krok to makieta do akceptacji. Przy poprawie wyglądu sekcji wypisz elementy UI/UX, które autor wymienił,
 - "Do ustalenia z autorem:" tylko przy niejasnym zakresie: 1-3 pytania o decyzje, które może podjąć tylko autor (co ma być widać, dla kogo, jak ma się zachowywać). Nigdy pytań, na które agent odpowie sam z kodu (który plik, który endpoint, jak coś jest zrobione),
-- "Gotowe, gdy:" tylko gdy autor wymienił co najmniej dwa wymagania; warunki wyłącznie z jego słów, ostatni: "testy, lint i typecheck przechodzą".
+- "Gotowe, gdy:" tylko gdy autor wymienił co najmniej dwa wymagania; warunki wyłącznie z jego słów, ostatni: "testy, lint i typecheck przechodzą",
+- zakończenie (opis niżej).
+
+Zgody i zakazy (B i C) bierz tylko ze słów autora; gdy nic o nich nie napisał, pomiń tę część w całości:
+- co agent może zmienić: "Tak, możesz zmienić ...",
+- czego ma nie ruszać: "Zostaw ... w spokoju.",
+- zakaz ("nigdy", "zawsze", "pod żadnym pozorem", "bez pytania") zamień na prośbę o zgodę z powodem autora: "Zapytaj mnie, zanim ...: powód." Gdy autor nie podał powodu, samo "Zapytaj mnie, zanim ...". W poleceniu nie zostaje ani "nigdy", ani "zawsze".
+
+Zakończenie (B i C) to zawsze dwa osobne akapity, dosłownie:
+Skończ całą pracę, zanim się zatrzymasz. Nie proponuj kontynuacji: kontynuuj. Zapytaj mnie, zanim cokolwiek usuniesz.
+Zakończ podsumowaniem dla kogoś, kto nie widział żadnej pracy: najważniejsze najpierw, prostymi słowami.
+Wyjątek: gdy pierwszy krok to makieta, zamiast pierwszego akapitu napisz "Nie implementuj, dopóki nie zaakceptuję makiety. Zapytaj mnie, zanim cokolwiek usuniesz."
 
 D. Pomysł do rozważenia: autor głośno myśli o zmianie, ale jeszcze nie zdecydował ("zastanawiam się, czy", "myślę o", "może by", "czy warto", "co myślisz o"). Agent ma doradzić, nie budować. Napisz:
 - pierwsze zdanie: "Rozważam ..." z pomysłem autora,
@@ -56,7 +70,7 @@ Zasady dla wszystkich:
 
 /// Worked examples (draft, rewrite), one per kind, so a small model sees the
 /// format and that a follow-up stays a follow-up.
-const EXAMPLES: [(&str, &str); 6] = [
+const EXAMPLES: [(&str, &str); 7] = [
     ("dobra to wrzuc na produkcje jak testy przejda", "Dobra, wrzuć to na produkcję, jak testy przejdą."),
     ("nie widze tego przycisku w menu czemu", "Nie widzę tego przycisku w menu. Dlaczego?"),
     (
@@ -65,7 +79,7 @@ const EXAMPLES: [(&str, &str); 6] = [
     ),
     (
         "kalendarz sie rozjezdza na telefonie [Image #4] godziny wychodza poza ekran a ma sie miescic",
-        "Napraw układ kalendarza na telefonie.\n\nObjaw: godziny wychodzą poza ekran [Image #4].\nOczekiwane: cały kalendarz mieści się na ekranie.\n\nOdtwórz błąd (jeśli się da, testem, który go pokazuje), napraw przyczynę i sprawdź, że objaw zniknął.",
+        "Cel: Napraw układ kalendarza na telefonie.\n\nKontekst: godziny wychodzą poza ekran [Image #4].\nOczekiwane: cały kalendarz mieści się na ekranie.\n\nOdtwórz błąd (jeśli się da, testem, który go pokazuje), napraw przyczynę i sprawdź, że objaw zniknął.\n\nSkończ całą pracę, zanim się zatrzymasz. Nie proponuj kontynuacji: kontynuuj. Zapytaj mnie, zanim cokolwiek usuniesz.\n\nZakończ podsumowaniem dla kogoś, kto nie widział żadnej pracy: najważniejsze najpierw, prostymi słowami.",
     ),
     (
         "mysle czy nie przerobic logowania zeby bylo prostsze",
@@ -73,7 +87,11 @@ const EXAMPLES: [(&str, &str); 6] = [
     ),
     (
         "dodaj przypomnienia o spotkaniach mailem i powiadomieniem w apce",
-        "Dodaj przypomnienia o spotkaniach.\n\n- Wysyłaj przypomnienie mailem.\n- Pokazuj powiadomienie w aplikacji.\n\nNajpierw sprawdź, jak działają teraz spotkania i powiadomienia.\n\nDo ustalenia z autorem:\n- Ile czasu przed spotkaniem wysyłać przypomnienie?\n- Czy użytkownik może je wyłączyć?\n\nGotowe, gdy:\n- przypomnienie przychodzi mailem,\n- przypomnienie pojawia się jako powiadomienie w aplikacji,\n- testy, lint i typecheck przechodzą.",
+        "Cel: Dodaj przypomnienia o spotkaniach.\n\n- Wysyłaj przypomnienie mailem.\n- Pokazuj powiadomienie w aplikacji.\n\nSposób wykonania wybierz sam. Najpierw sprawdź, jak działają teraz spotkania i powiadomienia.\n\nDo ustalenia z autorem:\n- Ile czasu przed spotkaniem wysyłać przypomnienie?\n- Czy użytkownik może je wyłączyć?\n\nGotowe, gdy:\n- przypomnienie przychodzi mailem,\n- przypomnienie pojawia się jako powiadomienie w aplikacji,\n- testy, lint i typecheck przechodzą.\n\nSkończ całą pracę, zanim się zatrzymasz. Nie proponuj kontynuacji: kontynuuj. Zapytaj mnie, zanim cokolwiek usuniesz.\n\nZakończ podsumowaniem dla kogoś, kto nie widział żadnej pracy: najważniejsze najpierw, prostymi słowami.",
+    ),
+    (
+        "przerob strone koszyka zeby byla czytelniejsza na telefonie bo ludzie porzucaja zakupy, uklad i kolory mozesz zmieniac, formularza platnosci nie ruszaj, nigdy nie zmieniaj cen dostawy bo sa ustalone z kurierem",
+        "Cel: Przerób stronę koszyka tak, żeby była czytelniejsza na telefonie.\n\nKontekst: ludzie porzucają zakupy.\n\nTak, możesz zmieniać układ i kolory. Zostaw formularz płatności w spokoju.\nZapytaj mnie, zanim zmienisz cenę dostawy: ceny są ustalone z kurierem.\n\nSposób wykonania wybierz sam. Najpierw sprawdź, jak strona koszyka działa teraz.\n\nSkończ całą pracę, zanim się zatrzymasz. Nie proponuj kontynuacji: kontynuuj. Zapytaj mnie, zanim cokolwiek usuniesz.\n\nZakończ podsumowaniem dla kogoś, kto nie widział żadnej pracy: najważniejsze najpierw, prostymi słowami.",
     ),
 ];
 
@@ -362,7 +380,10 @@ fn improve(cfg: &PromptAi, text: &str, log: &Path, connect_to: Option<&str>) -> 
 /// Topic words of the worked examples (prefixes, no diacritics). A rewrite
 /// that has one the draft does not copied an example's content into a short
 /// or vague draft ("przypomnienia o spotkaniach").
-const EXAMPLE_TOPICS: [&str; 8] = ["produkc", "eksport", "faktur", "kalendarz", "przypomn", "spotkan", "mail", "logowan"];
+const EXAMPLE_TOPICS: [&str; 13] = [
+    "produkc", "eksport", "faktur", "kalendarz", "przypomn", "spotkan", "mail", "logowan", "koszyk", "platnosc", "dostaw",
+    "kurier", "porzuc",
+];
 
 pub fn borrows_from_examples(draft: &str, rewrite: &str) -> bool {
     let draft = plain_words(draft);
@@ -527,5 +548,23 @@ mod tests {
         assert!(r("Jesteś doświadczonym inżynierem, który pisze").is_err());
         assert!(parse_reply(r#"{"choices":[{"message":{"content":null}}]}"#).is_err());
         assert!(parse_reply("<html>").is_err());
+    }
+
+    /// Task rewrites (bug, feature) follow the template: goal first, then the
+    /// two closing paragraphs; follow-ups, questions and ideas stay without it.
+    #[test]
+    fn task_examples_follow_the_goal_and_finish_template() {
+        let finish = "Skończ całą pracę, zanim się zatrzymasz. Nie proponuj kontynuacji: kontynuuj. Zapytaj mnie, zanim cokolwiek usuniesz.";
+        let recap = "Zakończ podsumowaniem dla kogoś, kto nie widział żadnej pracy: najważniejsze najpierw, prostymi słowami.";
+        assert!(DEFAULT_INSTRUCTIONS.contains(finish) && DEFAULT_INSTRUCTIONS.contains(recap));
+        let tasks: Vec<&str> = EXAMPLES.iter().map(|(_, r)| *r).filter(|r| r.starts_with("Cel: ")).collect();
+        assert_eq!(tasks.len(), 3);
+        for r in &tasks {
+            assert!(r.ends_with(&format!("{finish}\n\n{recap}")), "{r}");
+            assert!(!plain_words(r).iter().any(|w| w == "nigdy" || w == "zawsze"), "{r}");
+        }
+        for (_, r) in EXAMPLES.iter().filter(|(_, r)| !r.starts_with("Cel: ")) {
+            assert!(!r.contains(finish) && !r.contains(recap), "{r}");
+        }
     }
 }
