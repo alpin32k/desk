@@ -1,5 +1,19 @@
 # Zmiany
 
+## 0.1.31 (2026-11-13)
+
+- **Od razu widać, w którym kafelku piszesz.** Przy kilku kolumnach aktywny kafelek różnił się
+  od reszty tylko cienką ramką. Teraz treść terminali, w których nie piszesz, jest przygaszona,
+  a nagłówki, zakładki i przyciski zostają czytelne. Stopka zaczyna się od małej plakietki
+  z aktywną sesją w kolorze projektu.
+- **Sesja, która czeka, nie udaje aktywnej.** Zamiast żółtej ramki ma żółty nagłówek z kreską
+  u góry, a jej treść jest przygaszona słabiej, żeby było widać, o co pyta. Zakładka czekającej
+  sesji w karcie ma żółtą obwódkę.
+- **Zwinięta kolumna to wąski pasek.** Gdy wszystkie sesje w kolumnie są zwinięte (⌘J), kolumna
+  zwęża się do paska z etykietą czytaną z góry na dół, a jej miejsce dostają pozostałe. Klik
+  w etykietę albo ⌘J rozwija ją do poprzedniej szerokości; ostatnia linia wyjścia jest w dymku
+  po najechaniu.
+
 ## 0.1.30 (2026-11-10)
 
 - **Sesje w tle widać i można je zabić.** ⌘Q zamyka kafelek, ale sesja działa dalej i zużywa
