@@ -811,6 +811,63 @@ html.dragging-card .tile .term {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
 }
 
+/* a lane of folded tiles only: a narrow strip, labels read top to bottom */
+.lane.folded {
+  flex-basis: 26px;
+  flex-shrink: 0;
+}
+
+.lane.folded .card {
+  /* over the inline `flex: none` of a card of folded tiles */
+  flex: 1 1 0 !important;
+}
+
+.lane.folded .card-head,
+.lane.folded .card-tabs {
+  display: none;
+}
+
+.lane.folded .card-body {
+  flex-direction: column;
+}
+
+.lane.folded .tile.minimized {
+  flex: 1 1 0;
+}
+
+.lane.folded .tile.minimized header {
+  flex: 1;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  padding: 7px 0;
+  gap: 8px;
+  writing-mode: vertical-rl;
+  cursor: pointer;
+}
+
+.lane.folded .tile.minimized .badge {
+  min-width: 0;
+  writing-mode: horizontal-tb;
+}
+
+.lane.folded .tile.minimized .title {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* room for what matters: the name and the state; the branch is in the tooltip's folder */
+.lane.folded .tile.minimized .title > * {
+  margin-inline-end: 8px;
+}
+
+.lane.folded .tile.minimized .peek,
+.lane.folded .tile.minimized .actions,
+.lane.folded .tile.minimized .branch,
+.lane.folded .tile.minimized .sep {
+  display: none;
+}
+
 /* fullscreen: one tile covers the whole grid (also one behind a tab) */
 .grid.has-full .tile.full {
   display: flex;

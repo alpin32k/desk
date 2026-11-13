@@ -966,6 +966,7 @@ export class App {
       const body = lane.querySelector<HTMLElement>(".lane-body")!;
       const items: HTMLElement[] = [lane.querySelector<HTMLElement>(".hint")!];
       const open = paths.filter((p) => this.tiles.has(p));
+      let unfoldedHere = 0;
       // Order inside the lane: one card per project, its sessions in their order.
       L.groups(open, this.projectOf).forEach((keys, j) => {
         if (j > 0) items.push(splitLine("h", () => this.changed()));
@@ -974,10 +975,16 @@ export class App {
         const mode: CardMode = shown ? "stack" : (this.layout.modes[project] ?? "stack");
         const unfolded = this.fillCard(card, project, keys, mode, shown);
         if (mode === "stack" && unfolded > 1) stacked.push({ card, project, keys, open: unfolded });
+        unfoldedHere += unfolded;
         items.push(card);
       });
       body.replaceChildren(...items);
       body.classList.toggle("empty", open.length === 0);
+      // A lane of folded tiles only is a narrow strip with upright labels: its room
+      // goes to the other lanes, and the lines between lanes skip it (flex-grow 0).
+      const strip = !shown && open.length > 0 && unfoldedHere === 0;
+      lane.classList.toggle("folded", strip);
+      if (strip) lane.style.flexGrow = "0";
       grid.push(lane);
     });
     this.grid.replaceChildren(...grid);

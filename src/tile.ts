@@ -453,8 +453,16 @@ export class Tile {
     if (on) this.queuePeek();
     else {
       this.peek.textContent = "";
+      this.setTip();
       this.queueFit();
     }
+  }
+
+  /** Hovering the title: agent and folder, and the last line of a folded tile
+   *  (a lane folded to a strip has no room to show it). */
+  private setTip(): void {
+    const last = this.minimized ? (this.peek.textContent ?? "") : "";
+    this.title.title = [`${this.agent} · ${this.path}`, last].filter(Boolean).join("\n");
   }
 
   private queuePeek(): void {
@@ -463,6 +471,7 @@ export class Tile {
     requestAnimationFrame(() => {
       this.peekQueued = false;
       if (this.minimized && !this.disposed) this.peek.textContent = this.snapshot(1)[0] ?? "";
+      this.setTip();
     });
   }
 
@@ -517,7 +526,7 @@ export class Tile {
       this.agent === "claude" ? `<span class="state">${stateLabel(this.state)}</span>` : "",
     ].filter(Boolean);
     if (!this.renaming) this.title.innerHTML = parts.join(`<span class="sep"> · </span>`);
-    this.title.title = `${this.agent} · ${this.path}`;
+    this.setTip();
   }
 
   private renaming = false;
