@@ -5,13 +5,13 @@ import { DEFAULT_THEME, THEMES } from "./themes";
 import { api, type AccountInfo, type AgentInfo, type ClaudeAccount, type CoffeeStatus, type Layout, type Project, type PromptAi } from "./api";
 import { accountColor, withAccount, withoutAccount } from "./accounts";
 import type { LinkClick } from "./links";
-import { PLATFORM, shortcut } from "./platform";
+import { shortcut } from "./platform";
 import { rows, shortPath } from "./projects";
 import { search, type SearchItem } from "./settings-search";
 import { escapeHtml } from "./tile";
 import { acceleratorFor, DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
 import { LANGUAGES, language, t, type Language, type MessageKey } from "./i18n";
-import { acceleratorsOf, bindingLabel, BINDINGS, clashWith, FIXED, groupLabel, GROUPS, keysIn, keyText } from "./keys";
+import { acceleratorsOf, bindingLabel, BINDINGS, clashWith, FIXED, groupLabel, GROUPS, keyText } from "./keys";
 import { clampLimit, DEFAULT_LIMIT, MAX_LIMIT, MIN_LIMIT } from "./thermal";
 import { toast } from "./ui";
 
@@ -330,10 +330,8 @@ export class Settings {
     const hotkey = hotkeyLabel(layout.dropdownHotkey || DEFAULT_HOTKEY());
     const off = layout.dropdown ? "" : "disabled";
     const linkClick: LinkClick = layout.linkClick === "browser" || layout.linkClick === "none" ? layout.linkClick : "desk";
-    const keyNames = PLATFORM === "mac" ? { mod: "⌘", alt: "⌥" } : { mod: "Ctrl", alt: "Alt" };
     const linkHint = t(
       linkClick === "browser" ? "settings.linkClickHintBrowser" : linkClick === "none" ? "settings.linkClickHintNone" : "settings.linkClickHintDesk",
-      keyNames,
     );
     // A section of a group. `row`: the whole section is one search hit
     // ("header": found by its header alone); otherwise its lines are.
@@ -366,14 +364,14 @@ export class Settings {
         ) +
           section(
             t("settings.terminalSection"),
-            `<label class="line" data-row>${t("settings.font")} <input type="number" min="8" max="24" step="0.5" value="${layout.fontSize}" data-k="font" /> px <span class="dim">(${keysIn(t("settings.fontHint"))})</span></label>`,
+            `<label class="line" data-row>${t("settings.font")} <input type="number" min="8" max="24" step="0.5" value="${layout.fontSize}" data-k="font" /> px <span class="dim">(${t("settings.fontHint")})</span></label>`,
           ),
       ],
       [
         "window",
         section(
           "",
-          `<label class="line" data-row><input type="checkbox" data-k="auto-layout" ${layout.autoLayout ? "checked" : ""}/> ${t("settings.autoLayout")} <span class="dim">${keysIn(t("settings.autoLayoutHint"))}</span></label>
+          `<label class="line" data-row><input type="checkbox" data-k="auto-layout" ${layout.autoLayout ? "checked" : ""}/> ${t("settings.autoLayout")} <span class="dim">${t("settings.autoLayoutHint")}</span></label>
       <label class="line" data-row>${t("settings.lanes")} <input type="number" min="1" max="8" value="${layout.lanes.length}" data-k="lanes" ${layout.autoLayout ? "disabled" : ""}/></label>`,
         ) +
           section(
@@ -444,7 +442,7 @@ export class Settings {
         "claude",
         section(
           `${t("settings.accounts")} <span class="dim">${t("settings.accountsHint")}</span>`,
-          `<p class="dim small">${keysIn(t("settings.accountsAbout"))}</p>
+          `<p class="dim small">${t("settings.accountsAbout")}</p>
       <div class="accounts">${this.accountRows(layout)
         .map(
           (a, i) => `<div class="account-row"><i class="acct" style="background:${accountColor(layout, a.id)}"></i><input type="text" data-acct-name="${escapeHtml(

@@ -1,5 +1,5 @@
 import { hotkeyLabel } from "./hotkey";
-import { t, type MessageKey } from "./i18n";
+import { setKeyNames, t, type MessageKey } from "./i18n";
 import { PLATFORM, shortcut, type Platform } from "./platform";
 
 // App shortcuts, named after the Polish actions (⌘P projekty, ⌘Q zamknij, ...);
@@ -209,11 +209,22 @@ export function hints(platform: Platform = PLATFORM): [string, string][] {
   });
 }
 
-/** Shortcuts written for macOS inside a text (a tooltip), as they are bound now. */
+/**
+ * Keys written for macOS inside a text (a tooltip, a hint), as the user has
+ * them: shortcuts as they are bound now, and the modifier of a click
+ * ("⌘-klik", "⌥-click") as ⌘ / ⌥ on macOS, Ctrl / Alt elsewhere. Every message
+ * goes through this in t(); call it yourself only for a text that is not one.
+ */
 export function keysIn(text: string, platform: Platform = PLATFORM): string {
-  return text.replace(/⌘⇧Q|⌘⌫|⌘↵|⌘[^\s)]*/g, (token) => {
+  // A click's modifier is the key alone (Ctrl-click), not desk's Ctrl+Shift.
+  // "⌘- " (a space after) is the shortcut ⌘-, left to the rule below.
+  const clicks = platform === "mac" ? text : text.replace(/([⌘⌥])-(?=\p{L})/gu, (_, key: string) => (key === "⌘" ? "Ctrl-" : "Alt-"));
+  return clicks.replace(/⌘⇧Q|⌘⌫|⌘↵|⌘[^\s)]*/g, (token) => {
     const mac = token.replace("⌘⇧", "⇧⌘"); // macOS writes ⇧ first
     const b = BINDINGS.find((x) => x.mac.some((a) => hotkeyLabel(a, "mac") === mac));
     return b ? hotkeyLabel(acceleratorsOf(b, platform)[0], platform) : shortcut(token, platform);
   });
 }
+
+// Every message names its keys this way (i18n.ts cannot import this file: it is imported here).
+setKeyNames((text) => keysIn(text));

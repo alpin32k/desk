@@ -16,7 +16,7 @@ import { api, type HookState } from "./api";
 import { stripProbeReplies } from "./input";
 import { DEFAULT_THEME, terminalTheme, themeById } from "./themes";
 import { PLATFORM } from "./platform";
-import { actionFor, keysIn } from "./keys";
+import { actionFor } from "./keys";
 import { linkTarget, rowLinks, webLink, type Row } from "./links";
 import { agentLabel, keyOf, type Spec } from "./sessions";
 
@@ -515,7 +515,7 @@ export class Tile {
   private setTitles(): void {
     for (const [a, key] of Object.entries(BUTTON_TITLES)) {
       const title = a === "minimize" && this.minimized ? t("tile.expand") : t(key);
-      this.el.querySelector<HTMLElement>(`[data-a="${a}"]`)!.title = keysIn(title);
+      this.el.querySelector<HTMLElement>(`[data-a="${a}"]`)!.title = title;
     }
   }
 
@@ -527,7 +527,7 @@ export class Tile {
       ? `<b>${escapeHtml(this.label())}</b>`
       : `<span class="${this.customName ? "named" : "agent"}">${escapeHtml(this.label())}</span>`;
     const account = this.account
-      ? ` <span class="account" data-a="account" title="${escapeHtml(keysIn(t("tile.account", { name: this.account.name })))}">${escapeHtml(this.account.name)}</span>`
+      ? ` <span class="account" data-a="account" title="${escapeHtml(t("tile.account", { name: this.account.name }))}">${escapeHtml(this.account.name)}</span>`
       : "";
     const parts = [
       label + account,

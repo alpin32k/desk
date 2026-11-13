@@ -661,7 +661,7 @@ export class App {
   /** Click on a tile's account label or ⌘⇧A: run its Claude on another account. */
   private async switchAccount(tile: Tile): Promise<void> {
     if (tile.agent !== "claude") return toast(t("app.accountOnlyClaude"));
-    if (!hasAccounts(this.layout)) return toast(keysIn(t("app.accountNone")));
+    if (!hasAccounts(this.layout)) return toast(t("app.accountNone"));
     const from = accountById(this.layout, accountFor(this.layout, tile.key, tile.path))!;
     const to = accountById(this.layout, await this.askAccount(t("app.accountPick", { name: tile.name }), from.id));
     if (!to || to.id === from.id) return;
@@ -1298,14 +1298,14 @@ export class App {
     card = document.createElement("div");
     card.className = "card";
     card.dataset.project = project;
-    card.innerHTML = keysIn(`
+    card.innerHTML = `
       <header class="card-head">
         <span class="dot"></span><span class="card-title"></span>
         <span class="modes">${(["stack", "row", "tabs"] as const).map((m) => `<button data-mode="${m}">${MODE_ICONS[m]}</button>`).join("")}</span>
         <span class="actions"><button data-a="sub">+</button><button data-a="terminal">›_</button><button data-a="run">▶</button></span>
       </header>
       <nav class="card-tabs" hidden></nav>
-      <div class="card-body"></div>`);
+      <div class="card-body"></div>`;
     const head = card.querySelector<HTMLElement>(".card-head")!;
     cardTitles(head);
     const first = () => {
@@ -1785,7 +1785,7 @@ export class App {
       c.sleepDisabled && c.level !== "lid"
         ? `<button class="coffee warn" data-coffee="restore" title="${t("coffee.strayTitle")}">${t("coffee.stray")}</button>`
         : "";
-    return `${stray}<button class="coffee ${c.level}" data-coffee="cycle" title="${keysIn(title)}">${label}</button>`;
+    return `${stray}<button class="coffee ${c.level}" data-coffee="cycle" title="${title}">${label}</button>`;
   }
 
   // ---- lock --------------------------------------------------------------
@@ -1989,7 +1989,7 @@ function cardTitles(head: HTMLElement): void {
     ["terminal", t("tile.terminal")],
     ["run", t("tile.run")],
   ];
-  for (const [a, title] of titles) head.querySelector<HTMLElement>(`[data-a="${a}"]`)!.title = keysIn(title);
+  for (const [a, title] of titles) head.querySelector<HTMLElement>(`[data-a="${a}"]`)!.title = title;
   for (const mode of ["stack", "row", "tabs"] as const) head.querySelector<HTMLElement>(`[data-mode="${mode}"]`)!.title = t(`card.${mode}`);
 }
 
