@@ -1232,6 +1232,10 @@ html.dragging-card .tile .term {
   border-bottom: 1px solid var(--line);
 }
 
+.settings-head .search {
+  flex: 1;
+}
+
 .settings-body {
   flex: 1;
   min-height: 0;

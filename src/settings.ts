@@ -7,6 +7,7 @@ import { accountColor, withAccount, withoutAccount } from "./accounts";
 import type { LinkClick } from "./links";
 import { PLATFORM, shortcut } from "./platform";
 import { rows, shortPath } from "./projects";
+import { search, type SearchItem } from "./settings-search";
 import { escapeHtml } from "./tile";
 import { acceleratorFor, DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
 import { LANGUAGES, language, t, type Language, type MessageKey } from "./i18n";
@@ -168,6 +169,8 @@ export class Settings {
   /** Waiting for a new shortcut: "dropdown" or a binding id (keys.ts). */
   private recording: string | null = null;
   private tab: Group = "general";
+  /** What is typed in the search field; "" shows the chosen group. */
+  private query = "";
 
   constructor(private ctx: SettingsContext) {}
 
@@ -194,6 +197,7 @@ export class Settings {
     window.addEventListener("keydown", this.onKey, true);
     document.body.appendChild(this.el);
     this.render();
+    this.el.querySelector<HTMLInputElement>('[data-k="search"]')?.focus();
     this.projects = await this.ctx.projects();
     this.render();
   }
@@ -201,6 +205,7 @@ export class Settings {
   close(): void {
     window.removeEventListener("keydown", this.onKey, true);
     this.recording = null;
+    this.query = "";
     this.el?.remove();
     this.el = null;
   }
@@ -224,8 +229,50 @@ export class Settings {
     if (e.key !== "Escape" || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
     e.preventDefault();
     e.stopPropagation();
+    // Esc first empties the search, then closes.
+    if (this.query) {
+      this.query = "";
+      const field = this.el?.querySelector<HTMLInputElement>('[data-k="search"]');
+      if (field) field.value = "";
+      this.applySearch();
+      return;
+    }
     this.close();
   };
+
+  /**
+   * Show what the search field asks for, without building the page again
+   * (typing keeps its focus, half-filled fields keep their text): the rows
+   * that match in every group, or with no query the chosen group whole.
+   */
+  private applySearch(): void {
+    const box = this.el?.querySelector<HTMLElement>(".dialog");
+    if (!box) return;
+    const found = [...box.querySelectorAll<HTMLElement>("[data-row]")];
+    const items: SearchItem[] = found.map((row) => ({
+      group: row.closest<HTMLElement>("[data-pane]")?.dataset.pane ?? "",
+      section: row.closest("[data-section]")?.querySelector(":scope > h3")?.textContent ?? "",
+      // "header": found by its section's header alone (the projects have their own filter).
+      text: row.dataset.row === "header" ? "" : (row.textContent ?? ""),
+    }));
+    const names = Object.fromEntries(Object.entries(GROUP_NAMES).map(([id, key]) => [id, t(key)]));
+    const result = search(items, names, this.query);
+    const searching = result.query !== "";
+    found.forEach((row, i) => (row.hidden = !result.show[i]));
+    box.querySelectorAll<HTMLElement>("[data-section]:not([data-row])").forEach((section) => {
+      section.hidden = searching && !section.querySelector("[data-row]:not([hidden])");
+    });
+    box.querySelectorAll<HTMLElement>("[data-pane]").forEach((pane) => {
+      pane.hidden = searching ? !result.counts[pane.dataset.pane!] : pane.dataset.pane !== this.tab;
+    });
+    box.querySelectorAll<HTMLElement>("[data-tab]").forEach((tab) => {
+      const hits = result.counts[tab.dataset.tab!] ?? 0;
+      tab.querySelector(".count")!.textContent = searching ? String(hits) : "";
+      tab.classList.toggle("dim", searching && !hits);
+      tab.classList.toggle("sel", !searching && tab.dataset.tab === this.tab);
+    });
+    box.querySelector<HTMLElement>('[data-k="search-none"]')!.hidden = !searching || Object.keys(result.counts).length > 0;
+  }
 
   /** A new shortcut was pressed for `id`: taken keys are refused. */
   private record(id: string, accelerator: string): void {
@@ -262,6 +309,10 @@ export class Settings {
   render(): void {
     const box = this.el?.querySelector<HTMLElement>(".dialog");
     if (!box) return;
+    // Building the page again must not move what you look at or type in.
+    const before = box.querySelector<HTMLInputElement>('[data-k="search"]');
+    const caret = before && document.activeElement === before ? before.selectionStart : null;
+    const scroll = box.querySelector(".settings-panes")?.scrollTop ?? 0;
     const layout = this.ctx.layout();
     const auto = new Set(layout.autostart);
     const list = rows(this.projects, this.filter);
@@ -485,7 +536,9 @@ export class Settings {
     ];
     // Every group is in the page (the hidden ones too), so every field keeps its listener.
     box.innerHTML = `
-      <div class="settings-head"><h2>${t("settings.title")}</h2></div>
+      <div class="settings-head"><h2>${t("settings.title")}</h2><input type="text" class="search" data-k="search" placeholder="${t(
+        "settings.search",
+      )}" value="${escapeHtml(this.query)}" spellcheck="false" /></div>
       <div class="settings-body">
       <nav class="settings-nav">${panes
         .map(
@@ -493,7 +546,7 @@ export class Settings {
             `<button class="tab ${this.tab === id ? "sel" : ""}" data-tab="${id}"><span>${t(GROUP_NAMES[id])}</span><span class="count"></span></button>`,
         )
         .join("")}</nav>
-      <div class="settings-panes">${panes
+      <div class="settings-panes"><p class="dim" data-k="search-none" hidden>${t("settings.searchNone")}</p>${panes
         .map(
           ([id, html]) =>
             `<div class="pane" data-pane="${id}" ${this.tab === id ? "" : "hidden"}><h2 class="pane-title">${t(GROUP_NAMES[id])}</h2>${html}</div>`,
@@ -506,9 +559,25 @@ export class Settings {
       b.addEventListener("click", () => {
         this.tab = b.dataset.tab as Group;
         this.recording = null;
+        this.query = "";
         this.render();
+        box.querySelector(".settings-panes")!.scrollTop = 0;
       }),
     );
+
+    const panesEl = box.querySelector<HTMLElement>(".settings-panes")!;
+    const field = box.querySelector<HTMLInputElement>('[data-k="search"]')!;
+    field.addEventListener("input", () => {
+      this.query = field.value;
+      this.applySearch();
+      panesEl.scrollTop = 0;
+    });
+    if (caret !== null) {
+      field.focus();
+      field.setSelectionRange(caret, caret);
+    }
+    this.applySearch();
+    panesEl.scrollTop = scroll;
 
     const filter = box.querySelector<HTMLInputElement>('[data-k="filter"]')!;
     filter.addEventListener("input", () => {

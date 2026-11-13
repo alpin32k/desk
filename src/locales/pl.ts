@@ -286,6 +286,8 @@ export const pl = {
   "settings.general": "Ogólne",
   "settings.dropdown": "Dropdown",
   "settings.keys": "Skróty",
+  "settings.search": "Szukaj: link, czcionka, kawa…",
+  "settings.searchNone": "Nic nie pasuje. Spróbuj innego słowa albo wybierz grupę po lewej.",
   "settings.look": "Wygląd",
   "settings.window": "Okno i układ",
   "settings.terminal": "Terminal i linki",

@@ -287,6 +287,8 @@ export const en: Messages = {
   "settings.general": "General",
   "settings.dropdown": "Dropdown",
   "settings.keys": "Shortcuts",
+  "settings.search": "Search: link, font, coffee…",
+  "settings.searchNone": "Nothing matches. Try another word or pick a group on the left.",
   "settings.look": "Appearance",
   "settings.window": "Window and layout",
   "settings.terminal": "Terminal and links",

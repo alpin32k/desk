@@ -58,7 +58,8 @@ Okno nie wywołuje żadnych modeli. Limity planu czyta z plików, które agenci 
 ![Panel podglądu: plan w Markdown z diagramem mermaid, checklistą i tabelą obok sesji Claude, reszta sesji jako mini karty po lewej](docs/panel.png)
 
 ⌘W otwiera panel obok terminali. Kliknięty link (strona, `localhost`, plik) otwiera się w nim, a ⌥-klik
-w przeglądarce. Klikalne są też ścieżki względne, np. `docs/plan.md`, liczone od folderu projektu kafelka.
+w przeglądarce. W Opcjach (Terminal i linki) można to odwrócić albo wyłączyć zwykły klik: wtedy link
+otwiera dopiero ⌘-klik (panel) lub ⌥-klik (przeglądarka). Klikalne są też ścieżki względne, np. `docs/plan.md`, liczone od folderu projektu kafelka.
 
 - **Pokazuje** strony, obrazki, PDF, Markdown z diagramami mermaid, pliki `.mmd`, JSON, CSV i TSV jako
   tabelę oraz kod i tekst.
