@@ -1,5 +1,13 @@
 # Zmiany
 
+## 0.1.32 (2026-11-13)
+
+- **Jedyna sesja projektu zwija się zawsze.** ⌘J nic nie robiło z jedyną sesją projektu, którego
+  karta miała wcześniej kilka sesji w zakładkach: tryb „zakładki” zostawał zapisany, a karta
+  w zakładkach zawsze trzyma jedną sesję rozwiniętą. Teraz karta z jedną sesją układa ją jak
+  zwykły kafelek, więc zwija się (także do wąskiego paska), a zakładki wracają, gdy projekt
+  dostanie drugą sesję.
+
 ## 0.1.31 (2026-11-13)
 
 - **Od razu widać, w którym kafelku piszesz.** Przy kilku kolumnach aktywny kafelek różnił się
