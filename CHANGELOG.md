@@ -1,5 +1,13 @@
 # Zmiany
 
+## 0.1.35 (2026-11-14)
+
+- **Zwinięta sesja obok innych nie zabiera im miejsca.** W karcie ułożonej „obok siebie” zwinięcie
+  jednej sesji (⌘J) zostawiało na ekranie tylko jej nagłówek na całą szerokość, a pozostałe
+  sesje znikały. Teraz zwinięta sesja jest wąskim pionowym paskiem z nazwą, jak w zwiniętej
+  kolumnie, a resztę miejsca dzielą rozwinięte; klik w pasek ją rozwija. Gdy zwinięte są
+  wszystkie sesje karty, ich nagłówki układają się jeden pod drugim.
+
 ## 0.1.34 (2026-11-13)
 
 - **Sam decydujesz, co robi klik w link.** Kliknięcie w terminal, żeby wrócić do karty, trafiało
