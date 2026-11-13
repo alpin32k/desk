@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   add,
+  cardLayout,
   autoColumns,
   autoLanes,
   distribute,
@@ -162,5 +163,14 @@ describe("lanes", () => {
     expect(Number(grow(0.75))).toBeGreaterThanOrEqual(1);
     expect(Number(grow(0.05))).toBeGreaterThanOrEqual(1); // a side squeezed to its minimum
     expect(Number(grow(0.97)) / Number(grow(0.53))).toBeCloseTo(0.97 / 0.53);
+  });
+
+  it("a card left in tabs or side by side stacks its last session, so it can fold", () => {
+    // Tabs show one session unfolded: a lone session of a card still set to tabs never folded (⌘J).
+    expect(cardLayout("tabs", 1)).toBe("stack");
+    expect(cardLayout("row", 1)).toBe("stack");
+    expect(cardLayout("tabs", 2)).toBe("tabs");
+    expect(cardLayout("row", 3)).toBe("row");
+    expect(cardLayout("stack", 2)).toBe("stack");
   });
 });
