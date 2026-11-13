@@ -41,6 +41,15 @@ describe("search", () => {
     expect(r.counts).toEqual({ power: 1 });
   });
 
+  it("every word of the query must be found, in any order and place", () => {
+    // The third row has "klikiem" and sits in the group "Terminal i linki".
+    expect(search(items, names, "klik link").show).toEqual([true, false, true, false, false]);
+    expect(search(items, names, "otwiera klik").show).toEqual([true, false, false, false, false]);
+    // One word in the section's header, the other in the row.
+    expect(search(items, names, "linki przegladarka").show).toEqual([false, true, false, false, false]);
+    expect(search(items, names, "klik kawa").show.some(Boolean)).toBe(false);
+  });
+
   it("nothing found", () => {
     const r = search(items, names, "xyz");
     expect(r.show.some(Boolean)).toBe(false);

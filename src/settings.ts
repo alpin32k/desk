@@ -65,6 +65,14 @@ const GROUP_NAMES: Record<Group, MessageKey> = {
   keys: "settings.keys",
 };
 
+/** The text of an element as words: its pieces apart, not glued ("w desk" + "w przeglądarce"). */
+function words(el: HTMLElement): string {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const parts: string[] = [];
+  while (walker.nextNode()) parts.push(walker.currentNode.textContent ?? "");
+  return parts.join(" ");
+}
+
 /** A folder for an account: in the home folder (~/...) or a full path. */
 const ACCOUNT_DIR = /^(~[\\/]|\/|[a-z]:[\\/]|\\\\)/i;
 
@@ -253,7 +261,7 @@ export class Settings {
       group: row.closest<HTMLElement>("[data-pane]")?.dataset.pane ?? "",
       section: row.closest("[data-section]")?.querySelector(":scope > h3")?.textContent ?? "",
       // "header": found by its section's header alone (the projects have their own filter).
-      text: row.dataset.row === "header" ? "" : (row.textContent ?? ""),
+      text: row.dataset.row === "header" ? "" : words(row),
     }));
     const names = Object.fromEntries(Object.entries(GROUP_NAMES).map(([id, key]) => [id, t(key)]));
     const result = search(items, names, this.query);
