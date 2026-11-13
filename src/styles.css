@@ -811,6 +811,13 @@ html.dragging-card .tile .term {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
 }
 
+/* Side by side, a folded tile is a narrow strip between its neighbours.
+   `flex: none` alone would make it as wide as its header's text (the last
+   line of output), leaving the other sessions of the card no room. */
+.card-body.row > .tile.minimized {
+  flex: 0 0 26px;
+}
+
 /* a lane of folded tiles only: a narrow strip, labels read top to bottom */
 .lane.folded {
   flex-basis: 26px;
@@ -835,7 +842,8 @@ html.dragging-card .tile .term {
   flex: 1 1 0;
 }
 
-.lane.folded .tile.minimized header {
+.lane.folded .tile.minimized header,
+.card-body.row > .tile.minimized header {
   flex: 1;
   width: 100%;
   height: auto;
@@ -846,25 +854,32 @@ html.dragging-card .tile .term {
   cursor: pointer;
 }
 
-.lane.folded .tile.minimized .badge {
+.lane.folded .tile.minimized .badge,
+.card-body.row > .tile.minimized .badge {
   min-width: 0;
   writing-mode: horizontal-tb;
 }
 
-.lane.folded .tile.minimized .title {
+.lane.folded .tile.minimized .title,
+.card-body.row > .tile.minimized .title {
   flex: 1 1 auto;
   min-height: 0;
 }
 
 /* room for what matters: the name and the state; the branch is in the tooltip's folder */
-.lane.folded .tile.minimized .title > * {
+.lane.folded .tile.minimized .title > *,
+.card-body.row > .tile.minimized .title > * {
   margin-inline-end: 8px;
 }
 
 .lane.folded .tile.minimized .peek,
 .lane.folded .tile.minimized .actions,
 .lane.folded .tile.minimized .branch,
-.lane.folded .tile.minimized .sep {
+.lane.folded .tile.minimized .sep,
+.card-body.row > .tile.minimized .peek,
+.card-body.row > .tile.minimized .actions,
+.card-body.row > .tile.minimized .branch,
+.card-body.row > .tile.minimized .sep {
   display: none;
 }
 
