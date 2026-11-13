@@ -11,13 +11,13 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { openOutside, preview, previewFile } from "./side";
+import { linkClickMode, openOutside, preview, previewFile } from "./side";
 import { api, type HookState } from "./api";
 import { stripProbeReplies } from "./input";
 import { DEFAULT_THEME, terminalTheme, themeById } from "./themes";
 import { PLATFORM } from "./platform";
 import { actionFor, keysIn } from "./keys";
-import { rowLinks, type Row } from "./links";
+import { linkTarget, rowLinks, type Row } from "./links";
 import { agentLabel, keyOf, type Spec } from "./sessions";
 
 /** Rows looked at above and below a hovered one for a wrapped path. */
@@ -228,18 +228,25 @@ export class Tile {
       this.lastInput = Date.now();
     };
     window.addEventListener("mouseup", this.released, true);
-    // Click a link: preview inside desk; Option-click: Brave / Chrome / system browser.
+    // A clicked link opens in desk's panel or outside desk (Brave / Chrome /
+    // system browser, a file's default app), or not at all: Options decide
+    // what a plain click does, Option and ⌘ / Ctrl pick the other places.
     const openLink = (e: MouseEvent, uri: string, relative = false) => {
+      const target = linkTarget(linkClickMode(), { alt: e.altKey, mod: PLATFORM === "mac" ? e.metaKey : e.ctrlKey });
+      if (!target) return;
+      const outside = target === "browser";
       // A relative path (docs/plan.md) is a file of this tile's project.
       const p = relative
-        ? e.altKey
+        ? outside
           ? openOutside(`${this.path.replace(/[\\/]+$/, "")}/${uri}`)
           : previewFile(this.path, uri)
-        : e.altKey
+        : outside
           ? openOutside(uri)
           : preview(uri);
       p.catch((err) => this.term.write(`\r\n\x1b[33m${err}\x1b[0m\r\n`));
     };
+    // Hyperlinks a program sends (OSC 8) follow the same setting.
+    this.term.options.linkHandler = { activate: (e, uri) => openLink(e, uri) };
     this.term.loadAddon(new WebLinksAddon(openLink));
     this.term.registerLinkProvider({
       provideLinks: (y, callback) => {

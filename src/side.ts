@@ -27,6 +27,8 @@ export interface SideContext {
   terminal(path: string): void;
   /** Where web pages open outside desk (Layout.browser). */
   browser(): string;
+  /** What a plain click on a terminal link does (Layout.linkClick). */
+  linkClick(): string;
 }
 
 
@@ -45,6 +47,11 @@ export function previewFile(path: string, file: string): Promise<void> {
 /** A link outside desk: a web page in Brave / Chrome (Options), a file in its default app. */
 export function openOutside(link: string): Promise<void> {
   return api.openExternal(link, Side.current?.browserPref());
+}
+
+/** What a plain click on a terminal link does: "desk", "browser" or "none". */
+export function linkClickMode(): string {
+  return Side.current?.linkClickPref() ?? "desk";
 }
 
 export class Side {
@@ -215,6 +222,10 @@ export class Side {
 
   browserPref(): string {
     return this.ctx.browser();
+  }
+
+  linkClickPref(): string {
+    return this.ctx.linkClick();
   }
 
   /** The browser setting changed (or desk started): name it on the ↗ button. */

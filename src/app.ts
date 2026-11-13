@@ -150,6 +150,7 @@ export class App {
       },
       terminal: (path) => void this.openTerminal(path),
       browser: () => this.layout?.browser ?? "auto",
+      linkClick: () => this.layout?.linkClick ?? "desk",
     });
     root.querySelector(".middle")!.appendChild(this.side.el);
     this.footer = root.querySelector(".bottom")!;
@@ -197,6 +198,10 @@ export class App {
         this.layout.browser = id;
         this.save();
         void this.side.browserChanged();
+      },
+      setLinkClick: (mode) => {
+        this.layout.linkClick = mode;
+        this.save();
       },
       setDropdown: (change) => this.setDropdown(change),
       setKey: (id, accelerator) => {
@@ -332,6 +337,7 @@ export class App {
       tabs: boot.layout.tabs ?? {},
       theme: boot.layout.theme ?? "desk",
       browser: boot.layout.browser ?? "auto",
+      linkClick: boot.layout.linkClick ?? "desk",
       fontSize: boot.layout.fontSize || DEFAULT_FONT_SIZE,
       minimized: boot.layout.minimized ?? [],
       titles: boot.layout.titles ?? {},

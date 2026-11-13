@@ -4,6 +4,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { DEFAULT_THEME, THEMES } from "./themes";
 import { api, type AccountInfo, type AgentInfo, type ClaudeAccount, type CoffeeStatus, type Layout, type Project, type PromptAi } from "./api";
 import { accountColor, withAccount, withoutAccount } from "./accounts";
+import type { LinkClick } from "./links";
 import { rows, shortPath } from "./projects";
 import { escapeHtml } from "./tile";
 import { acceleratorFor, DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
@@ -21,6 +22,8 @@ export interface SettingsContext {
   setAutoLayout: (on: boolean) => void;
   setTheme: (id: string) => void;
   setBrowser: (id: string) => void;
+  /** What a plain click on a terminal link does (links.ts). */
+  setLinkClick: (mode: LinkClick) => void;
   setFontSize: (px: number) => void;
   setLanguage: (id: Language) => void;
   setDropdown: (
