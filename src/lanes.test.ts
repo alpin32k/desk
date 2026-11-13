@@ -173,4 +173,14 @@ describe("lanes", () => {
     expect(cardLayout("row", 3)).toBe("row");
     expect(cardLayout("stack", 2)).toBe("stack");
   });
+
+  it("a side-by-side card with every session folded stacks their headers", () => {
+    // Side by side, a folded session is a narrow upright strip: a card of strips alone would have no height of its own.
+    expect(cardLayout("row", 3, 0)).toBe("stack");
+    expect(cardLayout("row", 3, 1)).toBe("row");
+    expect(cardLayout("row", 3, 3)).toBe("row");
+    // Tabs show one session whatever is folded.
+    expect(cardLayout("tabs", 3, 0)).toBe("tabs");
+    expect(cardLayout("stack", 3, 0)).toBe("stack");
+  });
 });

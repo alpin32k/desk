@@ -7,10 +7,14 @@ export type ProjectOf = (key: string) => string;
 /**
  * How a card lays its sessions out. Tabs and side by side need two sessions:
  * a card down to one stacks it, so the session can fold (tabs always show one
- * unfolded). The chosen mode stays in the layout and returns with a second session.
+ * unfolded). Side by side also needs one of them unfolded (`unfolded`): there
+ * a folded session is a narrow upright strip, and strips alone would give the
+ * card no height, so its headers stack. The chosen mode stays in the layout
+ * and returns with a second session, or with one unfolded.
  */
-export function cardLayout<M extends string>(mode: M, sessions: number): M | "stack" {
-  return sessions > 1 ? mode : "stack";
+export function cardLayout<M extends string>(mode: M, sessions: number, unfolded = sessions): M | "stack" {
+  if (sessions < 2) return "stack";
+  return mode === "row" && unfolded === 0 ? "stack" : mode;
 }
 
 export function clone(lanes: Lanes): Lanes {
