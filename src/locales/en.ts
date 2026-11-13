@@ -139,6 +139,7 @@ export const en: Messages = {
   "top.browserTitle": "Browser in the side panel ({keys}); ↗ opens the page in Brave or Chrome",
   "bottom.pinTitle": "The dropdown hides when you click another app; click to keep it down",
   "bottom.pinnedTitle": "The dropdown stays down when you click another app; click to let it hide",
+  "bottom.here": "You are typing here: {path}",
   "usage.limit": "{agent} plan limit",
   "usage.window": "{label}: {percent}%, resets in {time}",
   "usage.limitAccount": "Claude plan limit of the {account} account",

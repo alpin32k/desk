@@ -870,6 +870,7 @@ export class App {
       if (this.fullscreen && this.fullscreen !== key) this.toggleFullscreen(key);
       if (this.focusMode()) this.render(); // the newly active session moves to the middle
       this.side.projectChanged();
+      this.renderHere();
     }
     if (focus) this.tiles.get(key)?.focus();
   }
@@ -1602,9 +1603,24 @@ export class App {
       return a ? { name: a.name, color: accountColor(this.layout, a.id) } : null;
     })}<button class="top-btn" data-top="browser" title="${t("top.browserTitle", { keys: keysIn("⌘W") })}">${t("top.browser")}</button>${thermalHtml(this.thermal)}${this.coffeeHtml()}${this.quitHtml()}`;
     this.footer.innerHTML =
-      `<span class="hints">${hints()
+      `<span class="here" hidden></span><span class="hints">${hints()
         .map(([k, label]) => `<span><kbd>${k}</kbd> ${escapeHtml(label)}</span>`)
         .join("")}</span><span class="counts"><b>${this.tiles.size}</b> sessions · <span class="c-working">${count("working")} working</span> · <span class="c-waiting">${waiting} waiting</span> · ${count("idle")} idle</span>${this.pinHtml()}`;
+    this.renderHere();
+  }
+
+  /** The active session at the start of the bottom bar, in its project's color. */
+  private renderHere(): void {
+    const here = this.footer.querySelector<HTMLElement>(".here");
+    const tile = this.tiles.get(this.active ?? "");
+    if (!here) return;
+    here.hidden = !tile;
+    if (!tile) return;
+    const s = tile.summary();
+    const index = tile.index > 0 && tile.index < 10 ? `${tile.index} ` : "";
+    here.textContent = `${index}${s.name} · ${s.label}`;
+    here.title = t("bottom.here", { path: tile.path });
+    here.style.setProperty("--proj", projectColor(this.projectOf(tile.key), this.layout.colors));
   }
 
   /** ⏻ at the end of the top bar while docked: the dropdown has no menu, and ⌘Q closes a tile. */

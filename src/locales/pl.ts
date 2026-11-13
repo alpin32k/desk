@@ -138,6 +138,7 @@ export const pl = {
   "top.browserTitle": "Przeglądarka w panelu obok ({keys}); ↗ otwiera stronę w Brave albo Chrome",
   "bottom.pinTitle": "Dropdown chowa się, gdy klikniesz inną aplikację; kliknij, żeby został",
   "bottom.pinnedTitle": "Dropdown zostaje, gdy klikniesz inną aplikację; kliknij, żeby się chował",
+  "bottom.here": "Tu piszesz: {path}",
   "usage.limit": "Limit planu {agent}",
   "usage.window": "{label}: {percent}%, reset za {time}",
   "usage.limitAccount": "Limit planu Claude na koncie {account}",
