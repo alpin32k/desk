@@ -150,6 +150,7 @@ export class App {
       },
       terminal: (path) => void this.openTerminal(path),
       browser: () => this.layout?.browser ?? "auto",
+      linkClick: () => this.layout?.linkClick ?? "desk",
     });
     root.querySelector(".middle")!.appendChild(this.side.el);
     this.footer = root.querySelector(".bottom")!;
@@ -197,6 +198,10 @@ export class App {
         this.layout.browser = id;
         this.save();
         void this.side.browserChanged();
+      },
+      setLinkClick: (mode) => {
+        this.layout.linkClick = mode;
+        this.save();
       },
       setDropdown: (change) => this.setDropdown(change),
       setKey: (id, accelerator) => {
@@ -289,7 +294,7 @@ export class App {
       if (a === "restore") void this.restoreSleep();
       const t = (e.target as HTMLElement).closest<HTMLElement>("[data-top]")?.dataset.top;
       if (t === "browser") this.side.browse();
-      if (t === "thermal") void this.settings.toggle();
+      if (t === "thermal") void this.settings.toggle("power");
       if (t === "update") void this.installUpdate();
       if (t === "leave") void api.dropdownLeave();
       if (t === "quit") void this.quit();
@@ -332,6 +337,7 @@ export class App {
       tabs: boot.layout.tabs ?? {},
       theme: boot.layout.theme ?? "desk",
       browser: boot.layout.browser ?? "auto",
+      linkClick: boot.layout.linkClick ?? "desk",
       fontSize: boot.layout.fontSize || DEFAULT_FONT_SIZE,
       minimized: boot.layout.minimized ?? [],
       titles: boot.layout.titles ?? {},
@@ -655,7 +661,7 @@ export class App {
   /** Click on a tile's account label or ⌘⇧A: run its Claude on another account. */
   private async switchAccount(tile: Tile): Promise<void> {
     if (tile.agent !== "claude") return toast(t("app.accountOnlyClaude"));
-    if (!hasAccounts(this.layout)) return toast(keysIn(t("app.accountNone")));
+    if (!hasAccounts(this.layout)) return toast(t("app.accountNone"));
     const from = accountById(this.layout, accountFor(this.layout, tile.key, tile.path))!;
     const to = accountById(this.layout, await this.askAccount(t("app.accountPick", { name: tile.name }), from.id));
     if (!to || to.id === from.id) return;
@@ -1292,14 +1298,14 @@ export class App {
     card = document.createElement("div");
     card.className = "card";
     card.dataset.project = project;
-    card.innerHTML = keysIn(`
+    card.innerHTML = `
       <header class="card-head">
         <span class="dot"></span><span class="card-title"></span>
         <span class="modes">${(["stack", "row", "tabs"] as const).map((m) => `<button data-mode="${m}">${MODE_ICONS[m]}</button>`).join("")}</span>
         <span class="actions"><button data-a="sub">+</button><button data-a="terminal">›_</button><button data-a="run">▶</button></span>
       </header>
       <nav class="card-tabs" hidden></nav>
-      <div class="card-body"></div>`);
+      <div class="card-body"></div>`;
     const head = card.querySelector<HTMLElement>(".card-head")!;
     cardTitles(head);
     const first = () => {
@@ -1779,7 +1785,7 @@ export class App {
       c.sleepDisabled && c.level !== "lid"
         ? `<button class="coffee warn" data-coffee="restore" title="${t("coffee.strayTitle")}">${t("coffee.stray")}</button>`
         : "";
-    return `${stray}<button class="coffee ${c.level}" data-coffee="cycle" title="${keysIn(title)}">${label}</button>`;
+    return `${stray}<button class="coffee ${c.level}" data-coffee="cycle" title="${title}">${label}</button>`;
   }
 
   // ---- lock --------------------------------------------------------------
@@ -1983,7 +1989,7 @@ function cardTitles(head: HTMLElement): void {
     ["terminal", t("tile.terminal")],
     ["run", t("tile.run")],
   ];
-  for (const [a, title] of titles) head.querySelector<HTMLElement>(`[data-a="${a}"]`)!.title = keysIn(title);
+  for (const [a, title] of titles) head.querySelector<HTMLElement>(`[data-a="${a}"]`)!.title = title;
   for (const mode of ["stack", "row", "tabs"] as const) head.querySelector<HTMLElement>(`[data-mode="${mode}"]`)!.title = t(`card.${mode}`);
 }
 

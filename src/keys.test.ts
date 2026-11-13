@@ -1,3 +1,5 @@
+import { shortcuts } from "./platform";
+import { setLanguage, t } from "./i18n";
 import { describe, expect, it } from "vitest";
 import { actionFor, BINDINGS, clashWith, hints, keysIn, keyText, setCustomKeys } from "./keys";
 
@@ -72,6 +74,27 @@ describe("actionFor", () => {
     expect(hints("mac")[0]).toEqual(["⌘P", "projekty"]);
     expect(hints("windows")[0]).toEqual(["Ctrl⇧P", "projekty"]);
     expect(hints("linux").find(([, l]) => l === "zabij")).toEqual(["Ctrl⇧⌫", "zabij"]);
+  });
+});
+
+describe("keysIn", () => {
+  it("names the modifier of a click as the platform does", () => {
+    const text = "⌘-klik: panel desk, ⌥-klik: przeglądarka";
+    expect(keysIn(text, "mac")).toBe(text);
+    expect(keysIn(text, "windows")).toBe("Ctrl-klik: panel desk, Alt-klik: przeglądarka");
+    expect(keysIn("⌥-click: browser", "linux")).toBe("Alt-click: browser");
+  });
+
+  it("still reads ⌘- before a space as the shortcut ⌘-", () => {
+    expect(keysIn("⌘= większa, ⌘- mniejsza", "mac")).toBe("⌘= większa, ⌘- mniejsza");
+    expect(keysIn("⌘= większa, ⌘- mniejsza", "windows")).toBe(shortcuts("⌘= większa, ⌘- mniejsza", "windows"));
+  });
+
+  it("is what every message goes through, before its params are filled in", () => {
+    setLanguage("pl");
+    expect(t("tile.attachFailedHint")).toBe(keysIn("⌘Q zamyka kafelek."));
+    expect(t("tile.attachFailedHint")).not.toContain("⌘"); // tests run as Linux
+    expect(t("top.browserTitle", { keys: "⌘W" })).toContain("(⌘W)");
   });
 });
 

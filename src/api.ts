@@ -42,6 +42,8 @@ export interface Layout {
   theme: string;
   /** Web pages outside desk: "auto" (Brave, then Chrome), "brave", "chrome", "system". */
   browser: string;
+  /** A plain click on a terminal link: "desk", "browser" or "none" (links.ts). */
+  linkClick: string;
   /** Terminal font size in px. */
   fontSize: number;
   /** Session keys whose tiles are folded to their header. */

@@ -39,9 +39,24 @@ export function detectLanguage(preferred: readonly string[] = navigator.language
   return "en";
 }
 
-/** The message in the current language, `{name}` replaced by `params.name`. */
+let keyNames = (text: string): string => text;
+
+/**
+ * How the keys named in the messages are shown. The messages write them as
+ * on macOS with desk's default shortcuts ("⌘P", "⌥-klik"); keys.ts sets this
+ * to keysIn, which knows the platform and the shortcuts changed in Options.
+ */
+export function setKeyNames(names: (text: string) => string): void {
+  keyNames = names;
+}
+
+/**
+ * The message in the current language, its keys named as the user has them
+ * (setKeyNames), `{name}` replaced by `params.name`. Params are taken as they
+ * come: name their keys with keysIn before passing them.
+ */
 export function t(key: MessageKey, params?: Record<string, string | number>): string {
-  const text = MESSAGES[current][key];
+  const text = keyNames(MESSAGES[current][key]);
   return params ? text.replace(/\{(\w+)\}/g, (m: string, k: string) => (k in params ? String(params[k]) : m)) : text;
 }
 

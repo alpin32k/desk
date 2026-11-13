@@ -98,3 +98,35 @@ export function rowLinks(rows: Row[], at: number, cols: number, home = ""): RowL
     })
     .filter((l) => l.start.row <= at && l.end.row >= at);
 }
+
+/** What a plain click on a terminal link does (Options, Layout.linkClick). */
+export type LinkClick = "desk" | "browser" | "none";
+
+/** desk's side panel, or outside desk (browser, default app). */
+export type LinkTarget = "desk" | "browser";
+
+/**
+ * Where a clicked link opens, or null when the click does nothing.
+ * `alt`: Option / Alt held; `mod`: ⌘ on macOS, Ctrl elsewhere. Alt opens the
+ * other place than a plain click; with "none" a plain click is ignored and
+ * mod stands for desk. An unknown mode is "desk".
+ */
+export function linkTarget(mode: string, keys: { alt: boolean; mod: boolean }): LinkTarget | null {
+  if (mode === "browser") return keys.alt ? "desk" : "browser";
+  if (mode === "none") return keys.alt ? "browser" : keys.mod ? "desk" : null;
+  return keys.alt ? "browser" : "desk";
+}
+
+/**
+ * A hyperlink sent by a program (OSC 8) as an address desk may open: http
+ * and https only. Whatever writes to the terminal picks the target and the
+ * text shown for it, so file:, javascript:, app schemes... are refused.
+ */
+export function webLink(uri: string): string | null {
+  try {
+    const url = new URL(uri.trim());
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}

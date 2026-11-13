@@ -4,7 +4,6 @@
 
 import type { Conversation } from "./api";
 import { t } from "./i18n";
-import { keysIn } from "./keys";
 import { PLATFORM, shortcut } from "./platform";
 import { ago } from "./projects";
 import { conversationRows, matchesRow, type ConversationRow } from "./saved";
@@ -50,8 +49,8 @@ export function conversationBox(title: string, found: Conversation[], opts: Conv
       const note = [opts.isOpen(c.id) ? t("app.conversationOpen") : "", opts.account?.(c) ?? "", ago(c.modifiedMs), c.branch ?? ""]
         .filter(Boolean)
         .join(" · ");
-      const forget = r.name ? `<button class="conv-act" data-act="forget" title="${keysIn(t("conv.forgetTitle"))}">×</button>` : "";
-      return `<div class="row${n === sel ? " sel" : ""}${r.name ? " saved" : ""}" data-i="${n}"><span class="name">${escapeHtml(label)}</span><span class="path">${escapeHtml(second)}</span><span class="dim">${escapeHtml(note)}</span><button class="conv-act" data-act="name" title="${keysIn(t("conv.nameTitle"))}">✎</button>${forget}</div>`;
+      const forget = r.name ? `<button class="conv-act" data-act="forget" title="${t("conv.forgetTitle")}">×</button>` : "";
+      return `<div class="row${n === sel ? " sel" : ""}${r.name ? " saved" : ""}" data-i="${n}"><span class="name">${escapeHtml(label)}</span><span class="path">${escapeHtml(second)}</span><span class="dim">${escapeHtml(note)}</span><button class="conv-act" data-act="name" title="${t("conv.nameTitle")}">✎</button>${forget}</div>`;
     };
 
     const draw = () => {

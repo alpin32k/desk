@@ -51,6 +51,9 @@ pub struct Layout {
     /// Where web pages open outside desk: "auto" (Brave, then Chrome),
     /// "brave", "chrome" or "system" (see browser.rs).
     pub browser: String,
+    /// What a plain click on a terminal link does: "desk" (side panel),
+    /// "browser" or "none" (see linkTarget in src/links.ts).
+    pub link_click: String,
     /// Terminal font size in px (⌘= / ⌘- / ⌘0, Options).
     pub font_size: f64,
     /// Session keys whose tiles are folded to their header (⌘J).
@@ -124,6 +127,7 @@ impl Default for Layout {
             tabs: Default::default(),
             theme: "desk".into(),
             browser: "auto".into(),
+            link_click: "desk".into(),
             font_size: 11.5,
             minimized: Vec::new(),
             titles: Default::default(),
@@ -228,6 +232,16 @@ mod tests {
         save(&p, &l).unwrap();
         assert_eq!(load(&p), l);
         assert!(!p.with_extension("json.tmp").exists());
+    }
+
+    #[test]
+    fn link_click_is_desk_unless_the_file_says_otherwise() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join("layout.json");
+        std::fs::write(&p, r#"{"version":1,"browser":"brave"}"#).unwrap();
+        assert_eq!(load(&p).link_click, "desk");
+        std::fs::write(&p, r#"{"version":1,"linkClick":"none"}"#).unwrap();
+        assert_eq!(load(&p).link_click, "none");
     }
 
     #[test]
