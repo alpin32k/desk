@@ -1,5 +1,25 @@
 # Zmiany
 
+## 0.1.34 (2026-11-13)
+
+- **Sam decydujesz, co robi klik w link.** Kliknięcie w terminal, żeby wrócić do karty, trafiało
+  czasem w link i od razu otwierało panel albo przeglądarkę. W Opcjach (Terminal i linki) jest
+  teraz „Klik w link otwiera”: w desk (jak dotąd), w przeglądarce albo nic nie robi. ⌥-klik
+  otwiera w tym drugim miejscu, a w trybie „nic nie robi” ⌘-klik otwiera panel desk, ⌥-klik
+  przeglądarkę (poza macOS Ctrl-klik i Alt-klik).
+- **Opcje z paskiem bocznym i szukajką.** Zamiast długiego zwoju w zakładce „Ogólne” jest osiem
+  grup po lewej: Ogólne, Wygląd, Okno i układ, Terminal i linki, Projekty, Claude i agenci,
+  Zasilanie, Skróty. Pole szukania u góry zostawia tylko pasujące opcje ze wszystkich grup
+  i pokazuje liczbę trafień przy każdej; wielkość liter i polskie znaki nie mają znaczenia
+  („przegladarka” znajduje „Przeglądarka”). Esc najpierw czyści szukanie, potem zamyka Opcje.
+  Wskaźnik temperatury w górnym pasku otwiera Opcje od razu na „Zasilanie”.
+- **Hiperłącza wysyłane przez program słuchają tego samego ustawienia.** Linki, które program
+  sam oznacza w terminalu (OSC 8), otwierają się tak jak pozostałe, i tylko jako adresy http
+  albo https.
+- **Podpowiedzi zawsze pokazują Twoje klawisze.** Kilka komunikatów pokazywało skrót z macOS
+  także na Windows i Linuksie albo po zmianie skrótu w Opcjach (np. „⌘Q zamyka kafelek” po
+  nieudanym podłączeniu sesji). Teraz każdy tekst nazywa klawisze tak, jak je masz.
+
 ## 0.1.33 (2026-11-13)
 
 - **Ctrl+G / ⌘G układa zadanie według stałego szablonu.** Poprawiony prompt zgłoszenia błędu albo
