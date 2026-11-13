@@ -5,12 +5,12 @@ import { DEFAULT_THEME, THEMES } from "./themes";
 import { api, type AccountInfo, type AgentInfo, type ClaudeAccount, type CoffeeStatus, type Layout, type Project, type PromptAi } from "./api";
 import { accountColor, withAccount, withoutAccount } from "./accounts";
 import type { LinkClick } from "./links";
+import { PLATFORM, shortcut } from "./platform";
 import { rows, shortPath } from "./projects";
 import { escapeHtml } from "./tile";
 import { acceleratorFor, DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
-import { LANGUAGES, language, t, type Language } from "./i18n";
+import { LANGUAGES, language, t, type Language, type MessageKey } from "./i18n";
 import { acceleratorsOf, bindingLabel, BINDINGS, clashWith, FIXED, groupLabel, GROUPS, keysIn, keyText } from "./keys";
-import { shortcut } from "./platform";
 import { clampLimit, DEFAULT_LIMIT, MAX_LIMIT, MIN_LIMIT } from "./thermal";
 import { toast } from "./ui";
 
@@ -49,6 +49,20 @@ export interface SettingsContext {
   /** Claude accounts changed (accounts.ts): saved at once, Rust reads them. */
   setAccounts: (change: Pick<Layout, "claudeAccounts" | "tileAccounts" | "projectAccounts">) => Promise<void>;
 }
+
+/** The groups of Options, in the sidebar's order. */
+export type Group = "general" | "look" | "window" | "terminal" | "projects" | "claude" | "power" | "keys";
+
+const GROUP_NAMES: Record<Group, MessageKey> = {
+  general: "settings.general",
+  look: "settings.look",
+  window: "settings.window",
+  terminal: "settings.terminal",
+  projects: "settings.projects",
+  claude: "settings.claude",
+  power: "settings.power",
+  keys: "settings.keys",
+};
 
 /** A folder for an account: in the home folder (~/...) or a full path. */
 const ACCOUNT_DIR = /^(~[\\/]|\/|[a-z]:[\\/]|\\\\)/i;
@@ -153,7 +167,7 @@ export class Settings {
   private filter = "";
   /** Waiting for a new shortcut: "dropdown" or a binding id (keys.ts). */
   private recording: string | null = null;
-  private tab: "general" | "dropdown" | "keys" = "general";
+  private tab: Group = "general";
 
   constructor(private ctx: SettingsContext) {}
 
@@ -166,8 +180,10 @@ export class Settings {
     return this.recording !== null;
   }
 
-  async toggle(): Promise<void> {
+  /** Open on `group`, or on the group seen last; close when open. */
+  async toggle(group?: Group): Promise<void> {
     if (this.el) return this.close();
+    if (group) this.tab = group;
     this.el = document.createElement("div");
     this.el.className = "overlay";
     this.el.innerHTML = `<div class="dialog settings"></div>`;
@@ -254,48 +270,94 @@ export class Settings {
 
     const hotkey = hotkeyLabel(layout.dropdownHotkey || DEFAULT_HOTKEY());
     const off = layout.dropdown ? "" : "disabled";
-    // Every tab is in the page (the hidden ones too), so every field keeps its listener.
-    box.innerHTML = `
-      <div class="settings-head"><h2>${t("settings.title")}</h2><div class="tabs">${[
-        ["general", t("settings.general")],
-        ["dropdown", t("settings.dropdown")],
-        ["keys", t("settings.keys")],
-      ]
-        .map(([id, label]) => `<button class="tab ${this.tab === id ? "sel" : ""}" data-tab="${id}">${label}</button>`)
-        .join("")}</div></div>
-      <div class="pane" data-pane="general" ${this.tab === "general" ? "" : "hidden"}>
-      <label class="line">${t("settings.language")} <select data-k="language">${LANGUAGES.map(
-        (l) => `<option value="${l.id}" ${language() === l.id ? "selected" : ""}>${l.name}</option>`,
-      ).join("")}</select></label>
-      <label class="line"><input type="checkbox" data-k="auto-layout" ${layout.autoLayout ? "checked" : ""}/> ${t("settings.autoLayout")} <span class="dim">${keysIn(t("settings.autoLayoutHint"))}</span></label>
-      <label class="line">${t("settings.lanes")} <input type="number" min="1" max="8" value="${layout.lanes.length}" data-k="lanes" ${layout.autoLayout ? "disabled" : ""}/></label>
-      <label class="line"><input type="checkbox" data-k="notify" ${layout.notifications ? "checked" : ""}/> ${t("settings.notify")}</label>
-      <label class="line"><input type="checkbox" data-k="tmux-menu" ${layout.tmuxMenu ? "checked" : ""}/> ${t("settings.tmuxMenu")} <span class="dim">${t("settings.tmuxMenuHint")}</span></label>
-      <label class="line">${t("settings.font")} <input type="number" min="8" max="24" step="0.5" value="${layout.fontSize}" data-k="font" /> px <span class="dim">(${keysIn(t("settings.fontHint"))})</span></label>
-      <label class="line">${t("settings.browser")} <select data-k="browser">${[
+    const linkClick: LinkClick = layout.linkClick === "browser" || layout.linkClick === "none" ? layout.linkClick : "desk";
+    const keyNames = PLATFORM === "mac" ? { mod: "⌘", alt: "⌥" } : { mod: "Ctrl", alt: "Alt" };
+    const linkHint = t(
+      linkClick === "browser" ? "settings.linkClickHintBrowser" : linkClick === "none" ? "settings.linkClickHintNone" : "settings.linkClickHintDesk",
+      keyNames,
+    );
+    // A section of a group. `row`: the whole section is one search hit
+    // ("header": found by its header alone); otherwise its lines are.
+    const section = (head: string, body: string, row: "" | "row" | "header" = ""): string =>
+      `<section data-section${row === "header" ? ' data-row="header"' : row ? " data-row" : ""}>${head ? `<h3>${head}</h3>` : ""}${body}</section>`;
+    const panes: [Group, string][] = [
+      [
+        "general",
+        section(
+          "",
+          `<label class="line" data-row>${t("settings.language")} <select data-k="language">${LANGUAGES.map(
+            (l) => `<option value="${l.id}" ${language() === l.id ? "selected" : ""}>${l.name}</option>`,
+          ).join("")}</select></label>
+      <label class="line" data-row><input type="checkbox" data-k="notify" ${layout.notifications ? "checked" : ""}/> ${t("settings.notify")}</label>`,
+        ) +
+          section(
+            t("settings.updates"),
+            `<div class="line" data-row><span class="dim">desk <span data-k="version"></span> · ${t("settings.updatesHow")}</span> <button data-k="update">${t("settings.checkNow")}</button></div>`,
+          ),
+      ],
+      [
+        "look",
+        section(
+          t("settings.theme"),
+          `<div class="themes">${THEMES.map(
+            (t) => `<button class="theme ${t.id === (layout.theme || DEFAULT_THEME) ? "sel" : ""}" data-theme="${t.id}" style="background:${t.bg};color:${t.fg}">
+          <span class="swatches">${[1, 2, 3, 4, 5].map((i) => `<i style="background:${t.ansi[i]}"></i>`).join("")}</span>${escapeHtml(t.name)}</button>`,
+          ).join("")}</div>`,
+          "row",
+        ) +
+          section(
+            t("settings.terminalSection"),
+            `<label class="line" data-row>${t("settings.font")} <input type="number" min="8" max="24" step="0.5" value="${layout.fontSize}" data-k="font" /> px <span class="dim">(${keysIn(t("settings.fontHint"))})</span></label>`,
+          ),
+      ],
+      [
+        "window",
+        section(
+          "",
+          `<label class="line" data-row><input type="checkbox" data-k="auto-layout" ${layout.autoLayout ? "checked" : ""}/> ${t("settings.autoLayout")} <span class="dim">${keysIn(t("settings.autoLayoutHint"))}</span></label>
+      <label class="line" data-row>${t("settings.lanes")} <input type="number" min="1" max="8" value="${layout.lanes.length}" data-k="lanes" ${layout.autoLayout ? "disabled" : ""}/></label>`,
+        ) +
+          section(
+            t("settings.dropdown"),
+            `<label class="line" data-row><input type="checkbox" data-k="dropdown" ${layout.dropdown ? "checked" : ""}/> ${t("settings.dropdownOn", { hotkey: escapeHtml(hotkey) })}</label>
+      <p class="dim small" data-row>${t("settings.dropdownAbout", { hotkey: escapeHtml(hotkey) })}</p>
+      <label class="line" data-row>${t("settings.height")} <input type="number" min="20" max="100" step="5" value="${layout.dropdownHeight}" data-k="dropdown-height" ${off}/> ${t("settings.heightUnit")} <span class="dim">${t("settings.heightHint")}</span></label>
+      <label class="line" data-row>${t("settings.animation")} <input type="number" min="0" max="1000" step="50" value="${layout.dropdownAnimation}" data-k="dropdown-animation" ${off}/> ms <span class="dim">${t("settings.animationHint")}</span></label>
+      <label class="line" data-row><input type="checkbox" data-k="dropdown-autohide" ${layout.dropdownAutohide ? "checked" : ""} ${off}/> ${t("settings.autohide")}</label>`,
+          ),
+      ],
+      [
+        "terminal",
+        section(
+          t("settings.links"),
+          `<div class="line" data-row><span>${t("settings.linkClick")}</span><span class="seg">${(
+            [
+              ["desk", t("settings.linkClickDesk")],
+              ["browser", t("settings.linkClickBrowser")],
+              ["none", t("settings.linkClickNone")],
+            ] as const
+          )
+            .map(([v, label]) => `<button class="${linkClick === v ? "sel" : ""}" data-link-click="${v}">${label}</button>`)
+            .join("")}</span><span class="dim">${linkHint}</span></div>
+      <label class="line" data-row>${t("settings.browser")} <select data-k="browser">${[
         ["auto", t("settings.browserAuto")],
         ["brave", "Brave"],
         ["chrome", "Chrome"],
         ["system", t("settings.browserSystem")],
       ]
         .map(([v, label]) => `<option value="${v}" ${(layout.browser || "auto") === v ? "selected" : ""}>${label}</option>`)
-        .join("")}</select></label>
-      <h3>${t("settings.promptAi")} <span class="dim">${t("settings.promptAiHint")}</span></h3>
-      <div class="prompt-ai">
-      <label class="line"><input type="checkbox" data-k="prompt-ai-on" ${layout.promptAi?.enabled ? "checked" : ""}/> ${t("settings.promptAiOn")}</label>
-      <label class="line">${t("settings.promptAiUrl")} <input type="text" data-k="prompt-ai-url" value="${escapeHtml(layout.promptAi?.url ?? "")}" placeholder="http://host:port/v1" spellcheck="false" /></label>
-      <label class="line">${t("settings.promptAiModel")} <input type="text" data-k="prompt-ai-model" value="${escapeHtml(layout.promptAi?.model ?? "")}" spellcheck="false" /></label>
-      <label class="line col">${t("settings.promptAiVpn")} <span class="dim" data-k="prompt-ai-vpn-status"></span>
-        <textarea data-k="prompt-ai-vpn" rows="3" spellcheck="false" placeholder="${t("settings.promptAiVpnHint")}"></textarea></label>
-      <div class="line"><button data-k="prompt-ai-vpn-save">${t("settings.promptAiVpnSave")}</button><button data-k="prompt-ai-vpn-rm" hidden>${t("settings.promptAiVpnRemove")}</button><span class="vpn-error" data-k="prompt-ai-vpn-error"></span></div>
-      </div>
-      <h3>${t("settings.theme")}</h3>
-      <div class="themes">${THEMES.map(
-        (t) => `<button class="theme ${t.id === (layout.theme || DEFAULT_THEME) ? "sel" : ""}" data-theme="${t.id}" style="background:${t.bg};color:${t.fg}">
-          <span class="swatches">${[1, 2, 3, 4, 5].map((i) => `<i style="background:${t.ansi[i]}"></i>`).join("")}</span>${escapeHtml(t.name)}</button>`,
-      ).join("")}</div>
-      <h3>${t("settings.autostart")} <span class="dim">(${auto.size})</span></h3>
-      <input type="text" class="filter" placeholder="${t("settings.filter")}" value="${escapeHtml(this.filter)}" data-k="filter" spellcheck="false" />
+        .join("")}</select></label>`,
+        ) +
+          section(
+            t("settings.terminalSection"),
+            `<label class="line" data-row><input type="checkbox" data-k="tmux-menu" ${layout.tmuxMenu ? "checked" : ""}/> ${t("settings.tmuxMenu")} <span class="dim">${t("settings.tmuxMenuHint")}</span></label>`,
+          ),
+      ],
+      [
+        "projects",
+        section(
+          `${t("settings.autostart")} <span class="dim">(${auto.size})</span>`,
+          `<input type="text" class="filter" placeholder="${t("settings.filter")}" value="${escapeHtml(this.filter)}" data-k="filter" spellcheck="false" />
       <div class="checks">${
         list.length
           ? list
@@ -306,9 +368,24 @@ export class Settings {
               )
               .join("")
           : `<div class="dim">${t("common.searchingProjects")}</div>`
-      }</div>
-      <h3>${t("settings.accounts")} <span class="dim">${t("settings.accountsHint")}</span></h3>
-      <p class="dim small">${keysIn(t("settings.accountsAbout"))}</p>
+      }</div>`,
+          "header",
+        ) +
+          section(
+            t("settings.folders"),
+            `<div class="folders">${layout.extraFolders
+              .map(
+                (f) => `<div class="folder"><span>${escapeHtml(shortPath(f, this.ctx.home()))}</span><button data-rm="${escapeHtml(f)}">${t("common.remove")}</button></div>`,
+              )
+              .join("")}<button data-k="add">${t("settings.addFolder")}</button></div>`,
+            "row",
+          ),
+      ],
+      [
+        "claude",
+        section(
+          `${t("settings.accounts")} <span class="dim">${t("settings.accountsHint")}</span>`,
+          `<p class="dim small">${keysIn(t("settings.accountsAbout"))}</p>
       <div class="accounts">${this.accountRows(layout)
         .map(
           (a, i) => `<div class="account-row"><i class="acct" style="background:${accountColor(layout, a.id)}"></i><input type="text" data-acct-name="${escapeHtml(
@@ -321,81 +398,115 @@ export class Settings {
         <div class="line"><input type="text" data-k="acct-name" placeholder="${t("settings.accountName")}" spellcheck="false" /><input type="text" data-k="acct-dir" placeholder="${t(
           "settings.accountDir",
         )}" spellcheck="false" /><button data-k="acct-add">${t("settings.accountAdd")}</button></div>
-      </div>
-      <h3>${t("settings.agents")} <span class="dim">${t("settings.agentsHint")}</span></h3>
-      <div class="agents">${this.ctx
-        .agents()
-        .map(
-          (a) => `<div class="agent-row"><b>${escapeHtml(a.id)}</b> <span class="dim">${escapeHtml(a.command || "login shell")}</span> ${
-            a.installed
-              ? `<span class="tag open">${t("settings.agentInstalled")}</span>`
-              : a.installable
-                ? `<span class="tag">${t("common.installsOnOpen")}</span>`
-                : `<span class="tag">${t("settings.agentMissing")}</span>`
-          }${a.builtin ? "" : ` <button data-rm-agent="${escapeHtml(a.id)}">${t("common.remove")}</button>`}</div>`,
-        )
-        .join("")}
+      </div>`,
+          "row",
+        ) +
+          section(
+            `${t("settings.agents")} <span class="dim">${t("settings.agentsHint")}</span>`,
+            `<div class="agents">${this.ctx
+              .agents()
+              .map(
+                (a) => `<div class="agent-row"><b>${escapeHtml(a.id)}</b> <span class="dim">${escapeHtml(a.command || "login shell")}</span> ${
+                  a.installed
+                    ? `<span class="tag open">${t("settings.agentInstalled")}</span>`
+                    : a.installable
+                      ? `<span class="tag">${t("common.installsOnOpen")}</span>`
+                      : `<span class="tag">${t("settings.agentMissing")}</span>`
+                }${a.builtin ? "" : ` <button data-rm-agent="${escapeHtml(a.id)}">${t("common.remove")}</button>`}</div>`,
+              )
+              .join("")}
         <div class="line"><input type="text" data-k="agent-id" placeholder="${t("settings.agentId")}" spellcheck="false" /><input type="text" data-k="agent-cmd" placeholder="${t("settings.agentCommand")}" spellcheck="false" /><button data-k="agent-add">${t("settings.addAgent")}</button></div>
-      </div>
-      <h3>${t("settings.folders")}</h3>
-      <div class="folders">${layout.extraFolders
+      </div>`,
+            "row",
+          ) +
+          section(
+            `${t("settings.promptAi")} <span class="dim">${t("settings.promptAiHint")}</span>`,
+            `<div class="prompt-ai">
+      <label class="line"><input type="checkbox" data-k="prompt-ai-on" ${layout.promptAi?.enabled ? "checked" : ""}/> ${t("settings.promptAiOn")}</label>
+      <label class="line">${t("settings.promptAiUrl")} <input type="text" data-k="prompt-ai-url" value="${escapeHtml(layout.promptAi?.url ?? "")}" placeholder="http://host:port/v1" spellcheck="false" /></label>
+      <label class="line">${t("settings.promptAiModel")} <input type="text" data-k="prompt-ai-model" value="${escapeHtml(layout.promptAi?.model ?? "")}" spellcheck="false" /></label>
+      <label class="line col">${t("settings.promptAiVpn")} <span class="dim" data-k="prompt-ai-vpn-status"></span>
+        <textarea data-k="prompt-ai-vpn" rows="3" spellcheck="false" placeholder="${t("settings.promptAiVpnHint")}"></textarea></label>
+      <div class="line"><button data-k="prompt-ai-vpn-save">${t("settings.promptAiVpnSave")}</button><button data-k="prompt-ai-vpn-rm" hidden>${t("settings.promptAiVpnRemove")}</button><span class="vpn-error" data-k="prompt-ai-vpn-error"></span></div>
+      </div>`,
+            "row",
+          ),
+      ],
+      [
+        "power",
+        section(
+          `${t("settings.coffee")} <span class="dim">(${escapeHtml(keyText("coffee"))})</span>`,
+          `<div class="line dim" data-row>${t("settings.coffeeGuard")} ${
+            this.ctx.coffee().helperInstalled
+              ? `${t("settings.coffeeHelper")} <button data-k="coffee-rm">${t("settings.coffeeRemove")}</button>`
+              : t("settings.coffeeAsk")
+          }</div>`,
+        ) +
+          section(
+            t("settings.thermal"),
+            `<label class="line" data-row><input type="checkbox" data-k="thermal-on" ${layout.thermalLimit ? "checked" : ""}/> ${t("settings.thermalOn")}</label>
+      <label class="line" data-row>${t("settings.thermalLimit")} <input type="number" min="${MIN_LIMIT}" max="${MAX_LIMIT}" step="1" value="${layout.thermalLimit || DEFAULT_LIMIT}" data-k="thermal-limit" ${layout.thermalLimit ? "" : "disabled"}/> °C</label>
+      <p class="dim small" data-row>${t("settings.thermalAbout")}</p>`,
+          ),
+      ],
+      [
+        "keys",
+        section("", `<p class="dim small" data-row>${t("settings.keysAbout")}</p>`) +
+          `<div class="shortcut-list">${section(
+            "Dropdown",
+            `<div class="shortcut" data-row>${this.keyButton("dropdown", hotkey, off)}<span>${t("settings.dropdownKey")}${
+              layout.dropdown ? "" : ` <span class="dim">${t("settings.dropdownKeyOff")}</span>`
+            }${
+              layout.dropdownHotkey && layout.dropdownHotkey !== DEFAULT_HOTKEY()
+                ? ` <button class="reset" data-unbind="dropdown" title="${t("settings.default")}">↺</button>`
+                : ""
+            }</span></div>`,
+          )}${GROUPS.map((group) =>
+            section(
+              escapeHtml(groupLabel(group)),
+              BINDINGS.filter((b) => b.group === group)
+                .map(
+                  (b) =>
+                    `<div class="shortcut" data-row>${this.keyButton(b.id, keyText(b.id) || t("settings.noKey"))}<span>${escapeHtml(bindingLabel(b.id))}${
+                      layout.keys[b.id] ? ` <button class="reset" data-unbind="${b.id}" title="${t("settings.default")}">↺</button>` : ""
+                    }</span></div>`,
+                )
+                .join("") +
+                FIXED.filter((f) => f.group === group)
+                  .map(
+                    (f) =>
+                      `<div class="shortcut" data-row><kbd>${escapeHtml(shortcut(f.keys))}</kbd><span>${escapeHtml(t(f.label))} <span class="dim">${t("settings.fixed")}</span></span></div>`,
+                  )
+                  .join(""),
+            ),
+          ).join("")}</div>` +
+          section("", `<p class="dim small" data-row>${t("settings.escNote")}</p>`),
+      ],
+    ];
+    // Every group is in the page (the hidden ones too), so every field keeps its listener.
+    box.innerHTML = `
+      <div class="settings-head"><h2>${t("settings.title")}</h2></div>
+      <div class="settings-body">
+      <nav class="settings-nav">${panes
         .map(
-          (f) => `<div class="folder"><span>${escapeHtml(shortPath(f, this.ctx.home()))}</span><button data-rm="${escapeHtml(f)}">${t("common.remove")}</button></div>`,
+          ([id]) =>
+            `<button class="tab ${this.tab === id ? "sel" : ""}" data-tab="${id}"><span>${t(GROUP_NAMES[id])}</span><span class="count"></span></button>`,
         )
-        .join("")}<button data-k="add">${t("settings.addFolder")}</button></div>
-      <h3>${t("settings.coffee")} <span class="dim">(${escapeHtml(keyText("coffee"))})</span></h3>
-      <div class="line dim">${t("settings.coffeeGuard")} ${
-        this.ctx.coffee().helperInstalled
-          ? `${t("settings.coffeeHelper")} <button data-k="coffee-rm">${t("settings.coffeeRemove")}</button>`
-          : t("settings.coffeeAsk")
-      }</div>
-      <h3>${t("settings.thermal")}</h3>
-      <label class="line"><input type="checkbox" data-k="thermal-on" ${layout.thermalLimit ? "checked" : ""}/> ${t("settings.thermalOn")}</label>
-      <label class="line">${t("settings.thermalLimit")} <input type="number" min="${MIN_LIMIT}" max="${MAX_LIMIT}" step="1" value="${layout.thermalLimit || DEFAULT_LIMIT}" data-k="thermal-limit" ${layout.thermalLimit ? "" : "disabled"}/> °C</label>
-      <p class="dim small">${t("settings.thermalAbout")}</p>
-      <h3>${t("settings.updates")}</h3>
-      <div class="line"><span class="dim">desk <span data-k="version"></span> · ${t("settings.updatesHow")}</span> <button data-k="update">${t("settings.checkNow")}</button></div>
+        .join("")}</nav>
+      <div class="settings-panes">${panes
+        .map(
+          ([id, html]) =>
+            `<div class="pane" data-pane="${id}" ${this.tab === id ? "" : "hidden"}><h2 class="pane-title">${t(GROUP_NAMES[id])}</h2>${html}</div>`,
+        )
+        .join("")}</div>
       </div>
-      <div class="pane" data-pane="dropdown" ${this.tab === "dropdown" ? "" : "hidden"}>
-      <label class="line"><input type="checkbox" data-k="dropdown" ${layout.dropdown ? "checked" : ""}/> ${t("settings.dropdownOn", { hotkey: escapeHtml(hotkey) })}</label>
-      <p class="dim small">${t("settings.dropdownAbout", { hotkey: escapeHtml(hotkey) })}</p>
-      <label class="line">${t("settings.height")} <input type="number" min="20" max="100" step="5" value="${layout.dropdownHeight}" data-k="dropdown-height" ${off}/> ${t("settings.heightUnit")} <span class="dim">${t("settings.heightHint")}</span></label>
-      <label class="line">${t("settings.animation")} <input type="number" min="0" max="1000" step="50" value="${layout.dropdownAnimation}" data-k="dropdown-animation" ${off}/> ms <span class="dim">${t("settings.animationHint")}</span></label>
-      <label class="line"><input type="checkbox" data-k="dropdown-autohide" ${layout.dropdownAutohide ? "checked" : ""} ${off}/> ${t("settings.autohide")}</label>
-      </div>
-      <div class="pane" data-pane="keys" ${this.tab === "keys" ? "" : "hidden"}>
-      <p class="dim small">${t("settings.keysAbout")}</p>
-      <div class="shortcut-list"><div class="group">Dropdown</div>${this.keyButton("dropdown", hotkey, off)}<span>${t("settings.dropdownKey")}${
-        layout.dropdown ? "" : ` <span class="dim">${t("settings.dropdownKeyOff")}</span>`
-      }${
-        layout.dropdownHotkey && layout.dropdownHotkey !== DEFAULT_HOTKEY()
-          ? ` <button class="reset" data-unbind="dropdown" title="${t("settings.default")}">↺</button>`
-          : ""
-      }</span>${GROUPS.map(
-        (group) =>
-          `<div class="group">${escapeHtml(groupLabel(group))}</div>` +
-          BINDINGS.filter((b) => b.group === group)
-            .map(
-              (b) =>
-                `${this.keyButton(b.id, keyText(b.id) || t("settings.noKey"))}<span>${escapeHtml(bindingLabel(b.id))}${
-                  layout.keys[b.id] ? ` <button class="reset" data-unbind="${b.id}" title="${t("settings.default")}">↺</button>` : ""
-                }</span>`,
-            )
-            .join("") +
-          FIXED.filter((f) => f.group === group)
-            .map((f) => `<kbd>${escapeHtml(shortcut(f.keys))}</kbd><span>${escapeHtml(t(f.label))} <span class="dim">${t("settings.fixed")}</span></span>`)
-            .join(""),
-      ).join("")}</div>
-      <p class="dim small">${t("settings.escNote")}</p>
-      </div>
-      <p class="dim small">${t("settings.where", { path: "~/Library/Application Support/desk/layout.json", sessions: "tmux -L desk ls" })}</p>`;
+      <p class="dim small settings-foot">${t("settings.where", { path: "~/Library/Application Support/desk/layout.json", sessions: "tmux -L desk ls" })}</p>`;
 
     box.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((b) =>
       b.addEventListener("click", () => {
-        this.tab = b.dataset.tab as typeof this.tab;
+        this.tab = b.dataset.tab as Group;
         this.recording = null;
         this.render();
-        box.scrollTop = 0;
       }),
     );
 
@@ -468,6 +579,12 @@ export class Settings {
       this.ctx.setLanguage((e.target as HTMLSelectElement).value as Language);
       this.render();
     });
+    box.querySelectorAll<HTMLButtonElement>("[data-link-click]").forEach((b) =>
+      b.addEventListener("click", () => {
+        this.ctx.setLinkClick(b.dataset.linkClick as LinkClick);
+        this.render();
+      }),
+    );
     box.querySelector<HTMLSelectElement>('[data-k="browser"]')!.addEventListener("change", (e) => {
       this.ctx.setBrowser((e.target as HTMLSelectElement).value);
     });

@@ -294,7 +294,7 @@ export class App {
       if (a === "restore") void this.restoreSleep();
       const t = (e.target as HTMLElement).closest<HTMLElement>("[data-top]")?.dataset.top;
       if (t === "browser") this.side.browse();
-      if (t === "thermal") void this.settings.toggle();
+      if (t === "thermal") void this.settings.toggle("power");
       if (t === "update") void this.installUpdate();
       if (t === "leave") void api.dropdownLeave();
       if (t === "quit") void this.quit();
