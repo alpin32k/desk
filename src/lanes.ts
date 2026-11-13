@@ -4,6 +4,15 @@
 export type Lanes = string[][];
 export type ProjectOf = (key: string) => string;
 
+/**
+ * How a card lays its sessions out. Tabs and side by side need two sessions:
+ * a card down to one stacks it, so the session can fold (tabs always show one
+ * unfolded). The chosen mode stays in the layout and returns with a second session.
+ */
+export function cardLayout<M extends string>(mode: M, sessions: number): M | "stack" {
+  return sessions > 1 ? mode : "stack";
+}
+
 export function clone(lanes: Lanes): Lanes {
   return lanes.map((l) => [...l]);
 }

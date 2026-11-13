@@ -972,7 +972,7 @@ export class App {
         if (j > 0) items.push(splitLine("h", () => this.changed()));
         const project = this.projectOf(keys[0]);
         const card = this.card(project);
-        const mode: CardMode = shown ? "stack" : (this.layout.modes[project] ?? "stack");
+        const mode: CardMode = shown ? "stack" : L.cardLayout(this.layout.modes[project] ?? "stack", keys.length);
         const unfolded = this.fillCard(card, project, keys, mode, shown);
         if (mode === "stack" && unfolded > 1) stacked.push({ card, project, keys, open: unfolded });
         unfoldedHere += unfolded;
