@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileLinks, rowLinks, type Row, linkTarget } from "./links";
+import { fileLinks, rowLinks, type Row, linkTarget, webLink } from "./links";
 
 describe("fileLinks", () => {
   it("finds absolute paths to previewable files", () => {
@@ -108,5 +108,25 @@ describe("linkTarget", () => {
   it("an unknown mode is desk", () => {
     expect(linkTarget("", none)).toBe("desk");
     expect(linkTarget("whatever", alt)).toBe("browser");
+  });
+});
+
+describe("webLink", () => {
+  it("passes http and https addresses", () => {
+    expect(webLink("https://example.com/a?b=1#c")).toBe("https://example.com/a?b=1#c");
+    expect(webLink("http://localhost:5173")).toBe("http://localhost:5173/");
+    expect(webLink("  HTTPS://Example.com  ")).toBe("https://example.com/");
+  });
+
+  it("refuses every other scheme", () => {
+    for (const uri of ["file:///etc/passwd", "javascript:alert(1)", "mailto:a@b.c", "vscode://file/x", "data:text/html,x", "ssh://host"]) {
+      expect(webLink(uri)).toBeNull();
+    }
+  });
+
+  it("refuses what is not an address", () => {
+    expect(webLink("")).toBeNull();
+    expect(webLink("docs/plan.md")).toBeNull();
+    expect(webLink("//example.com")).toBeNull();
   });
 });

@@ -116,3 +116,17 @@ export function linkTarget(mode: string, keys: { alt: boolean; mod: boolean }): 
   if (mode === "none") return keys.alt ? "browser" : keys.mod ? "desk" : null;
   return keys.alt ? "browser" : "desk";
 }
+
+/**
+ * A hyperlink sent by a program (OSC 8) as an address desk may open: http
+ * and https only. Whatever writes to the terminal picks the target and the
+ * text shown for it, so file:, javascript:, app schemes... are refused.
+ */
+export function webLink(uri: string): string | null {
+  try {
+    const url = new URL(uri.trim());
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}

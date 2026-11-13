@@ -17,7 +17,7 @@ import { stripProbeReplies } from "./input";
 import { DEFAULT_THEME, terminalTheme, themeById } from "./themes";
 import { PLATFORM } from "./platform";
 import { actionFor, keysIn } from "./keys";
-import { linkTarget, rowLinks, type Row } from "./links";
+import { linkTarget, rowLinks, webLink, type Row } from "./links";
 import { agentLabel, keyOf, type Spec } from "./sessions";
 
 /** Rows looked at above and below a hovered one for a wrapped path. */
@@ -245,8 +245,14 @@ export class Tile {
           : preview(uri);
       p.catch((err) => this.term.write(`\r\n\x1b[33m${err}\x1b[0m\r\n`));
     };
-    // Hyperlinks a program sends (OSC 8) follow the same setting.
-    this.term.options.linkHandler = { activate: (e, uri) => openLink(e, uri) };
+    // Hyperlinks a program sends (OSC 8) follow the same setting, web
+    // addresses only: the program picks both the target and the text shown.
+    this.term.options.linkHandler = {
+      activate: (e, uri) => {
+        const url = webLink(uri);
+        if (url) openLink(e, url);
+      },
+    };
     this.term.loadAddon(new WebLinksAddon(openLink));
     this.term.registerLinkProvider({
       provideLinks: (y, callback) => {
