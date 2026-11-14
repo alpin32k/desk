@@ -39,6 +39,12 @@ ma się dziać przy przegrzaniu (zwalniać, kręcić, jedno i drugie), wybiera s
 
 ## Czego nie wolno zepsuć (anty-cele)
 
+- **Wiatraki tylko na wyraźne życzenie użytkownika** (zasada właściciela). Domyślnie desk ich nie
+  rusza i nie instaluje helpera: ani przy pierwszym uruchomieniu, ani przy migracji starego
+  `layout.json`, ani przy aktualizacji. Nic nie podsuwa włączenia (żadnych toastów ani podpowiedzi
+  zachęcających). Helper i reguła sudo powstają wyłącznie po tym, jak użytkownik sam wybierze
+  w Opcjach tryb z wiatrakami i poda hasło.
+
 - **Wiatraki nie mogą zostać w trybie ręcznym, gdy desk już nimi nie steruje**: po zamknięciu desk,
   po wysypaniu się (także `kill -9`), po wyłączeniu trybu w Opcjach, po usunięciu zgody. Ręczny tryb
   na maksimum jest bezpieczny dla sprzętu, ale głośny i zjada baterię; ręczny tryb z niskimi

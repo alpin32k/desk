@@ -12,6 +12,7 @@ pub mod discovery;
 pub mod drag;
 pub mod dropdown;
 pub mod env;
+pub mod fan_control;
 pub mod git;
 pub mod github;
 pub mod hooks;

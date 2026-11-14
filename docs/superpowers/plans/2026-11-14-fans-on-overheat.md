@@ -12,6 +12,8 @@
 
 ## Global Constraints
 
+- **Fans only at the user's explicit request (owner's rule).** By default desk never touches the fans and never installs the helper: not on first launch, not when migrating an old `layout.json`, not on update. Nothing nudges the user toward it. The helper and the sudoers rule come into existence only after the user picks a fan mode in Options and enters the password.
+
 - Worktree `/Users/alpinem3/Projects/desk-dropdown.worktrees/fans`, branch `feat/fans-on-overheat` (from `upstream/main`). Commit subject in English, in the repo's sentence style ("The usage chip is a button…"), body in Polish. No AI attribution anywhere.
 - Code and comments in English. UI text only through `src/locales/pl.ts` and `en.ts`. Rust messages through `tr!`, except in the files the helper shares (`fan_control.rs`, `smc.rs`), which use plain English.
 - Helper installed at `/Library/PrivilegedHelperTools/pl.makarowski.desk.fans` (`root:wheel`, `0755`). Rule at `/etc/sudoers.d/desk-fans` (`0440`), exactly: `<user> ALL=(root) NOPASSWD: <helper> max, <helper> auto`.
