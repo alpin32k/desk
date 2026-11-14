@@ -129,8 +129,9 @@ describe("history charts", () => {
     expect(pct.slice(28, 32)).toEqual([40, 40, 95, 95]);
     expect(pct.slice(32, 44).every((p) => p === 0)).toBe(true);
     expect(pct.slice(44)).toEqual([10, 10, 10, 10]);
-    expect(bars[30].level).toBe("high");
+    expect(bars[30].level).toBe("warn");
     expect(bars[28].level).toBe("");
+    expect(bars24h([sample(s - H, 100, s + H)], now)[47].level).toBe("high");
   });
 
   it("marks the resets of the last 24 hours", () => {

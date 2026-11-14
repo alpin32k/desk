@@ -66,8 +66,8 @@ export function severityLevel(severity: string | null, percent: number): Level {
   return level(percent);
 }
 
-/** "dziś ok. 21:00" or "pt ok. 9:30", local time. */
-function when(at: number, nowMs: number): string {
+/** "dziś ok. 21:00" or "pt ok. 09:30", local time. */
+export function around(at: number, nowMs: number): string {
   const d = new Date(at * 1000);
   const time = d.toLocaleTimeString(language(), { hour: "2-digit", minute: "2-digit" });
   if (d.toDateString() === new Date(nowMs).toDateString()) return t("usage.endsToday", { time });
@@ -88,7 +88,7 @@ export function chipState(u: Usage, nowMs: number): { level: Level; dot: boolean
     const f = length === null ? null : forecast(used, resetsAt, length, nowMs);
     if (f?.endsAt == null) return;
     hidden = worse(hidden, "warn");
-    reasons.push(t("usage.reasonForecast", { label, time: when(f.endsAt, nowMs) }));
+    reasons.push(t("usage.reasonForecast", { label, time: around(f.endsAt, nowMs) }));
   };
   for (const w of u.windows) {
     shown = worse(shown, severityLevel(w.severity, w.usedPercent));
@@ -111,6 +111,13 @@ function fiveHour(history: LimitSample[]): LimitSample[] {
   return history.filter((h) => h.label === "5h").sort((a, b) => a.t - b.t);
 }
 
+/** A history bar's color: red only at the limit itself. */
+export function barLevel(percent: number): Level {
+  if (percent >= 100) return "high";
+  if (percent >= 70) return "warn";
+  return "";
+}
+
 /**
  * The last 24 hours of the 5h window in 48 half-hour bars, oldest first:
  * the highest reading in each, the last one carried on until its window
@@ -125,7 +132,7 @@ export function bars24h(history: LimitSample[], nowMs: number): { percent: numbe
     const before = samples.filter((x) => x.t < from).pop();
     let percent = before && before.resets > from ? before.pct : 0;
     for (const x of samples) if (x.t >= from && x.t < to) percent = Math.max(percent, x.pct);
-    return { percent, level: level(percent) };
+    return { percent, level: barLevel(percent) };
   });
 }
 
