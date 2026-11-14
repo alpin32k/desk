@@ -68,8 +68,12 @@ Zapis do wiatraków (klucze SMC) wymaga roota. Rozważone drogi:
 
 ### Helper `desk-fans`
 
-- Osobny, mały program w Ruście w tym samym crate (`src-tauri/src/bin/desk-fans.rs`), bez
-  zależności poza IOKit (FFI jak w `thermal.rs`). Nie linkuje `desk_lib`.
+- Osobny, mały program w Ruście, we własnym crate `src-tauri/fans-helper/` (z pustym `[workspace]`,
+  więc nie wchodzi do buildu desk), bez zależności poza IOKit i `libc`. Nie linkuje `desk_lib`, tylko
+  włącza przez `#[path]` dwa pliki, których używa też desk: logikę wiatraków (`fan_control.rs`)
+  i dostęp do SMC (`smc.rs`). Własny crate zamiast `src/bin/` (zmiana przy planowaniu): bundler
+  Tauri pakuje każdy bin z `src/bin/` na wszystkich systemach, a helper ma trafić tylko do paczki
+  macOS.
 - Komendy (jedyny argument):
   - `max`: wszystkie wiatraki (`FNum`) na maksimum (`FnMx`).
   - `auto`: wszystkie wiatraki z powrotem w trybie automatycznym.
@@ -88,8 +92,9 @@ Zapis do wiatraków (klucze SMC) wymaga roota. Rozważone drogi:
 - Kod wyjścia 0 tylko wtedy, gdy po zapisie odczyt potwierdza stan (tryb ręczny i cel = maksimum,
   albo tryb auto). Gdy `max` się nie uda w połowie, helper sam robi `auto` przed wyjściem z błędem.
   Błąd: krótki komunikat na stderr, który desk pokazuje w podpowiedzi.
-- Na Linuksie i Windows helper kompiluje się jako zaślepka (wypisuje „unsupported”, kod błędu), bo
-  `check.yml` buduje `cargo clippy --all-targets` na wszystkich trzech systemach.
+- Na Linuksie i Windows helper kompiluje się jako zaślepka (wypisuje „unsupported”, kod błędu).
+  `fan_control.rs` jest czysty i kompiluje się wszędzie, `smc.rs` tylko na macOS, więc
+  `cargo clippy --all-targets` w `check.yml` dalej przechodzi.
 
 ### Które Maki (decyzja: sprawdzenie kluczy, nie lista modeli)
 
@@ -128,13 +133,13 @@ Zapis do wiatraków (klucze SMC) wymaga roota. Rozważone drogi:
 ### Skąd desk bierze helper do instalacji
 
 - W paczce: obok binarki desk (`Contents/MacOS/desk-fans`), czyli
-  `current_exe().parent().join("desk-fans")`. W `pnpm tauri dev` to samo miejsce
-  (`target/debug/desk-fans`), bo cargo buduje wszystkie biny crate'u.
-- Jak trafia do paczki (externalBin w osobnym configu tylko dla macOS i krok w `release.yml` jak dla
-  tmux, albo `bundle.macOS.files` ze ścieżką do `target/<triple>/release/desk-fans`): decyzja
-  buildera. Warunki: nie przez `tauri.tmux.conf.json` (dzieli go AppImage na Linuksie), build na
-  Linuksie i Windows się nie zmienia, `Cargo.toml` dostaje `default-run = "desk"` (albo
-  równoważne). Sumy SHA-256 nie trzeba wbudowywać w czasie budowania (zob. Instalacja).
+  `current_exe().parent().join("desk-fans")`. W buildzie debug desk patrzy też do
+  `src-tauri/binaries/desk-fans-aarch64-apple-darwin`.
+- Jak trafia do paczki (ustalone w planie): skrypt `.github/build-fans.sh <triple>` buduje helper do
+  `src-tauri/binaries/desk-fans-<triple>`, a osobny config tylko dla macOS
+  (`tauri.mac-bundle.conf.json`: externalBin tmux i desk-fans) zastępuje w `release.yml` dla macOS
+  `tauri.tmux.conf.json` (ten dzieli AppImage na Linuksie). Build na Linuksie i Windows się nie
+  zmienia. Sumy SHA-256 nie trzeba wbudowywać w czasie budowania (zob. Instalacja).
 
 ## Decyzja: kiedy wiatraki, kiedy zwalnianie
 
@@ -265,7 +270,6 @@ propozycje przy spisywaniu:
 
 - Dokładna sekwencja zapisu SMC i typy kluczy (sprawdzić w kodzie Statsa i na sprzęcie), w
   granicach z sekcji „Helper”.
-- Jak helper trafia do paczki (externalBin czy `bundle.macOS.files`).
 - Czy stan zgody idzie nową komendą, czy w `thermal_status`.
 - Układ przełącznika pięciu trybów, jeśli nie mieści się w jednym wierszu.
 - Podział kodu między `thermal.rs`, nowy `fans.rs` i wspólne części z `coffee.rs`.
