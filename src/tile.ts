@@ -9,6 +9,7 @@ import { toast } from "./ui";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { pinAtlasCanvas } from "./atlas-font";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { linkClickMode, openOutside, preview, previewFile } from "./side";
@@ -332,7 +333,12 @@ export class Tile {
           gl.dispose();
           this.webgl = null;
         });
+        // Every new atlas (first one, font size, theme, display scale) starts with
+        // its scratch canvas outside the document: see atlas-font.ts. The event
+        // fires before the addon stores the atlas, hence the microtask.
+        gl.onChangeTextureAtlas(() => queueMicrotask(() => pinAtlasCanvas(gl, this.body)));
         this.term.loadAddon(gl);
+        pinAtlasCanvas(gl, this.body);
         this.webgl = gl;
         webglBudget--;
       } catch {
