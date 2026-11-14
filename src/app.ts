@@ -47,7 +47,7 @@ import { backgroundBox, choiceBox, confirmBox, newProjectBox, pickBox, toast, ty
 import { conversationBox } from "./conversationbox";
 import { setSaved, syncTile } from "./saved";
 import { usageHtml } from "./usage";
-import { DEFAULT_LIMIT, slowing, thermalHtml } from "./thermal";
+import { DEFAULT_FAN_LIMIT, DEFAULT_LIMIT, slowing, thermalHtml } from "./thermal";
 import { accountById, accountColor, accountFor, hasAccounts } from "./accounts";
 
 const POLL_MS = 3000;
@@ -349,7 +349,9 @@ export class App {
       dropdownAnimation: boot.layout.dropdownAnimation ?? 200,
       keys: boot.layout.keys ?? {},
       tmuxMenu: boot.layout.tmuxMenu ?? false,
+      thermalMode: boot.layout.thermalMode ?? "slow",
       thermalLimit: boot.layout.thermalLimit ?? DEFAULT_LIMIT,
+      fanLimit: boot.layout.fanLimit ?? DEFAULT_FAN_LIMIT,
       language,
       lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length),
     };

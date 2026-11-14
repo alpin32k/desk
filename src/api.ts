@@ -76,9 +76,16 @@ export interface Layout {
   tileAccounts: Record<string, string>;
   /** The account new Claude sessions of a project use, by project path. */
   projectAccounts: Record<string, string>;
-  /** Slow the sessions while the CPU is hotter than this, °C; 0: never (thermal.ts). */
+  /** What desk does when hot (thermal.ts, thermal.rs Mode). */
+  thermalMode: ThermalMode;
+  /** Slow the sessions while the CPU is hotter than this, °C (thermal.ts). */
   thermalLimit: number;
+  /** Fans at full speed from this, °C, in mode "fansFirst" (fans.rs). */
+  fanLimit: number;
 }
+
+/** What desk does when hot: nothing, slow its sessions, the fans at full speed, or both. */
+export type ThermalMode = "off" | "slow" | "fansFirst" | "together" | "fans";
 
 /** A Claude Code config folder with its own login (accounts.rs). */
 export interface ClaudeAccount {
@@ -205,14 +212,36 @@ export interface CoffeeStatus {
 export interface ThermalStatus {
   /** Hottest CPU sensor, °C; null when desk cannot read one here. */
   celsius: number | null;
-  /** From Options; 0: never slow. */
+  /** Slowing limit; 0: this mode never slows. */
   limit: number;
+  /** Fan limit; 0: this mode never uses the fans. */
+  fanLimit: number;
   /** Too hot: desk is slowing its sessions. */
   slowed: boolean;
   /** Processes slowed (the sessions and everything they started). */
   processes: number;
   /** Why desk cannot slow anything here, if it cannot. */
   cannotSlow: string | null;
+  /** The fans, when the mode uses them. */
+  fans: FanStatus | null;
+}
+
+/** The fans while a mode uses them (fans.rs). */
+export interface FanStatus {
+  /** desk has them at full speed. */
+  forced: boolean;
+  /** The fastest fan now. */
+  rpm: number | null;
+  maxRpm: number | null;
+  /** Why desk is not driving them while it wants to. */
+  problem: string | null;
+}
+
+/** For Options: can desk drive this Mac's fans, and is the permission installed. */
+export interface FanInfo {
+  /** Why the fan modes are greyed out, if they are. */
+  unsupported: string | null;
+  consent: "missing" | "outdated" | "installed";
 }
 
 export interface UsageWindow {
@@ -282,6 +311,10 @@ export const api = {
   ptyResize: (id: number, cols: number, rows: number) => invoke<void>("pty_resize", { id, cols, rows }),
   ptyClose: (id: number) => invoke<void>("pty_close", { id }),
   thermalStatus: () => invoke<ThermalStatus>("thermal_status"),
+  fansInfo: () => invoke<FanInfo>("fans_info"),
+  /** The one admin password prompt for the fans. */
+  fansInstall: () => invoke<FanInfo>("fans_install"),
+  fansUninstall: () => invoke<FanInfo>("fans_uninstall"),
   coffeeStatus: () => invoke<CoffeeStatus>("coffee_status"),
   coffeeSet: (level: CoffeeLevel) => invoke<CoffeeStatus>("coffee_set", { level }),
   coffeeRestore: () => invoke<CoffeeStatus>("coffee_restore"),
