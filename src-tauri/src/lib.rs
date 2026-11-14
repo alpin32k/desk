@@ -24,6 +24,7 @@ pub mod new_project;
 #[cfg(target_os = "linux")]
 mod pam;
 pub mod preview;
+pub mod pricing;
 pub mod project;
 pub mod prompt_ai;
 pub mod pty;
@@ -37,6 +38,7 @@ pub mod usage;
 pub mod usage_history;
 pub mod usage_sessions;
 pub mod usage_share;
+pub mod usage_transcripts;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};

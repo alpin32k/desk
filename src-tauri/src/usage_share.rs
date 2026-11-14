@@ -4,7 +4,9 @@
 //! (mode "transcripts", usage_transcripts.rs).
 
 use crate::usage_history::CostSample;
+use crate::usage_sessions::SessionStatus;
 use serde::Serialize;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -38,7 +40,7 @@ pub fn from_costs(costs: &[CostSample], account: Option<&str>, window_start: u64
     }
     let recorded_before = recording_since.is_some_and(|r| r <= window_start);
     let mut incomplete = false;
-    let mut used: Vec<(String, f64)> = Vec::new();
+    let mut used: Vec<(Option<String>, String, f64)> = Vec::new();
     for samples in by_session.values_mut() {
         samples.sort_by_key(|c| c.t);
         let Some(last) = samples.last() else { continue };
@@ -53,20 +55,39 @@ pub fn from_costs(costs: &[CostSample], account: Option<&str>, window_start: u64
         };
         let delta = (last.cost - start).max(0.0);
         if delta > 0.0 {
-            used.push((last.slug.clone(), delta));
+            used.push((Some(last.slug.clone()), last.slug.clone(), delta));
         }
     }
     Share { mode: "cost".into(), rows: rows(used), incomplete }
 }
 
-/// Fractions of the total, largest first; `slug` set for desk sessions.
-fn rows(used: Vec<(String, f64)>) -> Vec<ShareRow> {
-    let total: f64 = used.iter().map(|u| u.1).sum();
-    let mut rows: Vec<ShareRow> = used
-        .into_iter()
-        .map(|(slug, x)| ShareRow { label: slug.clone(), slug: Some(slug), fraction: x / total })
+/// Each transcript's cost in the window: a desk session's (matched by its
+/// session id, the transcript's name) under its slug, the others summed per
+/// project folder. `account` picks the desk sessions to match.
+pub fn from_transcripts(costs: &HashMap<String, (f64, String)>, sessions: &[SessionStatus], account: &str) -> Share {
+    let slugs: HashMap<&str, &str> = sessions
+        .iter()
+        .filter(|s| s.account == account)
+        .map(|s| (s.session_id.as_str(), s.slug.as_str()))
         .collect();
-    rows.sort_by(|a, b| b.fraction.total_cmp(&a.fraction));
+    let mut used: HashMap<(Option<String>, String), f64> = HashMap::new();
+    for (path, (cost, folder)) in costs.iter().filter(|(_, (c, _))| *c > 0.0) {
+        let id = std::path::Path::new(path).file_stem().map(|s| s.to_string_lossy());
+        let key = match id.as_deref().and_then(|id| slugs.get(id)) {
+            Some(slug) => (Some(slug.to_string()), slug.to_string()),
+            None => (None, folder.clone()),
+        };
+        *used.entry(key).or_default() += cost;
+    }
+    Share { mode: "transcripts".into(), rows: rows(used.into_iter().map(|((s, l), x)| (s, l, x)).collect()), incomplete: false }
+}
+
+/// Fractions of the total, largest first; `slug` set for desk sessions.
+fn rows(used: Vec<(Option<String>, String, f64)>) -> Vec<ShareRow> {
+    let total: f64 = used.iter().map(|u| u.2).sum();
+    let mut rows: Vec<ShareRow> =
+        used.into_iter().map(|(slug, label, x)| ShareRow { slug, label, fraction: x / total }).collect();
+    rows.sort_by(|a, b| b.fraction.total_cmp(&a.fraction).then_with(|| a.label.cmp(&b.label)));
     rows
 }
 
@@ -105,5 +126,42 @@ mod tests {
         let o = |t, cost| CostSample { t, session: "o".into(), slug: "o".into(), account: Some("own".into()), cost };
         let s = from_costs(&[w(900, 1.0), w(1500, 3.0), o(900, 1.0), o(1500, 9.0)], Some("work"), 1000, Some(800));
         assert_eq!(s.rows, vec![ShareRow { slug: Some("w".into()), label: "w".into(), fraction: 1.0 }]);
+    }
+
+    fn session(slug: &str, id: &str, account: &str) -> SessionStatus {
+        SessionStatus {
+            slug: slug.into(),
+            session_id: id.into(),
+            transcript: format!("/h/.claude/projects/-p/{id}.jsonl"),
+            account: account.into(),
+            model: String::new(),
+            model_id: String::new(),
+            effort: None,
+            fast: false,
+            cost: 0.0,
+            context_percent: None,
+            cache_warm: None,
+            cache_expires_at: None,
+            recache_tokens: None,
+        }
+    }
+
+    #[test]
+    fn share_from_transcripts() {
+        let costs: HashMap<String, (f64, String)> = [
+            ("/h/.claude/projects/-p/aaa.jsonl", 3.0, "desk"),
+            ("/h/.claude/projects/-q/bbb.jsonl", 1.0, "crm"),
+            ("/h/.claude/projects/-q/ccc.jsonl", 0.5, "crm"),
+            ("/h/.claude/projects/-r/ddd.jsonl", 0.5, "shop"),
+        ]
+        .into_iter()
+        .map(|(p, c, d)| (p.to_string(), (c, d.to_string())))
+        .collect();
+        let sessions = [session("desk-1", "aaa", "default"), session("crm-1", "ddd", "work")];
+        let s = from_transcripts(&costs, &sessions, "default");
+        assert_eq!(s.mode, "transcripts");
+        assert!(!s.incomplete);
+        let got: Vec<_> = s.rows.iter().map(|r| (r.slug.as_deref(), r.label.as_str(), r.fraction)).collect();
+        assert_eq!(got, [(Some("desk-1"), "desk-1", 0.6), (None, "crm", 0.3), (None, "shop", 0.1)]);
     }
 }
