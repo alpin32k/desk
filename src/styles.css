@@ -103,8 +103,22 @@ button:hover {
   line-height: 18px;
   border: 1px solid var(--line-hi);
   border-radius: 4px;
+  background: none;
   color: var(--dim);
+  font: inherit;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+/* the color comes from a limit the text does not show (a model, the pace) */
+.usage .dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 1px;
 }
 
 .usage .reset {
@@ -119,6 +133,10 @@ button:hover {
 .usage.high {
   color: var(--danger);
   border-color: var(--danger);
+}
+
+.usage[aria-expanded="true"] {
+  border-color: var(--accent);
 }
 
 .top-btn {

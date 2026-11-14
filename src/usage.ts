@@ -2,7 +2,7 @@
 // The numbers come from the agents' own local files (see src-tauri/src/usage.rs).
 import type { Usage } from "./api";
 import { t } from "./i18n";
-import { level } from "./usage-stats";
+import { chipState, level } from "./usage-stats";
 
 export { level };
 
@@ -31,23 +31,33 @@ function escapeHtml(s: string): string {
 /** How the top bar names a Claude account (its name and color, accounts.ts). */
 export type AccountLabel = (id: string) => { name: string; color: string } | null;
 
+/** Which chip (and popover) a reading belongs to: agent and account. */
+export function chipId(u: Usage): string {
+  return `${u.agent}:${u.account ?? ""}`;
+}
+
+/** The chips: buttons opening the usage popover, colored by every limit (usage-stats.ts chipState). */
 export function usageHtml(list: Usage[], nowMs: number, account: AccountLabel = () => null): string {
   return list
     .filter((u) => u.windows.length)
     .map((u) => {
-      const worst = Math.max(...u.windows.map((w) => w.usedPercent));
+      const state = chipState(u, nowMs);
       const parts = u.windows
         .map((w) => `${w.label} ${Math.round(w.usedPercent)}% <span class="reset">↻${shortReset(w.resetsAt, nowMs)}</span>`)
         .join(" · ");
-      const title = u.windows
+      const lines = u.windows
         .map((w) => t("usage.window", { label: w.label, percent: w.usedPercent.toFixed(1), time: resetsIn(w.resetsAt, nowMs) }))
+        .concat(state.reasons.map(escapeHtml))
         .join("\n");
+      const dot = state.dot ? '<i class="dot"></i>' : "";
+      const open = (title: string) =>
+        `<button class="usage ${state.level}" data-usage="${escapeHtml(chipId(u))}" aria-haspopup="dialog" title="${title}\n${lines}">`;
       const a = u.account ? account(u.account) : null;
       if (a) {
         const name = escapeHtml(a.name);
-        return `<span class="usage ${level(worst)}" title="${t("usage.limitAccount", { account: name })}\n${title}"><i class="acct" style="background:${a.color}"></i><b>${name}</b> ${parts}</span>`;
+        return `${open(t("usage.limitAccount", { account: name }))}<i class="acct" style="background:${a.color}"></i><b>${name}</b> ${parts}${dot}</button>`;
       }
-      return `<span class="usage ${level(worst)}" title="${t("usage.limit", { agent: u.agent })}\n${title}">${u.agent} ${parts}</span>`;
+      return `${open(t("usage.limit", { agent: u.agent }))}${u.agent} ${parts}${dot}</button>`;
     })
     .join("");
 }
