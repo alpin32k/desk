@@ -2,7 +2,18 @@
 // hand-added folders.
 import { getVersion } from "@tauri-apps/api/app";
 import { DEFAULT_THEME, THEMES } from "./themes";
-import { api, type AccountInfo, type AgentInfo, type ClaudeAccount, type CoffeeStatus, type Layout, type Project, type PromptAi } from "./api";
+import {
+  api,
+  type AccountInfo,
+  type AgentInfo,
+  type ClaudeAccount,
+  type CoffeeStatus,
+  type Layout,
+  type Project,
+  type PromptAi,
+  type UsageLayout,
+  type UsageShare,
+} from "./api";
 import { accountColor, withAccount, withoutAccount } from "./accounts";
 import type { LinkClick } from "./links";
 import { shortcut } from "./platform";
@@ -25,6 +36,10 @@ export interface SettingsContext {
   setBrowser: (id: string) => void;
   /** What a plain click on a terminal link does (links.ts). */
   setLinkClick: (mode: LinkClick) => void;
+  /** The usage popover's layout (Options, AI stats). */
+  setUsageLayout: (v: UsageLayout) => void;
+  /** How a session's share of the 5-hour window is worked out. */
+  setUsageShare: (v: UsageShare) => void;
   setFontSize: (px: number) => void;
   setLanguage: (id: Language) => void;
   setDropdown: (
@@ -52,7 +67,7 @@ export interface SettingsContext {
 }
 
 /** The groups of Options, in the sidebar's order. */
-export type Group = "general" | "look" | "window" | "terminal" | "projects" | "claude" | "power" | "keys";
+export type Group = "general" | "look" | "window" | "terminal" | "projects" | "claude" | "stats" | "power" | "keys";
 
 const GROUP_NAMES: Record<Group, MessageKey> = {
   general: "settings.general",
@@ -61,6 +76,7 @@ const GROUP_NAMES: Record<Group, MessageKey> = {
   terminal: "settings.terminal",
   projects: "settings.projects",
   claude: "settings.claude",
+  stats: "settings.stats",
   power: "settings.power",
   keys: "settings.keys",
 };
@@ -330,6 +346,8 @@ export class Settings {
     const hotkey = hotkeyLabel(layout.dropdownHotkey || DEFAULT_HOTKEY());
     const off = layout.dropdown ? "" : "disabled";
     const linkClick: LinkClick = layout.linkClick === "browser" || layout.linkClick === "none" ? layout.linkClick : "desk";
+    const usageLayout: UsageLayout = layout.usageLayout === "all" ? "all" : "tabs";
+    const usageShare: UsageShare = layout.usageShare === "transcripts" ? "transcripts" : "cost";
     const linkHint = t(
       linkClick === "browser" ? "settings.linkClickHintBrowser" : linkClick === "none" ? "settings.linkClickHintNone" : "settings.linkClickHintDesk",
     );
@@ -488,6 +506,29 @@ export class Settings {
       </div>`,
             "row",
           ),
+      ],
+      [
+        "stats",
+        section(
+          "",
+          `<p class="dim small">${t("settings.statsAbout")}</p>
+      <div class="line" data-row><span>${t("settings.usageLayout")}</span><span class="seg">${(
+        [
+          ["tabs", t("settings.usageLayoutTabs")],
+          ["all", t("settings.usageLayoutAll")],
+        ] as const
+      )
+        .map(([v, label]) => `<button class="${usageLayout === v ? "sel" : ""}" data-usage-layout="${v}">${label}</button>`)
+        .join("")}</span></div>
+      <div class="line" data-row><span>${t("settings.usageShare")}</span><span class="seg">${(
+        [
+          ["cost", t("settings.usageShareCost")],
+          ["transcripts", t("settings.usageShareTranscripts")],
+        ] as const
+      )
+        .map(([v, label]) => `<button class="${usageShare === v ? "sel" : ""}" data-usage-share="${v}">${label}</button>`)
+        .join("")}</span><span class="dim">${t(usageShare === "transcripts" ? "settings.usageShareHintTranscripts" : "settings.usageShareHintCost")}</span></div>`,
+        ),
       ],
       [
         "power",
@@ -654,6 +695,18 @@ export class Settings {
       this.ctx.setLanguage((e.target as HTMLSelectElement).value as Language);
       this.render();
     });
+    box.querySelectorAll<HTMLButtonElement>("[data-usage-layout]").forEach((b) =>
+      b.addEventListener("click", () => {
+        this.ctx.setUsageLayout(b.dataset.usageLayout === "all" ? "all" : "tabs");
+        this.render();
+      }),
+    );
+    box.querySelectorAll<HTMLButtonElement>("[data-usage-share]").forEach((b) =>
+      b.addEventListener("click", () => {
+        this.ctx.setUsageShare(b.dataset.usageShare === "transcripts" ? "transcripts" : "cost");
+        this.render();
+      }),
+    );
     box.querySelectorAll<HTMLButtonElement>("[data-link-click]").forEach((b) =>
       b.addEventListener("click", () => {
         this.ctx.setLinkClick(b.dataset.linkClick as LinkClick);

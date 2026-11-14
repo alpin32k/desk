@@ -47,6 +47,7 @@ import { backgroundBox, choiceBox, confirmBox, newProjectBox, pickBox, toast, ty
 import { conversationBox } from "./conversationbox";
 import { setSaved, syncTile } from "./saved";
 import { usageHtml } from "./usage";
+import { UsagePopover } from "./usage-popover";
 import { DEFAULT_LIMIT, slowing, thermalHtml } from "./thermal";
 import { accountById, accountColor, accountFor, hasAccounts } from "./accounts";
 
@@ -123,6 +124,8 @@ export class App {
   private footer: HTMLElement;
   private palette: Palette;
   private settings: Settings;
+  /** Details of a usage chip (usage-popover.ts), outside .top: renderChrome rewrites the bar. */
+  private usagePopover: UsagePopover;
 
   constructor(root: HTMLElement) {
     document.documentElement.dataset.platform = PLATFORM; // CSS: room for the macOS traffic lights
@@ -132,6 +135,25 @@ export class App {
       <footer class="bottom"></footer>`;
     this.top = root.querySelector(".top")!;
     this.grid = root.querySelector(".grid")!;
+    this.usagePopover = new UsagePopover(root, {
+      usage: () => this.usage,
+      layout: () => this.layout,
+      sessions: (statuses) =>
+        statuses.flatMap((status) => {
+          const tile = [...this.tiles.values()].find((t) => t.agent === "claude" && t.slug === status.slug);
+          if (!tile) return [];
+          const s = tile.summary();
+          const state = tile.state === "working" || tile.state === "waiting" ? tile.state : "idle";
+          return [{ slug: status.slug, key: tile.key, name: s.label ? `${s.name} · ${s.label}` : s.name, state, status }];
+        }),
+      details: (agent, account, share) => api.usageDetails(agent, account, share),
+      focus: (key) => this.setActive(key, true),
+      title: (u) => {
+        const a = u.account ? this.layout.claudeAccounts.find((x) => x.id === u.account) : undefined;
+        if (!a) return escapeHtml(t("usage.title", { agent: u.agent }));
+        return `<i class="acct" style="background:${accountColor(this.layout, a.id)}"></i>${escapeHtml(t("usage.title", { agent: a.name }))}`;
+      },
+    });
     // Opening, closing or resizing the panel changes the grid's width: lay out again.
     this.rail = root.querySelector(".rail")!;
     this.strip = root.querySelector(".strip")!;
@@ -202,6 +224,16 @@ export class App {
       setLinkClick: (mode) => {
         this.layout.linkClick = mode;
         this.save();
+      },
+      setUsageLayout: (v) => {
+        this.layout.usageLayout = v;
+        this.save();
+        this.usagePopover.refresh();
+      },
+      setUsageShare: (v) => {
+        this.layout.usageShare = v;
+        this.save();
+        this.usagePopover.refresh();
       },
       setDropdown: (change) => this.setDropdown(change),
       setKey: (id, accelerator) => {
@@ -299,6 +331,8 @@ export class App {
       if (t === "leave") void api.dropdownLeave();
       if (t === "quit") void this.quit();
       if (t === "background") void this.showBackground();
+      const chip = (e.target as HTMLElement).closest<HTMLElement>("[data-usage]")?.dataset.usage;
+      if (chip) this.usagePopover.toggle(chip);
     });
     const boot = await api.bootstrap();
     // First launch: the system's language, kept from now on.
@@ -350,6 +384,8 @@ export class App {
       keys: boot.layout.keys ?? {},
       tmuxMenu: boot.layout.tmuxMenu ?? false,
       thermalLimit: boot.layout.thermalLimit ?? DEFAULT_LIMIT,
+      usageLayout: boot.layout.usageLayout === "all" ? "all" : "tabs",
+      usageShare: boot.layout.usageShare === "transcripts" ? "transcripts" : "cost",
       language,
       lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length),
     };
@@ -1622,6 +1658,7 @@ export class App {
         .map(([k, label]) => `<span><kbd>${k}</kbd> ${escapeHtml(label)}</span>`)
         .join("")}</span><span class="counts"><b>${this.tiles.size}</b> sessions · <span class="c-working">${count("working")} working</span> · <span class="c-waiting">${waiting} waiting</span> · ${count("idle")} idle</span>${this.pinHtml()}`;
     this.renderHere();
+    this.usagePopover.refresh();
   }
 
   /** The active session at the start of the bottom bar, in its project's color. */

@@ -91,6 +91,54 @@ pub struct Window {
     pub used_percent: f64,
     /// Unix seconds.
     pub resets_at: u64,
+    /// Anthropic's own grading of the window: "normal", "warning" or "critical";
+    /// None when only the status line knew it.
+    pub severity: Option<String>,
+}
+
+/// A weekly limit of one model (Fable), on top of the plan's weekly one.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelLimit {
+    /// As Anthropic names it, "Fable".
+    pub name: String,
+    pub used_percent: f64,
+    /// Unix seconds.
+    pub resets_at: u64,
+    pub severity: Option<String>,
+    /// Points of the plan's weekly limit this model used, and the most it may use.
+    pub share_of_weekly: Option<f64>,
+    pub allowance_of_weekly: Option<f64>,
+}
+
+/// Resets on offer (Claude Code's `/limit-reset`); desk only shows them.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Resets {
+    /// The 5-hour window reset, once a week.
+    pub five_hour: Option<FiveHourReset>,
+    /// Saved resets that are not used up.
+    pub saved: Vec<SavedReset>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FiveHourReset {
+    pub available: bool,
+    /// Unix seconds.
+    pub next_available_at: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedReset {
+    pub label: String,
+    pub left: u32,
+    pub total: u32,
+    /// Unix seconds: use it by then.
+    pub ends_at: Option<u64>,
+    /// Works only at a usage limit.
+    pub requires_limit: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -100,9 +148,14 @@ pub struct Usage {
     /// The Claude account (accounts.rs) with two or more of them, else None.
     pub account: Option<String>,
     pub windows: Vec<Window>,
+    /// Weekly limits of single models (Claude only).
+    pub models: Vec<ModelLimit>,
+    /// Usage credits take over at a limit; None when unknown.
+    pub credits: Option<bool>,
+    pub resets: Option<Resets>,
 }
 
-fn now() -> u64 {
+pub fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
@@ -117,10 +170,13 @@ pub fn usage(agents: &[String], accounts: &[ClaudeAccount], state_dir: &Path, ho
         .flat_map(|a| match a.as_str() {
             "claude" => claude(state_dir, &accounts, home, now)
                 .into_iter()
-                .map(|(account, windows)| Usage {
+                .map(|c| Usage {
                     agent: a.clone(),
-                    account: split.then_some(account),
-                    windows,
+                    account: split.then_some(c.id),
+                    windows: c.windows,
+                    models: c.models,
+                    credits: c.credits,
+                    resets: c.resets,
                 })
                 .collect(),
             "codex" => codex(&home.join(".codex/sessions"), now)
@@ -128,6 +184,9 @@ pub fn usage(agents: &[String], accounts: &[ClaudeAccount], state_dir: &Path, ho
                     agent: a.clone(),
                     account: None,
                     windows,
+                    models: Vec::new(),
+                    credits: None,
+                    resets: None,
                 })
                 .into_iter()
                 .collect::<Vec<_>>(),
@@ -168,17 +227,133 @@ fn fetch_account(token: &str) -> Option<Value> {
     out.status.success().then(|| serde_json::from_slice(&out.stdout).ok())?
 }
 
-/// `five_hour` / `seven_day` from the usage answer.
+/// `five_hour` / `seven_day` from the usage answer, graded by its `limits`.
 pub fn account_windows(v: &Value, now: u64) -> Option<Vec<Window>> {
-    let w: Vec<Window> = [("five_hour", "5h"), ("seven_day", "7d")]
+    let w: Vec<Window> = [("five_hour", "5h", "session"), ("seven_day", "7d", "weekly_all")]
         .iter()
-        .filter_map(|(key, label)| {
+        .filter_map(|(key, label, kind)| {
             let x = v.get(key)?;
             let at = iso_seconds(x.get("resets_at")?.as_str()?)?;
-            window(label, x.get("utilization")?.as_f64()?, &Value::from(at), now)
+            let mut w = window(label, x.get("utilization")?.as_f64()?, &Value::from(at), now)?;
+            w.severity = limits(v)
+                .find(|l| l.get("kind").and_then(Value::as_str) == Some(kind))
+                .and_then(severity);
+            Some(w)
         })
         .collect();
     (!w.is_empty()).then_some(w)
+}
+
+/// The answer's `limits` array.
+fn limits(v: &Value) -> impl Iterator<Item = &Value> {
+    v.get("limits").and_then(Value::as_array).into_iter().flatten()
+}
+
+fn severity(limit: &Value) -> Option<String> {
+    limit.get("severity").and_then(Value::as_str).map(str::to_string)
+}
+
+fn seconds(v: Option<&Value>) -> Option<u64> {
+    iso_seconds(v?.as_str()?)
+}
+
+/// Weekly limits of single models: `limits` of kind `weekly_scoped`, with
+/// how much of the plan's week each used (`weekly_scoped_shares`).
+pub fn account_models(v: &Value, now: u64) -> Vec<ModelLimit> {
+    let shares: Vec<&Value> = v
+        .get("weekly_scoped_shares")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().collect())
+        .unwrap_or_default();
+    limits(v)
+        .enumerate()
+        .filter(|(_, l)| l.get("kind").and_then(Value::as_str) == Some("weekly_scoped"))
+        .filter_map(|(i, l)| {
+            let model = l.get("scope")?.get("model")?;
+            let name = model
+                .get("display_name")
+                .and_then(Value::as_str)
+                .or_else(|| model.get("id").and_then(Value::as_str))?;
+            let resets_at = seconds(l.get("resets_at")).filter(|&at| at > now)?;
+            let share = shares
+                .iter()
+                .find(|s| s.get("limit_index").and_then(Value::as_u64) == Some(i as u64));
+            Some(ModelLimit {
+                name: name.to_string(),
+                used_percent: l.get("percent")?.as_f64()?,
+                resets_at,
+                severity: severity(l),
+                share_of_weekly: share.and_then(|s| s.get("used_percent_of_weekly")?.as_f64()),
+                allowance_of_weekly: share.and_then(|s| s.get("allowance_percent_of_weekly")?.as_f64()),
+            })
+        })
+        .collect()
+}
+
+/// Whether usage credits take over at a limit; None when the answer does not say.
+pub fn account_credits(v: &Value) -> Option<bool> {
+    let extra = v.get("extra_usage").and_then(|x| x.get("is_enabled")).and_then(Value::as_bool);
+    let spend = v.get("spend").and_then(|x| x.get("enabled")).and_then(Value::as_bool);
+    match (extra, spend) {
+        (None, None) => None,
+        (a, b) => Some(a.unwrap_or(false) || b.unwrap_or(false)),
+    }
+}
+
+/// Resets on offer: the weekly 5-hour reset (`juniper_tide`) and saved ones
+/// (`cedar_ember`), in the shape Claude Code 2.1.325 reads them.
+pub fn account_resets(v: &Value, now: u64) -> Option<Resets> {
+    let eligible = |x: &&Value| x.get("eligible").and_then(Value::as_bool) == Some(true);
+    let five_hour = v.get("juniper_tide").filter(eligible).map(|j| FiveHourReset {
+        available: j.get("available").and_then(Value::as_bool).unwrap_or(false),
+        next_available_at: seconds(j.get("next_available_at")),
+    });
+    let saved: Vec<SavedReset> = v
+        .get("cedar_ember")
+        .filter(eligible)
+        .and_then(|c| c.get("grants"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|g| g.get("paused").and_then(Value::as_bool) != Some(true))
+        .filter_map(|g| {
+            let left = u32::try_from(g.get("resets_left")?.as_u64()?).ok()?;
+            let ends_at = seconds(g.get("ends_at"));
+            (left > 0 && ends_at.is_none_or(|at| at > now)).then(|| SavedReset {
+                label: g.get("label").and_then(Value::as_str).unwrap_or_default().to_string(),
+                left,
+                total: g
+                    .get("resets_total")
+                    .and_then(Value::as_u64)
+                    .and_then(|t| u32::try_from(t).ok())
+                    .unwrap_or(left),
+                ends_at,
+                requires_limit: g.get("use_requires_limit").and_then(Value::as_bool).unwrap_or(false),
+            })
+        })
+        .collect();
+    (five_hour.is_some() || !saved.is_empty()).then_some(Resets { five_hour, saved })
+}
+
+/// Model limits a session's status line carried (`rate_limits.model_scoped`).
+pub fn status_models(status: &Value, now: u64) -> Vec<ModelLimit> {
+    status
+        .get("rate_limits")
+        .and_then(|r| r.get("model_scoped"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|m| {
+            Some(ModelLimit {
+                name: m.get("display_name")?.as_str()?.to_string(),
+                used_percent: m.get("utilization")?.as_f64()?,
+                resets_at: seconds(m.get("resets_at")).filter(|&at| at > now)?,
+                severity: None,
+                share_of_weekly: None,
+                allowance_of_weekly: None,
+            })
+        })
+        .collect()
 }
 
 /// "2026-10-26T10:09:59.519952+00:00" (UTC, as the API sends it) -> Unix seconds.
@@ -204,9 +379,9 @@ pub fn iso_seconds(s: &str) -> Option<u64> {
     u64::try_from(days * 86_400 + h * 3600 + min * 60 + sec - offset).ok()
 }
 
-/// The account's limits, asked for at most every 5 minutes (also after a
+/// The account's usage answer, asked for at most every 5 minutes (also after a
 /// failure), each account on its own.
-fn account(dir: &str, home: &Path, now: u64) -> Option<Vec<Window>> {
+fn account_answer(dir: &str, home: &Path, now: u64) -> Option<Value> {
     use std::collections::HashMap;
     use std::sync::Mutex;
     use std::time::Instant;
@@ -219,7 +394,37 @@ fn account(dir: &str, home: &Path, now: u64) -> Option<Vec<Window>> {
         let got = crate::accounts::token(dir, home, now).and_then(|t| fetch_account(&t));
         last.insert(key.clone(), (Instant::now(), got));
     }
-    account_windows(last.get(&key)?.1.as_ref()?, now)
+    last.get(&key)?.1.clone()
+}
+
+/// What desk knows of one Claude account's limits.
+struct AccountLimits {
+    id: String,
+    windows: Vec<Window>,
+    models: Vec<ModelLimit>,
+    credits: Option<bool>,
+    resets: Option<Resets>,
+}
+
+/// Per model name the latest reading, as `freshest` does for windows.
+fn freshest_models(readings: impl IntoIterator<Item = ModelLimit>) -> Vec<ModelLimit> {
+    let mut out: Vec<ModelLimit> = Vec::new();
+    for m in readings {
+        match out.iter_mut().find(|o| o.name == m.name) {
+            Some(o)
+                if if m.resets_at.abs_diff(o.resets_at) < 3600 {
+                    m.used_percent > o.used_percent
+                } else {
+                    m.resets_at > o.resets_at
+                } =>
+            {
+                *o = m
+            }
+            Some(_) => {}
+            None => out.push(m),
+        }
+    }
+    out
 }
 
 /// The plan's limits of each Claude account, from the status line input of
@@ -227,7 +432,7 @@ fn account(dir: &str, home: &Path, now: u64) -> Option<Vec<Window>> {
 /// from Anthropic. Each Claude Code session keeps the limits it last fetched,
 /// so an idle one shows old numbers: per window, the freshest reading wins
 /// (see `freshest`). Accounts with nothing known are left out.
-fn claude(state_dir: &Path, accounts: &[ClaudeAccount], home: &Path, now: u64) -> Vec<(String, Vec<Window>)> {
+fn claude(state_dir: &Path, accounts: &[ClaudeAccount], home: &Path, now: u64) -> Vec<AccountLimits> {
     let statuses: Vec<Value> = std::fs::read_dir(state_dir)
         .into_iter()
         .flatten()
@@ -238,15 +443,40 @@ fn claude(state_dir: &Path, accounts: &[ClaudeAccount], home: &Path, now: u64) -
     accounts
         .iter()
         .filter_map(|a| {
-            let own = statuses.iter().filter(|v| {
-                let transcript = v.get("transcript_path").and_then(Value::as_str).unwrap_or_default();
-                crate::accounts::owner_of(accounts, Path::new(transcript), home).is_some_and(|o| o.id == a.id)
-            });
+            let own: Vec<&Value> = statuses
+                .iter()
+                .filter(|v| {
+                    let transcript = v.get("transcript_path").and_then(Value::as_str).unwrap_or_default();
+                    crate::accounts::owner_of(accounts, Path::new(transcript), home).is_some_and(|o| o.id == a.id)
+                })
+                .collect();
+            let answer = account_answer(&a.dir, home, now);
+            let from_api = answer.as_ref().and_then(|v| account_windows(v, now)).unwrap_or_default();
             let readings = own
+                .iter()
                 .filter_map(|v| claude_windows(v, now))
-                .chain(account(&a.dir, home, now));
-            let w = freshest(readings);
-            (!w.is_empty()).then(|| (a.id.clone(), w))
+                .chain((!from_api.is_empty()).then(|| from_api.clone()));
+            let mut windows = freshest(readings);
+            // Anthropic's grading holds for the same window, whichever reading won.
+            for w in &mut windows {
+                w.severity = from_api
+                    .iter()
+                    .find(|x| x.label == w.label && x.resets_at.abs_diff(w.resets_at) < 3600)
+                    .and_then(|x| x.severity.clone());
+            }
+            let api_models = answer.as_ref().map(|v| account_models(v, now)).unwrap_or_default();
+            let models = if api_models.is_empty() {
+                freshest_models(own.iter().flat_map(|v| status_models(v, now)))
+            } else {
+                api_models
+            };
+            (!windows.is_empty()).then(|| AccountLimits {
+                id: a.id.clone(),
+                windows,
+                models,
+                credits: answer.as_ref().and_then(account_credits),
+                resets: answer.as_ref().and_then(|v| account_resets(v, now)),
+            })
         })
         .collect()
 }
@@ -363,6 +593,7 @@ fn window(label: &str, used: f64, resets_at: &Value, now: u64) -> Option<Window>
         label: label.to_string(),
         used_percent: used,
         resets_at,
+        severity: None,
     })
 }
 
@@ -467,7 +698,7 @@ mod tests {
 
     #[test]
     fn idle_sessions_old_limits_lose_to_fresh_ones() {
-        let w = |label: &str, used: f64, resets_at: u64| Window { label: label.into(), used_percent: used, resets_at };
+        let w = |label: &str, used: f64, resets_at: u64| Window { label: label.into(), used_percent: used, resets_at, severity: None };
         let got = freshest([
             vec![w("7d", 75.0, 9000)],                // idle since this morning
             vec![w("5h", 13.0, 30_000), w("7d", 80.0, 9000)], // working now
@@ -479,6 +710,109 @@ mod tests {
         // Same window, reset times rounded differently: the higher share wins.
         let got = freshest([vec![w("7d", 80.0, 9000)], vec![w("7d", 84.0, 8999)]]);
         assert_eq!(got, vec![w("7d", 84.0, 8999)]);
+    }
+
+    /// The usage answer of 2026-11-14 (fields desk does not read left out).
+    const ANSWER_2026_11_14: &str = r#"{
+        "five_hour": {"utilization": 61.0, "resets_at": "2026-11-14T03:49:59.598735+00:00"},
+        "seven_day": {"utilization": 54.0, "resets_at": "2026-11-20T03:59:59.598753+00:00"},
+        "seven_day_opus": null,
+        "juniper_tide": null,
+        "cedar_ember": null,
+        "extra_usage": {"is_enabled": false, "monthly_limit": null},
+        "limits": [
+            {"kind": "session", "group": "session", "percent": 61, "severity": "normal",
+             "resets_at": "2026-11-14T03:49:59.598735+00:00", "scope": null, "is_active": false},
+            {"kind": "weekly_all", "group": "weekly", "percent": 54, "severity": "normal",
+             "resets_at": "2026-11-20T03:59:59.598753+00:00", "scope": null, "is_active": false},
+            {"kind": "weekly_scoped", "group": "weekly", "percent": 95, "severity": "critical",
+             "resets_at": "2026-11-20T03:59:59.598916+00:00",
+             "scope": {"model": {"id": null, "display_name": "Fable"}, "surface": null}, "is_active": true}
+        ],
+        "spend": {"enabled": false, "can_purchase_credits": false},
+        "weekly_scoped_shares": [
+            {"limit_index": 2, "used_percent_of_weekly": 48, "allowance_percent_of_weekly": 50}
+        ]
+    }"#;
+
+    #[test]
+    fn reads_model_limits_severity_and_credits() {
+        let v: Value = serde_json::from_str(ANSWER_2026_11_14).unwrap();
+        let now = iso_seconds("2026-11-14T01:00:00Z").unwrap();
+        let w = account_windows(&v, now).unwrap();
+        assert_eq!(w[0].severity.as_deref(), Some("normal"));
+        assert_eq!(w[1].severity.as_deref(), Some("normal"));
+        assert_eq!(
+            account_models(&v, now),
+            vec![ModelLimit {
+                name: "Fable".into(),
+                used_percent: 95.0,
+                resets_at: iso_seconds("2026-11-20T03:59:59.598916+00:00").unwrap(),
+                severity: Some("critical".into()),
+                share_of_weekly: Some(48.0),
+                allowance_of_weekly: Some(50.0),
+            }]
+        );
+        assert_eq!(account_credits(&v), Some(false));
+        assert_eq!(account_resets(&v, now), None);
+        assert!(account_models(&v, iso_seconds("2026-11-21T00:00:00Z").unwrap()).is_empty(), "expired");
+    }
+
+    #[test]
+    fn reads_resets_when_offered() {
+        let v = json!({
+            "juniper_tide": {"eligible": true, "available": false, "next_available_at": "2026-11-20T04:00:00Z"},
+            "cedar_ember": {"eligible": true, "grants": [
+                {"id": "g1", "label": "Reset", "resets_total": 2, "resets_left": 1, "ends_at": "2026-11-27T00:00:00Z",
+                 "paused": false, "use_requires_limit": true, "clears": ["five_hour"]},
+                {"id": "g2", "label": "Used up", "resets_total": 1, "resets_left": 0, "paused": false, "use_requires_limit": true}
+            ]}
+        });
+        let r = account_resets(&v, 0).unwrap();
+        assert_eq!(
+            r.five_hour,
+            Some(FiveHourReset { available: false, next_available_at: iso_seconds("2026-11-20T04:00:00Z") })
+        );
+        assert_eq!(
+            r.saved,
+            vec![SavedReset {
+                label: "Reset".into(),
+                left: 1,
+                total: 2,
+                ends_at: iso_seconds("2026-11-27T00:00:00Z"),
+                requires_limit: true,
+            }]
+        );
+        assert_eq!(account_resets(&json!({"juniper_tide": {"eligible": false}}), 0), None);
+        assert_eq!(account_credits(&json!({})), None);
+    }
+
+    #[test]
+    fn model_limits_from_the_status_line() {
+        let s = json!({"rate_limits": {"model_scoped": [
+            {"display_name": "Fable", "utilization": 80.0, "resets_at": "2026-11-20T03:59:59Z"}]}});
+        let m = status_models(&s, 0);
+        assert_eq!((m[0].name.as_str(), m[0].used_percent), ("Fable", 80.0));
+        assert_eq!(m[0].resets_at, iso_seconds("2026-11-20T03:59:59Z").unwrap());
+        assert!(status_models(&json!({}), 0).is_empty());
+    }
+
+    #[test]
+    fn claude_without_api_answer_has_no_models() {
+        let tmp = tempfile::tempdir().unwrap();
+        let state = tmp.path().join("state");
+        std::fs::create_dir_all(&state).unwrap();
+        std::fs::write(
+            state.join("p-1.status"),
+            json!({"rate_limits": {"five_hour": {"used_percentage": 50, "resets_at": u64::MAX / 2}}}).to_string(),
+        )
+        .unwrap();
+        // A folder of its own: no Keychain item, no login file, no request.
+        let accounts = [ClaudeAccount { id: "x".into(), name: "X".into(), dir: "~/.claude-x".into() }];
+        let u = usage(&["claude".into()], &accounts, &state, tmp.path());
+        assert!(u[0].models.is_empty());
+        assert_eq!((u[0].credits, u[0].resets.clone()), (None, None));
+        assert_eq!(u[0].windows[0].severity, None);
     }
 
     #[test]

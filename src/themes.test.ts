@@ -21,6 +21,10 @@ describe("themes", () => {
     expect(uiColors(themeById("desk")).panel).toBe("#101318");
   });
 
+  it("gives model limits (Fable) the theme's magenta", () => {
+    expect(uiColors(themeById("desk")).model).toBe("#d2a8ff");
+  });
+
   it("mixes colors", () => {
     expect(mix("#000000", "#ffffff", 0.5)).toBe("#808080");
     expect(mix("#102030", "#102030", 0.3)).toBe("#102030");

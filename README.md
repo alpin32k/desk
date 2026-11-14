@@ -127,7 +127,8 @@ Zmieniają okno i terminale od razu.
 | **Ostatnie rozmowy** | ⌘S: rozmowy Claude z projektu aktywnego kafelka, od najnowszej, z tytułem i branchem. Wybrana wraca w nowym kafelku (`claude --resume`), a otwarta tylko dostaje fokus. |
 | **Zapisane rozmowy** | Nazwa kafelka z Claude (✎) zapisuje jego rozmowę. W ⌘S zapisane stoją na górze, zawsze wszystkie, pod Twoją nazwą, a wybrana wraca z tą nazwą także po zamknięciu kafelka i restarcie. ⌘↵ albo ✎ w ⌘S nazywa rozmowę, ⌘⌫ albo × usuwa ją z zapisanych. Po `/clear` nazwa zostaje przy starej rozmowie. |
 | **Sesje w tle** | ⌘Q zamyka kafelek, a sesja działa dalej. Gdy takie są, górny pasek pokazuje „N w tle”, a ⌘Y (albo klik w licznik) otwiera ich listę: ↵ otwiera sesję w kafelku, ⌘⌫ albo ✕ ją zabija, „Zabij wszystkie” kończy resztę. Przy zamykaniu desk (⏻) widać, które sesje zostaną, i można zabić wszystkie naraz. |
-| **Limity** | Górny pasek: zużycie planu (5h / 7d) dla otwartych agentów, z czasem do resetu (↻2h13m). Claude z konta co 5 min i ze status line sesji, Codex z `~/.codex/sessions`. Bursztyn od 70%, czerwień od 90%. |
+| **Limity** | Górny pasek: zużycie planu (5h / 7d) dla otwartych agentów, z czasem do resetu (↻2h13m). Claude z konta co 5 min i ze status line sesji, Codex z `~/.codex/sessions`. Kolor z najgorszego limitu: ocena Anthropic, a bez niej bursztyn od 70% i czerwień od 90%; kropka, gdy ostrzega coś, czego licznik nie pokazuje (limit modelu, np. Fable, albo tempo). |
+| **Szczegóły limitów** | Klik w licznik otwiera dymek (zakładki albo wszystko naraz, Opcje → Statystyki AI). **Teraz**: tempo i prognoza, czy limit skończy się przed resetem, dzienny budżet tygodnia, limity modeli i resety do `/limit-reset`. **Sesje**: model, koszt (cennik API, nie rachunek), cache i szacowany udział każdej sesji w oknie 5 h, liczony z kosztu sesji desk albo z transkryptów Claude Code. **Historia**: ostatnie 24 h i tydzień dzień po dniu; desk trzyma ją 8 dni w `usage-history.jsonl` w swoich danych. |
 | **Układ** | Ramki stoją tam, gdzie je przeciągniesz (przy brzegu kolumny powstaje nowa), a linie między kolumnami, ramkami i sesjami zmieniają rozmiar. Nowy projekt trafia w wolne miejsce, a ⌘L układa wszystko od nowa. W Opcjach wyłączysz dokładanie kolumn i ustawisz ich liczbę ręcznie. |
 | **Okno** | Otwiera się tam, gdzie je zamknięto: ten sam monitor, miejsce i rozmiar. Gdy monitora nie ma, okno otwiera się domyślnie. |
 | **Kafelek** | Projekt w swoim stonowanym kolorze, branch git (klik przełącza przez `git switch`, który przy niezapisanych zmianach odmawia) i stan. Powiadomienie, gdy sesja czeka, a okno nie ma fokusu. |
@@ -255,6 +256,9 @@ a kliknięcie pobiera ją, podmienia aplikację i uruchamia ponownie:
   `api.anthropic.com`; desk go nie odświeża ani nie zapisuje. Do tego dochodzą odczyty ze status line
   sesji desk (świeże po każdej turze), a wygrywa najświeższy. Bez loginu zostają same sesje. Twoja
   własna status line działa dalej: desk ją wywołuje.
+- **Udział sesji z transkryptów** (Opcje → Statystyki AI) desk liczy lokalnie: czyta tokeny
+  z `~/.claude/projects` i wycenia je według cennika API z 14.11.2026. Treści rozmów nie zapisuje
+  ani nigdzie nie wysyła.
 - **Podgląd lokalnych plików** widzi tylko folder podglądanego pliku i nie ma dostępu do API desk.
   Markdown i inne dokumenty desk renderuje sam: ich własne skrypty się nie uruchamiają (mermaid jest
   wbudowany, działa bez internetu).

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { pl } from "./locales/pl";
 import { normalize, search } from "./settings-search";
 
 const names = { term: "Terminal i linki", look: "Wygląd", power: "Zasilanie" };
@@ -54,5 +55,31 @@ describe("search", () => {
     const r = search(items, names, "xyz");
     expect(r.show.some(Boolean)).toBe(false);
     expect(r.counts).toEqual({});
+  });
+});
+
+describe("the AI stats group", () => {
+  // Its rows as Options renders them: the label and the choices.
+  const stats = [
+    { group: "stats", section: "", text: `${pl["settings.usageLayout"]} ${pl["settings.usageLayoutTabs"]} ${pl["settings.usageLayoutAll"]}` },
+    {
+      group: "stats",
+      section: "",
+      text: `${pl["settings.usageShare"]} ${pl["settings.usageShareCost"]} ${pl["settings.usageShareTranscripts"]} ${pl["settings.usageShareHintCost"]}`,
+    },
+  ];
+  const groups = { stats: pl["settings.stats"] };
+
+  it("finds the share row by its words", () => {
+    expect(search(stats, groups, "udział").show).toEqual([false, true]);
+    expect(search(stats, groups, "transkrypt").show).toEqual([false, true]);
+  });
+
+  it("finds the layout row by limit", () => {
+    expect(search(stats, groups, "limit").show).toEqual([true, false]);
+  });
+
+  it("the group name shows both rows", () => {
+    expect(search(stats, groups, "statystyki").show).toEqual([true, true]);
   });
 });
