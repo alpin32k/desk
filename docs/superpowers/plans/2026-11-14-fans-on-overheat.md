@@ -455,6 +455,7 @@ Expected: passes. Then run `pnpm tauri dev`, open Options → Zasilanie, and che
   5. Force again and quit desk normally (⏻). The fans go back to auto at once.
   6. In Stats, set the fans to manual, then let desk get hot (threshold 50). desk does not touch them, and the chip title says "inny program". Set Stats back to auto.
   7. "Usuń zgodę" asks for the password, and both files disappear. The mode falls back to "Zwalniaj sesje".
+  7a. (From the final review.) Force again (threshold 50), then click "Usuń zgodę" while the fans are at max, and take more than 10 s to type the password. The fans go back to auto as soon as you click, stay in auto while the dialog is open, and are still in auto after the files are gone. Cancelling the dialog lets desk force them again within a minute.
   8. If step 2 fails because the M3 rejects the target before manual mode, swap the order in `force_max`, keeping the restore-on-error, update `force_max_sets_target_before_manual_mode_on_every_fan`, and repeat.
 
 - [ ] **Step 3: Commit** with the subject `The README and changelog describe the fans when hot`.
