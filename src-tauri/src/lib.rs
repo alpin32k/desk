@@ -36,6 +36,7 @@ pub mod update;
 pub mod usage;
 pub mod usage_history;
 pub mod usage_sessions;
+pub mod usage_share;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
