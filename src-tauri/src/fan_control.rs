@@ -13,6 +13,9 @@ pub const AUTO: u8 = 0;
 pub const MANUAL: u8 = 1;
 /// Writes of manual mode tried after unlocking, with a pause (50 ms) between.
 pub const TRIES: usize = 100;
+/// A fan's maximum below this is not believed (a laptop fan tops out at
+/// several thousand rpm; 6800 on an M3 Pro).
+pub const MIN_MAX_RPM: f32 = 1000.0;
 
 /// Typed access to SMC keys ("FNum", "F0Md"...).
 pub trait Smc {
@@ -41,11 +44,16 @@ pub fn read(smc: &mut impl Smc) -> Result<Vec<Fan>, String> {
     let count = smc.read_u8("FNum")?;
     (0..count)
         .map(|i| {
-            Ok(Fan {
+            let fan = Fan {
                 mode: smc.read_u8(&key(i, "Md"))?,
                 rpm: smc.read_f32(&key(i, "Ac"))?,
                 max_rpm: smc.read_f32(&key(i, "Mx"))?,
-            })
+            };
+            // A maximum no fan has would make "max" a low manual speed.
+            if !(fan.max_rpm.is_finite() && fan.max_rpm >= MIN_MAX_RPM) {
+                return Err(format!("fan {i}: implausible maximum {}", fan.max_rpm));
+            }
+            Ok(fan)
         })
         .collect()
 }
@@ -223,6 +231,17 @@ mod tests {
         smc.u8s.insert("Ftst".into(), 0);
         smc.u8s.insert("FNum".into(), 0);
         assert_eq!(read(&mut smc).unwrap(), Vec::<Fan>::new());
+    }
+
+    #[test]
+    fn implausible_max_is_unsupported() {
+        for bad in [0.0, f32::NAN, 500.0] {
+            let mut smc = FakeSmc::two_fans();
+            smc.f32s.insert("F0Mx".into(), bad);
+            assert!(read(&mut smc).is_err(), "{bad}");
+            assert!(force_max(&mut smc, &mut || {}).is_err());
+            assert!(smc.log.is_empty(), "{bad}: {:?}", smc.log);
+        }
     }
 
     #[test]

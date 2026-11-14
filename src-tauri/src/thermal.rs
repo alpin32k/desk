@@ -94,6 +94,15 @@ impl Mode {
             _ => Mode::Slow,
         }
     }
+
+    /// What the mode does besides the fans (the permission was removed).
+    pub fn without_fans(self) -> Mode {
+        match self {
+            Mode::FansFirst | Mode::Together => Mode::Slow,
+            Mode::Fans => Mode::Off,
+            m => m,
+        }
+    }
 }
 
 /// (slowing limit, fan limit) for a mode; 0: not used. Both within
@@ -312,10 +321,21 @@ impl Guard {
         *self.config.lock().unwrap() = (mode, limit, fan_limit);
     }
 
-    /// The fans back to auto now, if desk set them (before removing the
-    /// permission).
-    pub fn release_fans(&self) {
-        self.inner.lock().unwrap().fans.release();
+    /// Before removing the permission: the fans back to auto now, if desk set
+    /// them, and no forcing until `resume_fans`.
+    pub fn pause_fans(&self) {
+        self.inner.lock().unwrap().fans.pause();
+    }
+
+    pub fn resume_fans(&self) {
+        self.inner.lock().unwrap().fans.resume();
+    }
+
+    /// The permission is gone: the mode keeps only what it did besides the
+    /// fans (Options saves the same).
+    pub fn drop_fan_mode(&self) {
+        let mut config = self.config.lock().unwrap();
+        config.0 = config.0.without_fans();
     }
 
     pub fn status(&self) -> Status {
@@ -892,6 +912,14 @@ mod tests {
         // The fans never wait longer than the slowing, and stay in range.
         assert_eq!(limits(Mode::FansFirst, 75, 80), (75, 75));
         assert_eq!(limits(Mode::FansFirst, 75, 10), (75, 50));
+    }
+
+    #[test]
+    fn without_fans_keeps_what_a_mode_did_besides() {
+        assert_eq!(
+            [Mode::Off, Mode::Slow, Mode::FansFirst, Mode::Together, Mode::Fans].map(Mode::without_fans),
+            [Mode::Off, Mode::Slow, Mode::Slow, Mode::Slow, Mode::Off]
+        );
     }
 
     #[test]

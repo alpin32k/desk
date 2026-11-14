@@ -579,13 +579,21 @@ async fn fans_install() -> Result<fans::Info, String> {
         .map_err(|e| e.to_string())?
 }
 
-/// Fans back to auto, then the helper and its rule removed (password prompt).
+/// Fans back to auto and held there while the password prompt is open, then
+/// the helper and its rule removed and the mode without fans.
 #[tauri::command]
 async fn fans_uninstall(guard: State<'_, thermal::Guard>) -> Result<fans::Info, String> {
-    guard.release_fans();
-    tauri::async_runtime::spawn_blocking(fans::uninstall)
+    guard.pause_fans();
+    let support = env::support_dir();
+    let result = tauri::async_runtime::spawn_blocking(move || fans::uninstall(&support))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+        .and_then(|r| r);
+    if result.is_ok() {
+        guard.drop_fan_mode();
+    }
+    guard.resume_fans();
+    result
 }
 
 #[tauri::command]
