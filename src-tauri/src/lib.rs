@@ -34,6 +34,7 @@ pub mod wg_tunnel;
 mod window_place;
 pub mod update;
 pub mod usage;
+pub mod usage_history;
 pub mod usage_sessions;
 
 use std::path::{Path, PathBuf};
@@ -55,6 +56,8 @@ struct App {
     /// tmux's right-click menu is on (Options); see `Tmux::reload_config`.
     tmux_menu: AtomicBool,
     _watcher: Mutex<Option<notify::RecommendedWatcher>>,
+    /// Limits and session costs over time (usage_history.rs).
+    history: std::sync::Arc<Mutex<usage_history::Recorder>>,
 }
 
 #[derive(serde::Serialize)]
@@ -369,9 +372,32 @@ async fn usage(app: State<'_, App>, agents: Vec<String>) -> Result<Vec<usage::Us
     // Off the main thread: every 5 minutes this asks Anthropic (up to 10 s).
     let state = app.hooks.state_dir.clone();
     let accounts = layout::load(&app.layout_path).claude_accounts;
-    tauri::async_runtime::spawn_blocking(move || usage::usage(&agents, &accounts, &state, &env::home()))
-        .await
-        .map_err(|e| e.to_string())
+    let history = app.history.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let home = env::home();
+        let u = usage::usage(&agents, &accounts, &state, &home);
+        let now = usage::now();
+        let costs = if agents.iter().any(|a| a == "claude") {
+            let split = accounts::effective(&accounts).len() > 1;
+            usage_history::cost_samples(now, &usage_sessions::read(&state, &accounts, &home), split)
+        } else {
+            Vec::new()
+        };
+        let recorded = history
+            .lock()
+            .map_err(|e| e.to_string())
+            .and_then(|mut h| h.record(now, &usage_history::limit_samples(now, &u), &costs).map_err(|e| e.to_string()));
+        // History must never cost the chip its numbers: say it once and go on.
+        static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if let Err(e) = recorded
+            && !SAID.swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
+            eprintln!("desk: usage history: {e}");
+        }
+        u
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Folder for plain conversations (⌘R) that belong to no project.
@@ -720,6 +746,9 @@ pub fn run() {
                 prompt_editor: prompt_ai::install(&support).ok(),
                 tmux_menu: AtomicBool::new(saved.tmux_menu),
                 _watcher: Mutex::new(watcher),
+                history: std::sync::Arc::new(Mutex::new(usage_history::Recorder::open(
+                    support.join("usage-history.jsonl"),
+                ))),
             });
             app.manage(thermal::Guard::new(saved.thermal_limit));
             let handle = app.handle().clone();
