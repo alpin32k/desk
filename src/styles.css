@@ -724,7 +724,8 @@ html.dragging-card .tile .term {
 
 .tile .state::before {
   content: "●";
-  margin-right: 4px;
+  /* inline-end: in a folded tile the header runs top to bottom */
+  margin-inline-end: 4px;
 }
 
 .state-working .state {
@@ -870,6 +871,17 @@ html.dragging-card .tile .term {
 .lane.folded .tile.minimized .title > *,
 .card-body.row > .tile.minimized .title > * {
   margin-inline-end: 8px;
+}
+
+/* The dot turns with the letters, so it sits on their middle, a little apart. */
+.lane.folded .tile.minimized .state,
+.card-body.row > .tile.minimized .state {
+  text-orientation: sideways;
+}
+
+.lane.folded .tile.minimized .state::before,
+.card-body.row > .tile.minimized .state::before {
+  margin-inline-end: 6px;
 }
 
 .lane.folded .tile.minimized .peek,
