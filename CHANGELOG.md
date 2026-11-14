@@ -1,5 +1,18 @@
 # Zmiany
 
+## 0.1.37 (2026-11-14)
+
+- **Pisanie nie zacina się, gdy desk chłodzi komputer.** Przy przegrzaniu desk zwalniał każdy
+  proces sesji, razem z powłoką i agentem, w którego piszesz, więc klawisze czekały w kolejce
+  z testami. Teraz zwalnia pracę: testy, buildy i wszystko, co uruchamia agent. Powłoka oraz
+  program, w którym możesz pisać (agent, edytor), mają pełną moc. Zadanie wpisane w powłoce
+  (`pnpm test`) jest zwalniane w całości. Na Windows program uruchomiony z powłoki zawsze ma
+  pełną moc.
+- **Polskie litery w terminalu stoją równo z resztą.** Z zainstalowanym JetBrainsMono Nerd Font
+  zwykłe litery były rysowane krojem SF Mono, a „ą”, „ł”, „ó”, „ś” i kolorowy tekst krojem
+  JetBrains Mono: cieńsze i 3 px wyżej w tym samym wierszu. Teraz wszystkie znaki pochodzą
+  z jednej czcionki.
+
 ## 0.1.36 (2026-11-14)
 
 - **Klik w licznik limitów pokazuje szczegóły.** Licznik w górnym pasku otwiera dymek z trzema
