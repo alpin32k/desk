@@ -1,7 +1,5 @@
 # Usage Details Popover Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** A click on a usage chip in the top bar opens a popover with limits, forecast, model limits (Fable), resets, the sessions' share of the 5 h window and history; Options get an "AI stats" group to pick the popover layout and how the share is computed.
 
 **Architecture:** Rust reads more of what desk already has: the cached `/api/oauth/usage` answer (model limits, severity, credits, resets), the `.status` files (per-session model, cost, cache), a new append-only history file, and (share mode A) Claude Code transcripts with a price table. The `usage` command (every 30 s) gains the light fields and records history; a new `usage_details` command, called only while the popover is open, returns history, sessions and the share. The frontend computes forecasts and chart buckets in pure functions and renders the popover outside `.top`.
