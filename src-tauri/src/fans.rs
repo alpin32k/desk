@@ -578,8 +578,12 @@ mod tests {
 
     #[test]
     fn watchdog_restores_auto_only_when_desk_is_gone() {
-        let dir = Path::new("/Users/k/Library/Application Support/desk");
-        let s = watchdog_script(42, &dir.join("fans.stop"), &dir.join("fans-forced"));
+        // Whole paths, not joined: Windows would join them with a backslash.
+        let s = watchdog_script(
+            42,
+            Path::new("/Users/k/Library/Application Support/desk/fans.stop"),
+            Path::new("/Users/k/Library/Application Support/desk/fans-forced"),
+        );
         assert!(s.contains("/bin/kill -0 42"));
         assert!(s.contains("[ ! -e '/Users/k/Library/Application Support/desk/fans.stop' ]"));
         assert!(s.ends_with(
