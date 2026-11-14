@@ -34,6 +34,7 @@ pub mod wg_tunnel;
 mod window_place;
 pub mod update;
 pub mod usage;
+pub mod usage_sessions;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
