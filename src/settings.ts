@@ -2,7 +2,18 @@
 // hand-added folders.
 import { getVersion } from "@tauri-apps/api/app";
 import { DEFAULT_THEME, THEMES } from "./themes";
-import { api, type AccountInfo, type AgentInfo, type ClaudeAccount, type CoffeeStatus, type Layout, type Project, type PromptAi } from "./api";
+import {
+  api,
+  type AccountInfo,
+  type AgentInfo,
+  type ClaudeAccount,
+  type CoffeeStatus,
+  type FanInfo,
+  type Layout,
+  type Project,
+  type PromptAi,
+  type ThermalMode,
+} from "./api";
 import { accountColor, withAccount, withoutAccount } from "./accounts";
 import type { LinkClick } from "./links";
 import { shortcut } from "./platform";
@@ -12,7 +23,7 @@ import { escapeHtml } from "./tile";
 import { acceleratorFor, DEFAULT_HOTKEY, hotkeyLabel } from "./hotkey";
 import { LANGUAGES, language, t, type Language, type MessageKey } from "./i18n";
 import { acceleratorsOf, bindingLabel, BINDINGS, clashWith, FIXED, groupLabel, GROUPS, keyText } from "./keys";
-import { clampLimit, DEFAULT_LIMIT, MAX_LIMIT, MIN_LIMIT } from "./thermal";
+import { clampFanLimit, clampLimit, MAX_LIMIT, MIN_LIMIT, MODE_LABELS, modeOptions, slows, usesFans } from "./thermal";
 import { toast } from "./ui";
 
 export interface SettingsContext {
@@ -40,8 +51,13 @@ export interface SettingsContext {
   toggleAutostart: (path: string) => void;
   addFolder: () => Promise<void>;
   removeFolder: (path: string) => void;
-  /** °C above which desk slows its sessions; 0: never (thermal.ts). */
-  setThermalLimit: (celsius: number) => void;
+  /** What desk does when hot, and its limits (thermal.ts); saved at once. */
+  setThermal: (change: Partial<Pick<Layout, "thermalMode" | "thermalLimit" | "fanLimit">>) => void;
+  /** Can desk drive the fans here, and is the permission installed; null: unknown. */
+  fans: () => FanInfo | null;
+  /** The one admin password prompt for the fans; false: cancelled or failed (a toast says why). */
+  installFans: () => Promise<boolean>;
+  uninstallFans: () => Promise<void>;
   coffee: () => CoffeeStatus;
   uninstallCoffee: () => Promise<void>;
   agents: () => AgentInfo[];
@@ -128,6 +144,74 @@ export class Settings {
   }
 
   /** Names, removal, a new account, and who is logged in on each. */
+  /** Options → Power → Temperature: what desk does when hot. */
+  private thermalHtml(layout: Layout): string {
+    const mode = layout.thermalMode;
+    const info = this.ctx.fans();
+    const seg = modeOptions(info)
+      .map(
+        ({ mode: m, why }) =>
+          `<button class="${m === mode ? "sel" : ""}" data-thermal-mode="${m}"${why ? ` disabled title="${escapeHtml(why)}"` : ""}>${t(MODE_LABELS[m])}</button>`,
+      )
+      .join("");
+    const input = (key: string, value: number) =>
+      `<input type="number" min="${MIN_LIMIT}" max="${MAX_LIMIT}" step="1" value="${value}" data-k="${key}"/> °C`;
+    let html = `<div class="line" data-row><span>${t("settings.thermalMode")}</span><span class="seg wrap">${seg}</span></div>`;
+    if (mode !== "off") html += `<label class="line" data-row>${t("settings.thermalLimit")} ${input("thermal-limit", layout.thermalLimit)}</label>`;
+    if (mode === "fansFirst") html += `<label class="line" data-row>${t("settings.fanLimit")} ${input("fan-limit", layout.fanLimit)}</label>`;
+    if (info && !info.unsupported) {
+      const consent =
+        info.consent === "installed"
+          ? `${t("settings.fansInstalled")} <button data-k="fans-rm">${t("settings.fansRemove")}</button>`
+          : info.consent === "outdated"
+            ? `${t("settings.fansOutdated")} <button data-k="fans-update">${t("settings.fansUpdate")}</button>`
+            : t("settings.fansAsk");
+      html += `<div class="line dim" data-row>${consent}</div>`;
+    }
+    const about: MessageKey[] =
+      mode === "off"
+        ? ["settings.thermalAboutOff"]
+        : [...(slows(mode) ? (["settings.thermalAbout"] as const) : []), ...(usesFans(mode) ? (["settings.thermalAboutFans"] as const) : [])];
+    return html + about.map((k) => `<p class="dim small" data-row>${t(k)}</p>`).join("");
+  }
+
+  private bindThermal(box: HTMLElement): void {
+    box.querySelectorAll<HTMLButtonElement>("[data-thermal-mode]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        const mode = b.dataset.thermalMode as ThermalMode;
+        // The fans only ever after the user's own pick, behind the password.
+        if (usesFans(mode) && this.ctx.fans()?.consent !== "installed" && !(await this.ctx.installFans())) {
+          this.render();
+          return;
+        }
+        this.ctx.setThermal({ thermalMode: mode });
+        this.render();
+      }),
+    );
+    const limit = box.querySelector<HTMLInputElement>('[data-k="thermal-limit"]');
+    limit?.addEventListener("change", () => {
+      const celsius = clampLimit(Number(limit.value));
+      limit.value = String(celsius);
+      const fanLimit = this.ctx.layout().fanLimit;
+      this.ctx.setThermal({ thermalLimit: celsius, fanLimit: clampFanLimit(fanLimit, celsius) });
+      this.render();
+    });
+    const fan = box.querySelector<HTMLInputElement>('[data-k="fan-limit"]');
+    fan?.addEventListener("change", () => {
+      const celsius = clampFanLimit(Number(fan.value), this.ctx.layout().thermalLimit);
+      fan.value = String(celsius);
+      this.ctx.setThermal({ fanLimit: celsius });
+    });
+    box.querySelector<HTMLButtonElement>('[data-k="fans-rm"]')?.addEventListener("click", async () => {
+      await this.ctx.uninstallFans();
+      this.render();
+    });
+    box.querySelector<HTMLButtonElement>('[data-k="fans-update"]')?.addEventListener("click", async () => {
+      await this.ctx.installFans();
+      this.render();
+    });
+  }
+
   private bindAccounts(box: HTMLElement): void {
     const layout = this.ctx.layout();
     const rows = this.accountRows(layout);
@@ -499,12 +583,7 @@ export class Settings {
               : t("settings.coffeeAsk")
           }</div>`,
         ) +
-          section(
-            t("settings.thermal"),
-            `<label class="line" data-row><input type="checkbox" data-k="thermal-on" ${layout.thermalLimit ? "checked" : ""}/> ${t("settings.thermalOn")}</label>
-      <label class="line" data-row>${t("settings.thermalLimit")} <input type="number" min="${MIN_LIMIT}" max="${MAX_LIMIT}" step="1" value="${layout.thermalLimit || DEFAULT_LIMIT}" data-k="thermal-limit" ${layout.thermalLimit ? "" : "disabled"}/> °C</label>
-      <p class="dim small" data-row>${t("settings.thermalAbout")}</p>`,
-          ),
+          section(t("settings.thermal"), this.thermalHtml(layout)),
       ],
       [
         "keys",
@@ -670,17 +749,7 @@ export class Settings {
     box.querySelector<HTMLInputElement>('[data-k="notify"]')!.addEventListener("change", (e) => {
       this.ctx.setNotifications((e.target as HTMLInputElement).checked);
     });
-    const thermalLimit = box.querySelector<HTMLInputElement>('[data-k="thermal-limit"]')!;
-    box.querySelector<HTMLInputElement>('[data-k="thermal-on"]')!.addEventListener("change", (e) => {
-      const on = (e.target as HTMLInputElement).checked;
-      this.ctx.setThermalLimit(on ? clampLimit(Number(thermalLimit.value)) : 0);
-      this.render();
-    });
-    thermalLimit.addEventListener("change", () => {
-      const celsius = clampLimit(Number(thermalLimit.value));
-      thermalLimit.value = String(celsius);
-      this.ctx.setThermalLimit(celsius);
-    });
+    this.bindThermal(box);
     box.querySelector<HTMLInputElement>('[data-k="tmux-menu"]')!.addEventListener("change", (e) => {
       this.ctx.setTmuxMenu((e.target as HTMLInputElement).checked);
     });

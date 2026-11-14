@@ -369,7 +369,6 @@ export const en: Messages = {
   "settings.coffeeRemove": "Remove permission",
   "settings.coffeeAsk": "The closed-lid mode asks for the administrator password once.",
   "settings.thermal": "Temperature",
-  "settings.thermalOn": "Slow the sessions when the CPU is too hot",
   "settings.thermalLimit": "Limit",
   "settings.thermalAbout": "Tests, builds and agents in desk's sessions keep running, only slower (macOS: background priority, Windows: EcoQoS efficiency mode, Linux: a CPU cap through systemd). Full speed comes back 7°C lower. Other programs (browser, Docker) are not touched.",
   "settings.thermalMode": "When hot",

@@ -368,7 +368,6 @@ export const pl = {
   "settings.coffeeRemove": "Usuń zgodę",
   "settings.coffeeAsk": "Tryb z zamkniętą klapką zapyta raz o hasło administratora.",
   "settings.thermal": "Temperatura",
-  "settings.thermalOn": "Zwalniaj sesje, gdy procesor jest za gorący",
   "settings.thermalLimit": "Próg",
   "settings.thermalAbout": "Testy, buildy i agenci w sesjach desk dalej działają, tylko wolniej (macOS: w tle, Windows: tryb oszczędny EcoQoS, Linux: limit CPU przez systemd). Pełna moc wraca 7°C niżej. Innych programów (przeglądarka, Docker) desk nie rusza.",
   "settings.thermalMode": "Przy przegrzaniu",
