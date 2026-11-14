@@ -200,7 +200,8 @@ mod tests {
         write(&tmp.path().join("-p/s1/subagents/agent-a.jsonl"), &entry("m2", "2026-11-14T00:10:00Z", input(1_000_000)));
         let r = Scanner::default().scan(tmp.path(), start());
         assert!((only(&r) - 8.0).abs() < 1e-9);
-        assert_eq!(r.keys().next().unwrap(), &tmp.path().join("-p/s1.jsonl").display().to_string());
+        // As a path: the expected one written with "/" is the same file on Windows.
+        assert_eq!(Path::new(r.keys().next().unwrap()), tmp.path().join("-p").join("s1.jsonl"));
     }
 
     #[test]
