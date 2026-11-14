@@ -2,6 +2,7 @@
 #[macro_use]
 pub mod i18n;
 pub mod accounts;
+pub mod admin;
 pub mod agents;
 pub mod backend;
 pub mod browser;
@@ -12,6 +13,7 @@ pub mod discovery;
 pub mod drag;
 pub mod dropdown;
 pub mod env;
+pub mod fans;
 pub mod fan_control;
 pub mod git;
 pub mod github;

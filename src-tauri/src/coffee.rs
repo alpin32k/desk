@@ -379,17 +379,7 @@ fn helper_installed() -> bool {
 
 /// The sudoers line: this user may run exactly these two pmset commands.
 pub fn sudoers_rule(user: &str) -> Result<String, String> {
-    let ok = !user.is_empty()
-        && user
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
-        && !user.starts_with('-');
-    if !ok {
-        return Err(tr!(
-            format!("nieobsługiwana nazwa użytkownika: {user:?}"),
-            format!("unsupported user name: {user:?}")
-        ));
-    }
+    crate::admin::check_user(user)?;
     Ok(format!(
         "{user} ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0\n"
     ))
@@ -457,36 +447,14 @@ fn spawn_watchdog(stop_file: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Run a fixed shell command as root; macOS shows its own password dialog.
+/// Run a fixed shell command as root behind coffee's password prompt.
 #[cfg(target_os = "macos")]
 fn run_admin(script: &str) -> Result<(), String> {
     let prompt = tr!(
         "desk: jednorazowa zgoda na tryb kawy z zamkniętą klapką (pmset disablesleep). Później desk nie będzie już pytać.",
         "desk: one-time permission for coffee with the lid closed (pmset disablesleep). desk will not ask again."
     );
-    let apple = format!(
-        "do shell script {} with administrator privileges with prompt {}",
-        applescript_quote(script),
-        applescript_quote(prompt)
-    );
-    let out = Command::new("/usr/bin/osascript")
-        .args(["-e", &apple])
-        .output()
-        .map_err(|e| e.to_string())?;
-    if out.status.success() {
-        Ok(())
-    } else {
-        let err = String::from_utf8_lossy(&out.stderr);
-        Err(if err.contains("-128") {
-            "anulowano".into()
-        } else {
-            err.trim().to_string()
-        })
-    }
-}
-
-pub fn applescript_quote(s: &str) -> String {
-    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+    crate::admin::run_admin(script, prompt)
 }
 
 /// `powercfg /query ... LIDACTION`: the current AC and DC indexes are the
@@ -739,10 +707,5 @@ mod tests {
                 .unwrap()
                 .success()
         );
-    }
-
-    #[test]
-    fn applescript_strings_are_escaped() {
-        assert_eq!(applescript_quote(r#"a "b" \c"#), r#""a \"b\" \\c""#);
     }
 }
