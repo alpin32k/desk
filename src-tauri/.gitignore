@@ -8,3 +8,6 @@
 
 # tmux built by .github/build-tmux.sh for the release bundles
 /binaries/
+
+# desk-fans built by cargo inside its own crate
+/fans-helper/target/

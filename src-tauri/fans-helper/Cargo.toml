@@ -1,0 +1,19 @@
+# desk-fans: the root helper that turns the fans to full speed and back
+# (fans.rs, fan_control.rs). Its own crate, outside desk's build, so only the
+# macOS bundle carries it (.github/build-fans.sh, tauri.mac-bundle.conf.json).
+[package]
+name = "desk-fans"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "desk-fans"
+path = "main.rs"
+
+# The shared smc.rs tests use libc::geteuid.
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+libc = "0.2"
+
+# Standalone: never part of src-tauri's build.
+[workspace]

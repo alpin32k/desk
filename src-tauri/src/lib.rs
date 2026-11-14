@@ -2,6 +2,7 @@
 #[macro_use]
 pub mod i18n;
 pub mod accounts;
+pub mod admin;
 pub mod agents;
 pub mod backend;
 pub mod browser;
@@ -12,11 +13,15 @@ pub mod discovery;
 pub mod drag;
 pub mod dropdown;
 pub mod env;
+pub mod fans;
+pub mod fan_control;
 pub mod git;
 pub mod github;
 pub mod hooks;
 pub mod layout;
 pub mod lock;
+#[cfg(target_os = "macos")]
+pub mod smc;
 #[cfg(target_os = "macos")]
 mod mac_keys;
 pub mod native;
@@ -536,7 +541,7 @@ fn pty_close(app: State<App>, id: u32) {
 
 #[tauri::command]
 fn save_layout(app: State<App>, guard: State<thermal::Guard>, layout: layout::Layout) -> Result<(), String> {
-    guard.set_limit(layout.thermal_limit);
+    guard.configure(thermal::Mode::parse(&layout.thermal_mode), layout.thermal_limit, layout.fan_limit);
     if app.tmux_menu.swap(layout.tmux_menu, Ordering::Relaxed) != layout.tmux_menu {
         app.sessions.reload_config(layout.tmux_menu);
     }
@@ -659,6 +664,37 @@ fn tile_info(paths: Vec<String>) -> Vec<TileInfo> {
             path,
         })
         .collect()
+}
+
+/// Can this Mac's fans be driven, and is the permission installed (Options).
+#[tauri::command]
+fn fans_info() -> fans::Info {
+    fans::info()
+}
+
+/// The one admin password prompt for the fans (fans.rs).
+#[tauri::command]
+async fn fans_install() -> Result<fans::Info, String> {
+    tauri::async_runtime::spawn_blocking(fans::install)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Fans back to auto and held there while the password prompt is open, then
+/// the helper and its rule removed and the mode without fans.
+#[tauri::command]
+async fn fans_uninstall(guard: State<'_, thermal::Guard>) -> Result<fans::Info, String> {
+    guard.pause_fans();
+    let support = env::support_dir();
+    let result = tauri::async_runtime::spawn_blocking(move || fans::uninstall(&support))
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|r| r);
+    if result.is_ok() {
+        guard.drop_fan_mode();
+    }
+    guard.resume_fans();
+    result
 }
 
 #[tauri::command]
@@ -826,7 +862,12 @@ pub fn run() {
                 scanner: Default::default(),
                 details: Default::default(),
             });
-            app.manage(thermal::Guard::new(saved.thermal_limit));
+            app.manage(thermal::Guard::new(
+                thermal::Mode::parse(&saved.thermal_mode),
+                saved.thermal_limit,
+                saved.fan_limit,
+                &support,
+            ));
             let handle = app.handle().clone();
             thermal::spawn(move |celsius, pressure| {
                 let roots = || handle.state::<App>().sessions.pids();
@@ -868,6 +909,9 @@ pub fn run() {
             list_projects,
             list_sessions,
             thermal_status,
+            fans_info,
+            fans_install,
+            fans_uninstall,
             coffee_status,
             coffee_set,
             coffee_restore,

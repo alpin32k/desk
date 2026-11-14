@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fans-uninstall"
+description = "Enables the fans_uninstall command without any pre-configured scope."
+commands.allow = ["fans_uninstall"]
+
+[[permission]]
+identifier = "deny-fans-uninstall"
+description = "Denies the fans_uninstall command without any pre-configured scope."
+commands.deny = ["fans_uninstall"]

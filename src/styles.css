@@ -1371,6 +1371,15 @@ html.dragging-card .tile .term {
   color: var(--accent);
 }
 
+.settings .seg.wrap {
+  flex-wrap: wrap;
+}
+
+.settings .seg button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .settings .shortcut-list {
   display: grid;
   grid-template-columns: max-content 1fr;

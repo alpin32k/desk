@@ -16,6 +16,7 @@ import {
   type Project,
   type PtyExit,
   type SessionState,
+  type FanInfo,
   type ThermalStatus,
   type Update,
   type Usage,
@@ -48,7 +49,7 @@ import { conversationBox } from "./conversationbox";
 import { setSaved, syncTile } from "./saved";
 import { usageHtml } from "./usage";
 import { UsagePopover } from "./usage-popover";
-import { DEFAULT_LIMIT, slowing, thermalHtml } from "./thermal";
+import { DEFAULT_FAN_LIMIT, DEFAULT_LIMIT, thermalHtml, thermalToast } from "./thermal";
 import { accountById, accountColor, accountFor, hasAccounts } from "./accounts";
 
 const POLL_MS = 3000;
@@ -106,6 +107,8 @@ export class App {
   private update: Update | null = null;
   private usageAt = 0;
   private coffee: CoffeeStatus = { level: "off", helperInstalled: false, sleepDisabled: false, stoppedBecause: null };
+  /** Can desk drive the fans here (Options); null until known. */
+  private fanInfo: FanInfo | null = null;
   /** CPU temperature in the top bar (thermal.ts); null until the first reading. */
   private thermal: ThermalStatus | null = null;
   private fullscreen: string | null = null;
@@ -269,10 +272,33 @@ export class App {
         this.projectCache = null;
         this.save();
       },
-      setThermalLimit: (celsius) => {
-        this.layout.thermalLimit = celsius;
+      // Rust takes the new mode on its next reading (≤5 s); the chip follows then.
+      setThermal: (change) => {
+        Object.assign(this.layout, change);
         this.save();
-        if (this.thermal) this.onThermal({ ...this.thermal, limit: celsius });
+      },
+      fans: () => this.fanInfo,
+      installFans: async () => {
+        try {
+          this.fanInfo = await api.fansInstall();
+          return this.fanInfo.consent === "installed";
+        } catch (err) {
+          toast(t("fans.error", { err: String(err) }));
+          return false;
+        }
+      },
+      uninstallFans: async () => {
+        try {
+          this.fanInfo = await api.fansUninstall();
+        } catch (err) {
+          toast(t("fans.error", { err: String(err) }));
+          return;
+        }
+        // Without the permission the fan modes fall back to what they did besides.
+        const mode = this.layout.thermalMode;
+        if (mode === "fansFirst" || mode === "together") this.layout.thermalMode = "slow";
+        else if (mode === "fans") this.layout.thermalMode = "off";
+        this.save();
       },
       coffee: () => this.coffee,
       uninstallCoffee: async () => {
@@ -341,6 +367,7 @@ export class App {
     setLanguage(language);
     this.side.relabel();
     this.coffee = await api.coffeeStatus();
+    this.fanInfo = await api.fansInfo().catch(() => null);
     this.agents = await api.listAgents();
     this.home = boot.home;
     this.projectsDir = boot.projectsDir;
@@ -383,7 +410,9 @@ export class App {
       dropdownAnimation: boot.layout.dropdownAnimation ?? 200,
       keys: boot.layout.keys ?? {},
       tmuxMenu: boot.layout.tmuxMenu ?? false,
+      thermalMode: boot.layout.thermalMode ?? "slow",
       thermalLimit: boot.layout.thermalLimit ?? DEFAULT_LIMIT,
+      fanLimit: boot.layout.fanLimit ?? DEFAULT_FAN_LIMIT,
       usageLayout: boot.layout.usageLayout === "all" ? "all" : "tabs",
       usageShare: boot.layout.usageShare === "transcripts" ? "transcripts" : "cost",
       language,
@@ -1767,17 +1796,15 @@ export class App {
   // ---- temperature -------------------------------------------------------
 
   private onThermal(s: ThermalStatus): void {
-    const was = slowing(this.thermal);
+    const prev = this.thermal;
     this.thermal = s;
     // Only the chip: the whole bar is not redrawn every 5 s.
     const chip = this.top.querySelector("[data-thermal]");
     const html = thermalHtml(s);
     if (chip) chip.outerHTML = html;
     else if (html) this.renderChrome();
-    const c = s.celsius ?? "?";
-    if (slowing(s) && !was) toast(t("thermal.slowing", { c }));
-    // Turned off in Options is not "cooled down".
-    else if (was && !s.slowed && s.limit) toast(t("thermal.cooled", { c }));
+    const msg = thermalToast(prev, s);
+    if (msg) toast(msg);
   }
 
   // ---- coffee ------------------------------------------------------------

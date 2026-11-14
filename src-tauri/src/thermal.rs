@@ -26,17 +26,26 @@
 //! The sessions get full speed back 7 °C below the limit (after at least a
 //! minute, so it does not flap), when slowing is turned off, and when desk
 //! quits. After a crash the next start puts them back.
+//!
+//! Fans
+//! - Only when the user picked a mode with fans in Options (`Mode`): every
+//!   fan at full speed from its own limit, back to auto by the same rules as
+//!   slowing (fans.rs; macOS on Apple Silicon only). A second `Policy` decides
+//!   for the fans, independent of the slowing one.
 
 use serde::Serialize;
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use crate::fans::{FanStatus, Fans};
+use std::path::Path;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 pub const DEFAULT_LIMIT: u32 = 75;
-/// Lowest and highest limit Options accepts; 0 turns slowing off.
+/// Lowest and highest limit Options accepts.
 pub const MIN_LIMIT: u32 = 50;
 pub const MAX_LIMIT: u32 = 100;
+/// Where the fans start in `Mode::FansFirst`, unless Options say otherwise.
+pub const DEFAULT_FAN_LIMIT: u32 = 70;
 /// Back to full speed this far below the limit.
 pub const COOL_MARGIN: f32 = 7.0;
 const TICK: Duration = Duration::from_secs(5);
@@ -50,22 +59,64 @@ const MIN_SLOW: Duration = Duration::from_secs(60);
 pub struct Status {
     /// Hottest CPU sensor in °C; None when desk cannot read one here.
     pub celsius: Option<i32>,
-    /// From Options; 0: never slow.
+    /// Slowing limit; 0: this mode never slows.
     pub limit: u32,
+    /// Fan limit; 0: this mode never uses the fans.
+    pub fan_limit: u32,
     /// Too hot: desk is slowing its sessions.
     pub slowed: bool,
     /// Processes slowed (what the sessions' shells, agents and editors started).
     pub processes: usize,
     /// Why desk cannot slow anything here, if it cannot.
     pub cannot_slow: Option<String>,
+    /// The fans, when the mode uses them.
+    pub fans: Option<FanStatus>,
 }
 
-/// 0 stays 0 (off); anything else within MIN_LIMIT..=MAX_LIMIT.
-pub fn clamp_limit(limit: u32) -> u32 {
-    if limit == 0 {
-        0
-    } else {
-        limit.clamp(MIN_LIMIT, MAX_LIMIT)
+/// What desk does when hot (Options, layout `thermalMode`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Off,
+    Slow,
+    /// Fans from their own, lower limit; slowing from the limit.
+    FansFirst,
+    Together,
+    Fans,
+}
+
+impl Mode {
+    /// The layout's name; anything unknown is `Slow`, today's behaviour.
+    pub fn parse(s: &str) -> Mode {
+        match s {
+            "off" => Mode::Off,
+            "fansFirst" => Mode::FansFirst,
+            "together" => Mode::Together,
+            "fans" => Mode::Fans,
+            _ => Mode::Slow,
+        }
+    }
+
+    /// What the mode does besides the fans (the permission was removed).
+    pub fn without_fans(self) -> Mode {
+        match self {
+            Mode::FansFirst | Mode::Together => Mode::Slow,
+            Mode::Fans => Mode::Off,
+            m => m,
+        }
+    }
+}
+
+/// (slowing limit, fan limit) for a mode; 0: not used. Both within
+/// MIN_LIMIT..=MAX_LIMIT, and the fans never wait longer than the slowing.
+pub fn limits(mode: Mode, limit: u32, fan_limit: u32) -> (u32, u32) {
+    let limit = limit.clamp(MIN_LIMIT, MAX_LIMIT);
+    let fan = fan_limit.clamp(MIN_LIMIT, MAX_LIMIT).min(limit);
+    match mode {
+        Mode::Off => (0, 0),
+        Mode::Slow => (limit, 0),
+        Mode::FansFirst => (limit, fan),
+        Mode::Together => (limit, limit),
+        Mode::Fans => (0, limit),
     }
 }
 
@@ -304,6 +355,8 @@ pub fn in_scope(cgroup: &str) -> bool {
 struct Inner {
     status: Status,
     policy: Policy,
+    fan_policy: Policy,
+    fans: Fans,
     os: os::Slower,
     /// The first reading after start: put back what a crashed desk left slowed.
     first: bool,
@@ -312,24 +365,29 @@ struct Inner {
 }
 
 pub struct Guard {
-    limit: AtomicU32,
+    /// From Options: the mode, the slowing limit and the fan limit.
+    config: Mutex<(Mode, u32, u32)>,
     inner: Mutex<Inner>,
 }
 
 impl Guard {
-    pub fn new(limit: u32) -> Self {
-        let limit = clamp_limit(limit);
+    pub fn new(mode: Mode, limit: u32, fan_limit: u32, support_dir: &Path) -> Self {
+        let (slow, fan) = limits(mode, limit, fan_limit);
         Self {
-            limit: AtomicU32::new(limit),
+            config: Mutex::new((mode, limit, fan_limit)),
             inner: Mutex::new(Inner {
                 status: Status {
                     celsius: None,
-                    limit,
+                    limit: slow,
+                    fan_limit: fan,
                     slowed: false,
                     processes: 0,
                     cannot_slow: None,
+                    fans: None,
                 },
                 policy: Policy::default(),
+                fan_policy: Policy::default(),
+                fans: Fans::new(support_dir),
                 // A unit struct on macOS and Windows, with state on Linux.
                 #[allow(clippy::default_constructed_unit_structs)]
                 os: os::Slower::default(),
@@ -339,8 +397,25 @@ impl Guard {
         }
     }
 
-    pub fn set_limit(&self, limit: u32) {
-        self.limit.store(clamp_limit(limit), Ordering::Relaxed);
+    pub fn configure(&self, mode: Mode, limit: u32, fan_limit: u32) {
+        *self.config.lock().unwrap() = (mode, limit, fan_limit);
+    }
+
+    /// Before removing the permission: the fans back to auto now, if desk set
+    /// them, and no forcing until `resume_fans`.
+    pub fn pause_fans(&self) {
+        self.inner.lock().unwrap().fans.pause();
+    }
+
+    pub fn resume_fans(&self) {
+        self.inner.lock().unwrap().fans.resume();
+    }
+
+    /// The permission is gone: the mode keeps only what it did besides the
+    /// fans (Options saves the same).
+    pub fn drop_fan_mode(&self) {
+        let mut config = self.config.lock().unwrap();
+        config.0 = config.0.without_fans();
     }
 
     pub fn status(&self) -> Status {
@@ -355,15 +430,25 @@ impl Guard {
         if g.stopped {
             return None;
         }
-        let limit = self.limit.load(Ordering::Relaxed);
+        let (mode, limit, fan_limit) = *self.config.lock().unwrap();
+        let (limit, fan_limit) = limits(mode, limit, fan_limit);
+        let now = Instant::now();
         let was = g.status.slowed;
-        let slow = g.policy.step(celsius, pressure, limit, Instant::now());
+        let slow = g.policy.step(celsius, pressure, limit, now);
+        let want_fans = g.fan_policy.step(celsius, pressure, fan_limit, now);
+        if g.first {
+            g.fans.recover();
+        }
+        // Also when the mode just dropped the fans: step releases them.
+        let fans = (fan_limit > 0 || g.fans.ours()).then(|| g.fans.step(want_fans, now));
         let mut next = Status {
             celsius: celsius.map(|c| c.round() as i32),
             limit,
+            fan_limit,
             slowed: slow,
             processes: 0,
             cannot_slow: g.status.cannot_slow.clone(),
+            fans: fans.filter(|_| fan_limit > 0),
         };
         if slow {
             let parts = split(&roots(), &os::processes(), os::typing);
@@ -387,10 +472,12 @@ impl Guard {
         Some(next)
     }
 
-    /// desk quits: the sessions (tmux keeps them running) get full speed back.
+    /// desk quits: the sessions (tmux keeps them running) get full speed back
+    /// and the fans go back to auto.
     pub fn shutdown(&self, roots: &[u32]) {
         let mut g = self.inner.lock().unwrap();
         g.stopped = true;
+        g.fans.release();
         if g.status.slowed {
             let pids = descendants(roots, &os::processes());
             g.os.release(&pids);
@@ -955,8 +1042,45 @@ mod tests {
     }
 
     #[test]
-    fn limits() {
-        assert_eq!([0, 10, 50, 75, 100, 200].map(clamp_limit), [0, 50, 50, 75, 100, 100]);
+    fn modes_set_the_two_limits() {
+        assert_eq!(limits(Mode::Off, 75, 70), (0, 0));
+        assert_eq!(limits(Mode::Slow, 75, 70), (75, 0));
+        assert_eq!(limits(Mode::FansFirst, 75, 70), (75, 70));
+        assert_eq!(limits(Mode::Together, 75, 70), (75, 75));
+        assert_eq!(limits(Mode::Fans, 75, 70), (0, 75));
+        // The fans never wait longer than the slowing, and stay in range.
+        assert_eq!(limits(Mode::FansFirst, 75, 80), (75, 75));
+        assert_eq!(limits(Mode::FansFirst, 75, 10), (75, 50));
+    }
+
+    #[test]
+    fn without_fans_keeps_what_a_mode_did_besides() {
+        assert_eq!(
+            [Mode::Off, Mode::Slow, Mode::FansFirst, Mode::Together, Mode::Fans].map(Mode::without_fans),
+            [Mode::Off, Mode::Slow, Mode::Slow, Mode::Slow, Mode::Off]
+        );
+    }
+
+    #[test]
+    fn mode_names() {
+        for (name, mode) in [
+            ("off", Mode::Off),
+            ("slow", Mode::Slow),
+            ("fansFirst", Mode::FansFirst),
+            ("together", Mode::Together),
+            ("fans", Mode::Fans),
+        ] {
+            assert_eq!(Mode::parse(name), mode);
+        }
+        assert_eq!(Mode::parse("x"), Mode::Slow);
+    }
+
+    #[test]
+    fn fan_and_slow_policies_are_independent() {
+        let t = Instant::now();
+        let (mut fans, mut slow) = (Policy::default(), Policy::default());
+        assert_eq!(run(&mut fans, &[72.0, 72.0, 72.0], 70, t, 5), [false, false, true]);
+        assert_eq!(run(&mut slow, &[72.0, 72.0, 72.0], 75, t, 5), [false, false, false]);
     }
 
     fn proc(pid: u32, parent: u32, name: &str, tty: Option<&str>) -> Proc {

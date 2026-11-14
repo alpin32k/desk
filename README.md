@@ -138,7 +138,7 @@ Zmieniają okno i terminale od razu.
 | **Pliki** | ⌘F: drzewo plików projektu (z `git ls-files`, bez `node_modules`). Filtr po nazwie, `?tekst` szuka w treści. Klik pokazuje plik w podglądzie, dwuklik otwiera edytor. Folder ma akcje: dodaj do sesji (`@ścieżka`), terminal tutaj, pokaż w Finderze. |
 | **Uruchom** | ⌘U albo ▶: skrypty z `package.json` (pnpm/yarn/npm/bun według lockfile), `cargo run`/`test`, cele `Makefile`, `docker compose up`, Django. Link `localhost` z wyjścia otwiera podgląd. |
 | **Kawa** | ⌘K: komputer nie zaśnie. Drugie ⌘K: także przy zamkniętej klapce. Wyłącza się sama przy przegrzaniu albo baterii ≤15%. Działa na macOS, Windows i Linuksie. |
-| **Temperatura** | Górny pasek: temperatura procesora (żółta 10°C przed progiem, czerwona od progu). Gdy przez 15 s trzyma się powyżej progu (domyślnie 75°C, Opcje → Ogólne), desk zwalnia pracę w swoich sesjach: testy, buildy i wszystko, co uruchamia agent, działają dalej, tylko wolniej (↓ przy temperaturze). Tego, w czym piszesz (powłoka, agent, edytor), nie zwalnia, więc pisanie się nie zacina. Pełna moc wraca 7°C niżej. Innych programów nie rusza. Działa na macOS, Windows i Linuksie. |
+| **Temperatura** | Górny pasek: temperatura procesora (żółta 10°C przed progiem, czerwona od progu). Co desk robi przy przegrzaniu, wybierasz w Opcje → Zasilanie: nic, zwalnia sesje (domyślnie), wiatraki, potem zwalnianie (wiatraki od własnego, niższego progu), wiatraki i zwalnianie albo tylko wiatraki. **Zwalnianie:** gdy przez 15 s temperatura trzyma się powyżej progu (domyślnie 75°C), desk zwalnia pracę w swoich sesjach: testy, buildy i wszystko, co uruchamia agent, działają dalej, tylko wolniej (↓ przy temperaturze). Tego, w czym piszesz (powłoka, agent, edytor), nie zwalnia, więc pisanie się nie zacina. Innych programów nie rusza. Działa na macOS, Windows i Linuksie. **Wiatraki** (macOS na Apple Silicon): wszystkie idą na pełne obroty (≋ przy temperaturze), ale tylko w trybie, który sam wybierzesz; za pierwszym razem macOS raz pyta o hasło administratora. Wiatraków, którymi steruje inny program (Stats, Macs Fan Control), desk nie rusza. Pełna moc sesji i auto wiatraków wracają 7°C niżej. |
 | **Język** | Polski albo angielski. Pierwsze uruchomienie bierze język systemu (polski, a każdy inny to angielski), zmienisz go w Opcje → Ogólne. |
 | **Blokada** | ⌘B: terminale widać, ale nic nie wpiszesz, dopóki nie odblokujesz: Touch ID albo hasło na macOS, Windows Hello na Windows, hasło konta na Linuksie. |
 
@@ -240,6 +240,12 @@ a kliknięcie pobiera ją, podmienia aplikację i uruchamia ponownie:
   w trakcie, osobny strażnik przywraca usypianie.
 - **Kawa na Linuksie** używa `systemd-inhibit` (z klapką: `handle-lid-switch`), a przegrzanie
   i baterię czyta z `/sys`.
+- **Wiatraki (macOS)** zapisuje mały program `desk-fans` z paczki desk, bo SMC przyjmuje zapis tylko od
+  roota. Gdy sam wybierzesz tryb z wiatrakami, macOS raz pyta o hasło administratora, a desk instaluje
+  go jako `/Library/PrivilegedHelperTools/pl.makarowski.desk.fans` (właściciel root, po sprawdzeniu
+  sumy SHA-256 kopii) z regułą `/etc/sudoers.d/desk-fans`, która pozwala tylko na `max` i `auto`.
+  Żadnej innej wartości ani klucza SMC nie da się nim zapisać. Odczyt wiatraków nie wymaga uprawnień.
+  Zgodę usuwasz w Opcje → Zasilanie. Gdy desk się zamknie albo zginie, osobny strażnik przywraca auto.
 - **Temperatura** na macOS pochodzi z czujników procesora przez IOKit (jak w Stats czy macmon, bez
   uprawnień administratora), a zwalnianie to `setpriority(PRIO_DARWIN_BG)`, czyli to samo co
   `taskpolicy -b`. Na Windows desk czyta licznik „Thermal Zone Information” i włącza EcoQoS (tryb
