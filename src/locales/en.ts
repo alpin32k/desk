@@ -429,7 +429,7 @@ export const en: Messages = {
   "settings.thermal": "Temperature",
   "settings.thermalOn": "Slow the sessions when the CPU is too hot",
   "settings.thermalLimit": "Limit",
-  "settings.thermalAbout": "Tests, builds and agents in desk's sessions keep running, only slower (macOS: background priority, Windows: EcoQoS efficiency mode, Linux: a CPU cap through systemd). Full speed comes back 7°C lower. Other programs (browser, Docker) are not touched.",
+  "settings.thermalAbout": "Tests, builds and whatever an agent starts keep running in desk's sessions, only slower (macOS: background priority, Windows: EcoQoS efficiency mode, Linux: a CPU cap through systemd). What you type into (the shell, the agent, an editor) is not slowed. Full speed comes back 7°C lower. Other programs (browser, Docker) are not touched.",
   "settings.updates": "Updates",
   "settings.updatesHow": "checks once a day (through GitHub CLI, gh)",
   "settings.checkNow": "Check now",

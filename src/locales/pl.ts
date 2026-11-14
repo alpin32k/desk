@@ -428,7 +428,7 @@ export const pl = {
   "settings.thermal": "Temperatura",
   "settings.thermalOn": "Zwalniaj sesje, gdy procesor jest za gorący",
   "settings.thermalLimit": "Próg",
-  "settings.thermalAbout": "Testy, buildy i agenci w sesjach desk dalej działają, tylko wolniej (macOS: w tle, Windows: tryb oszczędny EcoQoS, Linux: limit CPU przez systemd). Pełna moc wraca 7°C niżej. Innych programów (przeglądarka, Docker) desk nie rusza.",
+  "settings.thermalAbout": "Testy, buildy i wszystko, co uruchamia agent, dalej działają w sesjach desk, tylko wolniej (macOS: w tle, Windows: tryb oszczędny EcoQoS, Linux: limit CPU przez systemd). Tego, w czym piszesz (powłoka, agent, edytor), desk nie zwalnia. Pełna moc wraca 7°C niżej. Innych programów (przeglądarka, Docker) desk nie rusza.",
   "settings.updates": "Aktualizacje",
   "settings.updatesHow": "sprawdza raz dziennie (przez GitHub CLI, gh)",
   "settings.checkNow": "Sprawdź teraz",
