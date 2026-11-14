@@ -78,7 +78,14 @@ export interface Layout {
   projectAccounts: Record<string, string>;
   /** Slow the sessions while the CPU is hotter than this, °C; 0: never (thermal.ts). */
   thermalLimit: number;
+  /** The usage popover: one view at a time, or everything at once (usage-popover.ts). */
+  usageLayout: UsageLayout;
+  /** How a session's share of the 5-hour window is worked out (usage_share.rs). */
+  usageShare: UsageShare;
 }
+
+export type UsageLayout = "tabs" | "all";
+export type UsageShare = "cost" | "transcripts";
 
 /** A Claude Code config folder with its own login (accounts.rs). */
 export interface ClaudeAccount {

@@ -203,6 +203,14 @@ export class App {
         this.layout.linkClick = mode;
         this.save();
       },
+      setUsageLayout: (v) => {
+        this.layout.usageLayout = v;
+        this.save();
+      },
+      setUsageShare: (v) => {
+        this.layout.usageShare = v;
+        this.save();
+      },
       setDropdown: (change) => this.setDropdown(change),
       setKey: (id, accelerator) => {
         const keys = { ...this.layout.keys };
@@ -350,6 +358,8 @@ export class App {
       keys: boot.layout.keys ?? {},
       tmuxMenu: boot.layout.tmuxMenu ?? false,
       thermalLimit: boot.layout.thermalLimit ?? DEFAULT_LIMIT,
+      usageLayout: boot.layout.usageLayout === "all" ? "all" : "tabs",
+      usageShare: boot.layout.usageShare === "transcripts" ? "transcripts" : "cost",
       language,
       lanes: L.restore(boot.layout.lanes, boot.layout.autostart, boot.layout.lanes.length),
     };
