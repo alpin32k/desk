@@ -90,9 +90,14 @@ pub struct Layout {
     pub tile_accounts: std::collections::BTreeMap<String, String>,
     /// The account new Claude sessions of a project use, by project path.
     pub project_accounts: std::collections::BTreeMap<String, String>,
-    /// Slow the sessions while the CPU is hotter than this, °C; 0: never
-    /// (thermal.rs).
+    /// What desk does when hot: "off", "slow", "fansFirst", "together" or
+    /// "fans" (thermal::Mode).
+    pub thermal_mode: String,
+    /// Slow the sessions while the CPU is hotter than this, °C (thermal.rs).
+    /// Files from before modes used 0 for "never" (see `load`).
     pub thermal_limit: u32,
+    /// Fans at full speed from this, °C, in mode "fansFirst" (fans.rs).
+    pub fan_limit: u32,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -145,7 +150,9 @@ impl Default for Layout {
             claude_accounts: Vec::new(),
             tile_accounts: Default::default(),
             project_accounts: Default::default(),
+            thermal_mode: "slow".into(),
             thermal_limit: crate::thermal::DEFAULT_LIMIT,
+            fan_limit: crate::thermal::DEFAULT_FAN_LIMIT,
         }
     }
 }
@@ -178,6 +185,11 @@ pub fn load(path: &Path) -> Layout {
         Ok(mut l) => {
             if l.language.is_empty() {
                 l.language = "pl".into(); // saved before languages: desk spoke Polish
+            }
+            if l.thermal_limit == 0 {
+                // Saved before modes: 0 meant "never slow".
+                l.thermal_mode = "off".into();
+                l.thermal_limit = crate::thermal::DEFAULT_LIMIT;
             }
             l.normalized()
         }
@@ -227,6 +239,8 @@ mod tests {
             sizes: [("shell#0:/a".to_string(), 0.4)].into(),
             modes: [("/a".to_string(), "tabs".to_string())].into(),
             tabs: [("/a".to_string(), "shell#0:/a".to_string())].into(),
+            thermal_mode: "fansFirst".into(),
+            fan_limit: 65,
             ..Layout::default()
         };
         save(&p, &l).unwrap();
@@ -269,6 +283,24 @@ mod tests {
         assert_eq!(l.dropdown, cfg!(target_os = "macos"));
         assert_eq!((l.dropdown_height, l.dropdown_autohide), (50, true));
         assert_eq!(l.language, "pl");
+    }
+
+    #[test]
+    fn old_file_with_slowing_off_becomes_mode_off() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join("layout.json");
+        std::fs::write(&p, r#"{"thermalLimit":0}"#).unwrap();
+        let l = load(&p);
+        assert_eq!((l.thermal_mode.as_str(), l.thermal_limit, l.fan_limit), ("off", 75, 70));
+    }
+
+    #[test]
+    fn old_file_with_a_limit_keeps_slowing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join("layout.json");
+        std::fs::write(&p, r#"{"thermalLimit":80}"#).unwrap();
+        let l = load(&p);
+        assert_eq!((l.thermal_mode.as_str(), l.thermal_limit, l.fan_limit), ("slow", 80, 70));
     }
 
     #[test]

@@ -440,7 +440,7 @@ fn pty_close(app: State<App>, id: u32) {
 
 #[tauri::command]
 fn save_layout(app: State<App>, guard: State<thermal::Guard>, layout: layout::Layout) -> Result<(), String> {
-    guard.set_limit(layout.thermal_limit);
+    guard.configure(thermal::Mode::parse(&layout.thermal_mode), layout.thermal_limit, layout.fan_limit);
     if app.tmux_menu.swap(layout.tmux_menu, Ordering::Relaxed) != layout.tmux_menu {
         app.sessions.reload_config(layout.tmux_menu);
     }
@@ -563,6 +563,29 @@ fn tile_info(paths: Vec<String>) -> Vec<TileInfo> {
             path,
         })
         .collect()
+}
+
+/// Can this Mac's fans be driven, and is the permission installed (Options).
+#[tauri::command]
+fn fans_info() -> fans::Info {
+    fans::info()
+}
+
+/// The one admin password prompt for the fans (fans.rs).
+#[tauri::command]
+async fn fans_install() -> Result<fans::Info, String> {
+    tauri::async_runtime::spawn_blocking(fans::install)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Fans back to auto, then the helper and its rule removed (password prompt).
+#[tauri::command]
+async fn fans_uninstall(guard: State<'_, thermal::Guard>) -> Result<fans::Info, String> {
+    guard.release_fans();
+    tauri::async_runtime::spawn_blocking(fans::uninstall)
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -725,7 +748,12 @@ pub fn run() {
                 tmux_menu: AtomicBool::new(saved.tmux_menu),
                 _watcher: Mutex::new(watcher),
             });
-            app.manage(thermal::Guard::new(saved.thermal_limit));
+            app.manage(thermal::Guard::new(
+                thermal::Mode::parse(&saved.thermal_mode),
+                saved.thermal_limit,
+                saved.fan_limit,
+                &support,
+            ));
             let handle = app.handle().clone();
             thermal::spawn(move |celsius, pressure| {
                 let roots = || handle.state::<App>().sessions.pids();
@@ -767,6 +795,9 @@ pub fn run() {
             list_projects,
             list_sessions,
             thermal_status,
+            fans_info,
+            fans_install,
+            fans_uninstall,
             coffee_status,
             coffee_set,
             coffee_restore,

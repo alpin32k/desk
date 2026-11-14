@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fans-install"
+description = "Enables the fans_install command without any pre-configured scope."
+commands.allow = ["fans_install"]
+
+[[permission]]
+identifier = "deny-fans-install"
+description = "Denies the fans_install command without any pre-configured scope."
+commands.deny = ["fans_install"]

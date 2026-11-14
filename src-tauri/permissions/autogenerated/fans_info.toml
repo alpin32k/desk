@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fans-info"
+description = "Enables the fans_info command without any pre-configured scope."
+commands.allow = ["fans_info"]
+
+[[permission]]
+identifier = "deny-fans-info"
+description = "Denies the fans_info command without any pre-configured scope."
+commands.deny = ["fans_info"]
