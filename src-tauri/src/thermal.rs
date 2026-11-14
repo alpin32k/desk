@@ -1,8 +1,9 @@
 //! Temperature guard: every 5 s desk reads the CPU temperature, shows it in
 //! the top bar and, while the computer stays hotter than the limit set in
-//! Options (75 °C by default), slows the programs running in its sessions
-//! (tests, builds, agents) until it cools down. They keep running, only
-//! slower, and nothing outside desk's sessions is touched.
+//! Options (75 °C by default), slows the work running in its sessions (tests,
+//! builds, whatever an agent starts) until it cools down. It keeps running,
+//! only slower, and nothing outside desk's sessions is touched. What you type
+//! into (the shell, the agent, an editor) keeps full speed: see `split`.
 //!
 //! Reading
 //! - macOS: the CPU die sensors ("PMU tdie*" on Apple Silicon) through
@@ -64,7 +65,7 @@ pub struct Status {
     pub fan_limit: u32,
     /// Too hot: desk is slowing its sessions.
     pub slowed: bool,
-    /// Processes slowed (the sessions and everything they started).
+    /// Processes slowed (what the sessions' shells, agents and editors started).
     pub processes: usize,
     /// Why desk cannot slow anything here, if it cannot.
     pub cannot_slow: Option<String>,
@@ -157,14 +158,25 @@ impl Policy {
     }
 }
 
-/// The given processes still running and everything they started, from a
-/// (pid, parent pid) table.
-pub fn descendants(roots: &[u32], table: &[(u32, u32)]) -> Vec<u32> {
-    let alive: HashSet<u32> = table.iter().map(|&(pid, _)| pid).collect();
+/// One running process: what desk needs to know to decide about it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Proc {
+    pub pid: u32,
+    pub parent: u32,
+    /// The program's file name: "zsh", "claude", "node".
+    pub name: String,
+    /// Its terminal ("ttys004", "pts/3"); None without one or where desk
+    /// cannot tell (Windows).
+    pub tty: Option<String>,
+}
+
+/// The given processes still running and everything they started.
+pub fn descendants(roots: &[u32], table: &[Proc]) -> Vec<u32> {
+    let alive: HashSet<u32> = table.iter().map(|p| p.pid).collect();
     let mut children: HashMap<u32, Vec<u32>> = HashMap::new();
-    for &(pid, parent) in table {
-        if pid != parent {
-            children.entry(parent).or_default().push(pid);
+    for p in table {
+        if p.pid != p.parent {
+            children.entry(p.parent).or_default().push(p.pid);
         }
     }
     let mut seen = BTreeSet::new();
@@ -181,14 +193,82 @@ pub fn descendants(roots: &[u32], table: &[(u32, u32)]) -> Vec<u32> {
     seen.into_iter().collect()
 }
 
-/// `ps -A -o pid=,ppid=` output.
-pub fn parse_ps(out: &str) -> Vec<(u32, u32)> {
+/// The sessions' processes: the ones to slow and the ones to leave alone.
+#[derive(Debug, Default, PartialEq)]
+pub struct Split {
+    pub slow: Vec<u32>,
+    pub spare: Vec<u32>,
+}
+
+/// Programs that only start other programs in a terminal.
+const SHELLS: &[&str] = &[
+    "sh", "bash", "zsh", "fish", "dash", "ksh", "tcsh", "csh", "nu", "elvish", "xonsh", "pwsh", "powershell", "cmd",
+];
+
+/// What to slow among the sessions' processes (`roots` and everything they
+/// started), so that typing never stutters: the work, not what you type into.
+/// - A session's shell and the shells it starts are never slowed.
+/// - The program a shell runs (an agent, an editor) is left alone while its
+///   terminal takes keys one at a time (`typing(tty)`): you may be typing
+///   into it. With the terminal in line mode it is a job (`pnpm test`).
+/// - Everything such a program starts is slowed: tests, builds, tools.
+pub fn split(roots: &[u32], table: &[Proc], typing: impl Fn(Option<&str>) -> bool) -> Split {
+    let by_pid: HashMap<u32, &Proc> = table.iter().map(|p| (p.pid, p)).collect();
+    let mut children: HashMap<u32, Vec<u32>> = HashMap::new();
+    for p in table {
+        if p.pid != p.parent {
+            children.entry(p.parent).or_default().push(p.pid);
+        }
+    }
+    let mut typed: HashMap<Option<&str>, bool> = HashMap::new();
+    let mut spare = BTreeSet::new();
+    // Shells first, then the programs they run; `fronts` are those candidates.
+    let mut fronts: Vec<u32> = roots.to_vec();
+    while let Some(pid) = fronts.pop() {
+        let Some(p) = by_pid.get(&pid) else { continue };
+        if pid <= 1 || pid == std::process::id() || spare.contains(&pid) {
+            continue;
+        }
+        if SHELLS.contains(&p.name.as_str()) {
+            spare.insert(pid);
+            fronts.extend(children.get(&pid).into_iter().flatten());
+        } else if *typed.entry(p.tty.as_deref()).or_insert_with(|| typing(p.tty.as_deref())) {
+            spare.insert(pid);
+        }
+    }
+    let slow = descendants(roots, table).into_iter().filter(|p| !spare.contains(p)).collect();
+    Split {
+        slow,
+        spare: spare.into_iter().collect(),
+    }
+}
+
+/// `ps -A -o pid=,ppid=,tty=,comm=` output.
+pub fn parse_ps(out: &str) -> Vec<Proc> {
     out.lines()
         .filter_map(|l| {
             let mut it = l.split_whitespace();
-            Some((it.next()?.parse().ok()?, it.next()?.parse().ok()?))
+            let pid = it.next()?.parse().ok()?;
+            let parent = it.next()?.parse().ok()?;
+            let tty = it.next()?;
+            // The rest is the program, a path with spaces at times.
+            let comm = it.collect::<Vec<_>>().join(" ");
+            Some(Proc {
+                pid,
+                parent,
+                name: program_name(&comm),
+                tty: (!tty.starts_with('?')).then(|| tty.to_string()),
+            })
         })
         .collect()
+}
+
+/// "/bin/zsh", "-zsh" (a login shell) and "pwsh.exe" are zsh, zsh and pwsh.
+pub fn program_name(comm: &str) -> String {
+    let file = comm.rsplit(['/', '\\']).next().unwrap_or(comm);
+    let file = file.strip_prefix('-').unwrap_or(file);
+    let lower = file.to_lowercase();
+    lower.strip_suffix(".exe").unwrap_or(&lower).to_string()
 }
 
 /// The hottest believable reading (sensors that are off report nonsense).
@@ -371,8 +451,9 @@ impl Guard {
             fans: fans.filter(|_| fan_limit > 0),
         };
         if slow {
-            let pids = descendants(&roots(), &os::processes());
-            match g.os.slow(&pids) {
+            let parts = split(&roots(), &os::processes(), os::typing);
+            g.os.spare(&parts.spare);
+            match g.os.slow(&parts.slow) {
                 Ok(n) => {
                     next.processes = n;
                     next.cannot_slow = None;
@@ -416,10 +497,34 @@ pub fn spawn(mut tick: impl FnMut(Option<f32>, bool) + Send + 'static) {
     });
 }
 
+/// Whether the terminal takes keys one at a time (raw mode: a shell prompt,
+/// an editor, an agent) rather than whole lines (a job printing output).
+/// A terminal desk cannot ask counts as typed into: better a job at full
+/// speed than stuttering keys.
 #[cfg(unix)]
-fn ps_processes() -> Vec<(u32, u32)> {
+fn tty_takes_keys(tty: Option<&str>) -> bool {
+    let Some(tty) = tty else { return false };
+    let Ok(path) = std::ffi::CString::new(format!("/dev/{tty}")) else {
+        return true;
+    };
+    // SAFETY: opens and closes a descriptor of its own; O_NOCTTY keeps the
+    // terminal from becoming desk's, O_NONBLOCK from waiting on it.
+    unsafe {
+        let fd = libc::open(path.as_ptr(), libc::O_RDONLY | libc::O_NOCTTY | libc::O_NONBLOCK);
+        if fd < 0 {
+            return true;
+        }
+        let mut t: libc::termios = std::mem::zeroed();
+        let ok = libc::tcgetattr(fd, &mut t) == 0;
+        libc::close(fd);
+        !ok || t.c_lflag & libc::ICANON == 0
+    }
+}
+
+#[cfg(unix)]
+fn ps_processes() -> Vec<Proc> {
     std::process::Command::new("ps")
-        .args(["-A", "-o", "pid=,ppid="])
+        .args(["-A", "-o", "pid=,ppid=,tty=,comm="])
         .output()
         .map(|o| parse_ps(&String::from_utf8_lossy(&o.stdout)))
         .unwrap_or_default()
@@ -571,8 +676,12 @@ mod os {
         NSProcessInfo::processInfo().thermalState().0 >= NSProcessInfoThermalState::Serious.0
     }
 
-    pub fn processes() -> Vec<(u32, u32)> {
+    pub fn processes() -> Vec<super::Proc> {
         super::ps_processes()
+    }
+
+    pub fn typing(tty: Option<&str>) -> bool {
+        super::tty_takes_keys(tty)
     }
 
     #[derive(Default)]
@@ -587,6 +696,12 @@ mod os {
             for &p in pids {
                 set_background(p, false);
             }
+        }
+
+        /// Full speed for what is never slowed: one desk slowed before this
+        /// rule, or a program that went from a job to taking keys.
+        pub fn spare(&mut self, pids: &[u32]) {
+            self.release(pids);
         }
     }
 
@@ -650,8 +765,12 @@ mod os {
         false
     }
 
-    pub fn processes() -> Vec<(u32, u32)> {
+    pub fn processes() -> Vec<super::Proc> {
         super::ps_processes()
+    }
+
+    pub fn typing(tty: Option<&str>) -> bool {
+        super::tty_takes_keys(tty)
     }
 
     fn busctl(args: &[String]) -> Result<(), String> {
@@ -698,6 +817,10 @@ mod os {
             let _ = busctl(&quota_args(u64::MAX));
             self.capped = false;
         }
+
+        /// Nothing to do: what is spared is never moved into the scope. (A
+        /// process an older desk put there stays capped until it cools down.)
+        pub fn spare(&mut self, _pids: &[u32]) {}
     }
 }
 
@@ -779,7 +902,7 @@ mod os {
         false
     }
 
-    pub fn processes() -> Vec<(u32, u32)> {
+    pub fn processes() -> Vec<super::Proc> {
         let mut out = Vec::new();
         // SAFETY: the snapshot handle is closed below; the entry is sized.
         unsafe {
@@ -792,7 +915,13 @@ mod os {
             };
             if Process32FirstW(snap, &mut e).is_ok() {
                 loop {
-                    out.push((e.th32ProcessID, e.th32ParentProcessID));
+                    let len = e.szExeFile.iter().position(|&c| c == 0).unwrap_or(e.szExeFile.len());
+                    out.push(super::Proc {
+                        pid: e.th32ProcessID,
+                        parent: e.th32ParentProcessID,
+                        name: super::program_name(&String::from_utf16_lossy(&e.szExeFile[..len])),
+                        tty: None,
+                    });
                     if Process32NextW(snap, &mut e).is_err() {
                         break;
                     }
@@ -801,6 +930,12 @@ mod os {
             let _ = CloseHandle(snap);
         }
         out
+    }
+
+    /// Windows does not say what a console is doing: the program a shell
+    /// runs always counts as typed into, only what it starts is slowed.
+    pub fn typing(_tty: Option<&str>) -> bool {
+        true
     }
 
     #[derive(Default)]
@@ -815,6 +950,10 @@ mod os {
             for &p in pids {
                 eco(p, false);
             }
+        }
+
+        pub fn spare(&mut self, pids: &[u32]) {
+            self.release(pids);
         }
     }
 
@@ -944,20 +1083,107 @@ mod tests {
         assert_eq!(run(&mut slow, &[72.0, 72.0, 72.0], 75, t, 5), [false, false, false]);
     }
 
+    fn proc(pid: u32, parent: u32, name: &str, tty: Option<&str>) -> Proc {
+        Proc {
+            pid,
+            parent,
+            name: name.into(),
+            tty: tty.map(String::from),
+        }
+    }
+
     #[test]
     fn descendants_of_live_sessions_only() {
-        let table = [(1, 0), (10, 1), (11, 10), (12, 11), (13, 10), (20, 1), (21, 20)];
+        let table: Vec<Proc> = [(1, 0), (10, 1), (11, 10), (12, 11), (13, 10), (20, 1), (21, 20)]
+            .iter()
+            .map(|&(pid, parent)| proc(pid, parent, "x", None))
+            .collect();
         assert_eq!(descendants(&[10], &table), [10, 11, 12, 13]);
         // A session gone (99) adds nothing; init and desk are never in.
         assert_eq!(descendants(&[99, 20], &table), [20, 21]);
         assert_eq!(descendants(&[1], &table), Vec::<u32>::new());
         let me = std::process::id();
-        assert_eq!(descendants(&[me], &[(me, 1), (me + 1, me)]), Vec::<u32>::new());
+        assert_eq!(descendants(&[me], &[proc(me, 1, "desk", None), proc(me + 1, me, "x", None)]), Vec::<u32>::new());
+    }
+
+    /// A terminal takes keys one at a time (raw mode) or not.
+    fn raw(ttys: &'static [&'static str]) -> impl Fn(Option<&str>) -> bool {
+        move |tty| tty.is_some_and(|t| ttys.contains(&t))
+    }
+
+    #[test]
+    fn the_agent_you_type_into_keeps_full_speed_and_what_it_runs_is_slowed() {
+        // A Claude tile as desk starts it: zsh -lc 'claude ...; exec zsh -l'.
+        let t = Some("ttys000");
+        let table = [
+            proc(1, 0, "launchd", None),
+            proc(100, 1, "tmux", None),
+            proc(200, 100, "zsh", t),
+            proc(210, 200, "claude", t),
+            proc(220, 210, "node", t),         // an MCP server
+            proc(230, 210, "zsh", None),       // the agent's Bash tool
+            proc(231, 230, "node", None),      // pnpm test
+            proc(232, 231, "node", None),      // a vitest worker
+        ];
+        let s = split(&[200], &table, raw(&["ttys000"]));
+        assert_eq!(s.spare, [200, 210]);
+        assert_eq!(s.slow, [220, 230, 231, 232]);
+    }
+
+    #[test]
+    fn a_shell_and_the_editor_in_it_keep_full_speed() {
+        let t = Some("ttys001");
+        let table = [
+            proc(300, 1, "zsh", t),
+            proc(310, 300, "nvim", t),
+            proc(311, 310, "node", None), // a language server
+        ];
+        let s = split(&[300], &table, raw(&["ttys001"]));
+        assert_eq!(s.spare, [300, 310]);
+        assert_eq!(s.slow, [311]);
+        // The shell alone at its prompt.
+        assert_eq!(split(&[300], &table[..1], raw(&["ttys001"])), Split { slow: vec![], spare: vec![300] });
+    }
+
+    #[test]
+    fn tests_started_from_a_shell_are_slowed_whole() {
+        // `pnpm test` typed at a prompt: the terminal is not taking single
+        // keys, nobody types into pnpm.
+        let t = Some("ttys002");
+        let table = [
+            proc(400, 1, "zsh", t),
+            proc(410, 400, "node", t),
+            proc(411, 410, "node", t),
+            proc(420, 400, "zsh", t), // a subshell: still a shell
+            proc(421, 420, "cargo", t),
+        ];
+        let s = split(&[400], &table, raw(&[]));
+        assert_eq!(s.spare, [400, 420]);
+        assert_eq!(s.slow, [410, 411, 421]);
+    }
+
+    #[test]
+    fn a_session_that_is_one_program_follows_its_terminal() {
+        let table = [proc(500, 1, "htop", Some("pts/3")), proc(600, 1, "node", Some("pts/4")), proc(601, 600, "node", Some("pts/4"))];
+        let s = split(&[500, 600, 999], &table, raw(&["pts/3"]));
+        assert_eq!(s.spare, [500]);
+        assert_eq!(s.slow, [600, 601]);
     }
 
     #[test]
     fn reads_ps() {
-        assert_eq!(parse_ps("    1     0\n  412     1\nbad line\n 9001  412\n"), [(1, 0), (412, 1), (9001, 412)]);
+        let out = "    1     0 ??       /sbin/launchd\n 2299  2297 ttys000  -zsh\nbad line\n 2319  2299 ttys000  /Users/x/Application Support/bin/claude\n   77     1 ?        kworker\n  900   412 pts/3    bash\n";
+        assert_eq!(
+            parse_ps(out),
+            [
+                proc(1, 0, "launchd", None),
+                proc(2299, 2297, "zsh", Some("ttys000")),
+                proc(2319, 2299, "claude", Some("ttys000")),
+                proc(77, 1, "kworker", None),
+                proc(900, 412, "bash", Some("pts/3")),
+            ]
+        );
+        assert_eq!(program_name("C:\\Program Files\\PowerShell\\7\\pwsh.exe"), "pwsh");
     }
 
     #[test]
@@ -991,6 +1217,34 @@ mod tests {
         assert!(c.is_some());
     }
 
+    /// What desk would slow and spare right now in the sessions whose root
+    /// pids are in DESK_ROOTS (`tmux -L desk list-panes -a -F '#{pane_pid}'`):
+    /// `DESK_ROOTS="$(...)" cargo test splits_this_computer -- --ignored --nocapture`
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "reads this computer's processes"]
+    fn splits_this_computer() {
+        let roots: Vec<u32> = std::env::var("DESK_ROOTS")
+            .unwrap_or_default()
+            .split_whitespace()
+            .filter_map(|p| p.parse().ok())
+            .collect();
+        let table = os::processes();
+        let parts = split(&roots, &table, os::typing);
+        let show = |pids: &[u32]| {
+            let mut names: HashMap<&str, usize> = HashMap::new();
+            for p in table.iter().filter(|p| pids.contains(&p.pid)) {
+                *names.entry(&p.name).or_default() += 1;
+            }
+            let mut names: Vec<_> = names.into_iter().collect();
+            names.sort();
+            format!("{names:?}")
+        };
+        println!("spared {}: {}", parts.spare.len(), show(&parts.spare));
+        println!("slowed {}: {}", parts.slow.len(), show(&parts.slow));
+        assert!(!roots.is_empty() && !parts.spare.is_empty());
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
     fn slows_a_process_and_gives_it_its_speed_back() {
@@ -1006,13 +1260,40 @@ mod tests {
             String::from_utf8_lossy(&out.stdout).trim() == "4"
         };
         let mut s = os::Slower;
+        // Started from a session desk is slowing right now, it inherits that.
+        s.release(&[pid]);
         assert!(!background());
         assert_eq!(s.slow(&[pid]), Ok(1));
         assert!(background());
         s.release(&[pid]);
         assert!(!background());
+        assert_eq!(s.slow(&[pid]), Ok(1));
+        s.spare(&[pid]);
+        assert!(!background());
         let _ = child.kill();
         let _ = child.wait();
+    }
+
+    /// A real terminal: line mode as a job leaves it, then raw as an editor sets it.
+    #[cfg(unix)]
+    #[test]
+    fn tells_a_terminal_taking_keys_from_one_running_a_job() {
+        let (mut master, mut slave) = (0, 0);
+        // SAFETY: openpty fills the two descriptors, closed below.
+        unsafe {
+            assert_eq!(libc::openpty(&mut master, &mut slave, std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut()), 0);
+            let name = std::ffi::CStr::from_ptr(libc::ttyname(slave)).to_string_lossy().into_owned();
+            let tty = name.strip_prefix("/dev/").unwrap();
+            assert!(!tty_takes_keys(Some(tty)));
+            let mut t: libc::termios = std::mem::zeroed();
+            libc::tcgetattr(slave, &mut t);
+            libc::cfmakeraw(&mut t);
+            libc::tcsetattr(slave, libc::TCSANOW, &t);
+            assert!(tty_takes_keys(Some(tty)));
+            libc::close(slave);
+            libc::close(master);
+        }
+        assert!(!tty_takes_keys(None));
     }
 
     #[test]

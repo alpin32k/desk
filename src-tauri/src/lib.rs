@@ -29,6 +29,7 @@ pub mod new_project;
 #[cfg(target_os = "linux")]
 mod pam;
 pub mod preview;
+pub mod pricing;
 pub mod project;
 pub mod prompt_ai;
 pub mod pty;
@@ -39,6 +40,10 @@ pub mod wg_tunnel;
 mod window_place;
 pub mod update;
 pub mod usage;
+pub mod usage_history;
+pub mod usage_sessions;
+pub mod usage_share;
+pub mod usage_transcripts;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -59,7 +64,28 @@ struct App {
     /// tmux's right-click menu is on (Options); see `Tmux::reload_config`.
     tmux_menu: AtomicBool,
     _watcher: Mutex<Option<notify::RecommendedWatcher>>,
+    /// Limits and session costs over time (usage_history.rs).
+    history: std::sync::Arc<Mutex<usage_history::Recorder>>,
+    /// Reads Claude Code's transcripts on from where it stopped (usage_transcripts.rs).
+    scanner: std::sync::Arc<Mutex<usage_transcripts::Scanner>>,
+    /// The usage popover's last answers, by request, with when they were made.
+    details: Mutex<std::collections::HashMap<DetailsKey, (u64, UsageDetails)>>,
 }
+
+/// What the usage popover shows beyond the chip.
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UsageDetails {
+    /// The agent's (and account's) limits over the last 8 days.
+    history: Vec<usage_history::LimitSample>,
+    /// When desk's oldest kept reading was taken.
+    recording_since: Option<u64>,
+    sessions: Vec<usage_sessions::SessionStatus>,
+    share: Option<usage_share::Share>,
+}
+
+/// `usage_details`' arguments: agent, account, share mode.
+type DetailsKey = (String, Option<String>, Option<String>);
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -373,9 +399,84 @@ async fn usage(app: State<'_, App>, agents: Vec<String>) -> Result<Vec<usage::Us
     // Off the main thread: every 5 minutes this asks Anthropic (up to 10 s).
     let state = app.hooks.state_dir.clone();
     let accounts = layout::load(&app.layout_path).claude_accounts;
-    tauri::async_runtime::spawn_blocking(move || usage::usage(&agents, &accounts, &state, &env::home()))
-        .await
-        .map_err(|e| e.to_string())
+    let history = app.history.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let home = env::home();
+        let u = usage::usage(&agents, &accounts, &state, &home);
+        let now = usage::now();
+        let costs = if agents.iter().any(|a| a == "claude") {
+            let split = accounts::effective(&accounts).len() > 1;
+            usage_history::cost_samples(now, &usage_sessions::read(&state, &accounts, &home), split)
+        } else {
+            Vec::new()
+        };
+        let recorded = history
+            .lock()
+            .map_err(|e| e.to_string())
+            .and_then(|mut h| h.record(now, &usage_history::limit_samples(now, &u), &costs).map_err(|e| e.to_string()));
+        // History must never cost the chip its numbers: say it once and go on.
+        static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if let Err(e) = recorded
+            && !SAID.swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
+            eprintln!("desk: usage history: {e}");
+        }
+        u
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// History, sessions and share of the 5-hour window for the usage popover;
+/// the same request within 30 s gets the same answer. `share` None leaves
+/// the share out, "transcripts" counts it from Claude Code's transcripts,
+/// anything else from the sessions' cost in desk's history.
+#[tauri::command(async)]
+async fn usage_details(
+    app: State<'_, App>,
+    agent: String,
+    account: Option<String>,
+    share: Option<String>,
+) -> Result<UsageDetails, String> {
+    let key = (agent.clone(), account.clone(), share.clone());
+    let now = usage::now();
+    if let Some((at, d)) = app.details.lock().map_err(|e| e.to_string())?.get(&key)
+        && now.saturating_sub(*at) < 30
+    {
+        return Ok(d.clone());
+    }
+    let state = app.hooks.state_dir.clone();
+    let accounts = layout::load(&app.layout_path).claude_accounts;
+    let history = app.history.clone();
+    let scanner = app.scanner.clone();
+    let d = tauri::async_runtime::spawn_blocking(move || -> Result<UsageDetails, String> {
+        let home = env::home();
+        let (limits, costs) = history.lock().map_err(|e| e.to_string())?.load(0);
+        let recording_since = limits.iter().map(|l| l.t).chain(costs.iter().map(|c| c.t)).min();
+        let limits: Vec<_> = limits.into_iter().filter(|l| l.agent == agent && l.account == account).collect();
+        let effective = accounts::effective(&accounts);
+        let owner = accounts::find(&effective, account.as_deref()).filter(|_| agent == "claude");
+        let Some(owner) = owner else {
+            return Ok(UsageDetails { history: limits, recording_since, sessions: Vec::new(), share: None });
+        };
+        let sessions: Vec<_> =
+            usage_sessions::read(&state, &accounts, &home).into_iter().filter(|s| s.account == owner.id).collect();
+        let start = usage_share::window_start(&limits, now);
+        let share = match (share.as_deref(), start) {
+            (None, _) | (_, None) => None,
+            (Some("transcripts"), Some(start)) => {
+                let projects = accounts::config_dir(&owner.dir, &home).join("projects");
+                let costs = scanner.lock().map_err(|e| e.to_string())?.scan(&projects, start);
+                Some(usage_share::from_transcripts(&costs, &sessions, &owner.id))
+            }
+            (Some(_), Some(start)) => Some(usage_share::from_costs(&costs, account.as_deref(), start, recording_since)),
+        };
+        Ok(UsageDetails { history: limits, recording_since, sessions, share })
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    app.details.lock().map_err(|e| e.to_string())?.insert(key, (now, d.clone()));
+    Ok(d)
 }
 
 /// Folder for plain conversations (⌘R) that belong to no project.
@@ -755,6 +856,11 @@ pub fn run() {
                 prompt_editor: prompt_ai::install(&support).ok(),
                 tmux_menu: AtomicBool::new(saved.tmux_menu),
                 _watcher: Mutex::new(watcher),
+                history: std::sync::Arc::new(Mutex::new(usage_history::Recorder::open(
+                    support.join("usage-history.jsonl"),
+                ))),
+                scanner: Default::default(),
+                details: Default::default(),
             });
             app.manage(thermal::Guard::new(
                 thermal::Mode::parse(&saved.thermal_mode),
@@ -832,6 +938,7 @@ pub fn run() {
             dropped_paths,
             recent_conversations,
             claude_accounts,
+            usage_details,
             quit_desk,
         ])
         .on_window_event(|window, event| {

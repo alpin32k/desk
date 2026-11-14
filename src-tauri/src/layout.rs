@@ -98,6 +98,11 @@ pub struct Layout {
     pub thermal_limit: u32,
     /// Fans at full speed from this, °C, in mode "fansFirst" (fans.rs).
     pub fan_limit: u32,
+    /// The usage popover: "tabs" (one view at a time) or "all" (everything at once).
+    pub usage_layout: String,
+    /// How a session's share of the 5-hour window is worked out: "cost" (its
+    /// cost in desk's history) or "transcripts" (Claude Code's transcripts).
+    pub usage_share: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -153,6 +158,8 @@ impl Default for Layout {
             thermal_mode: "slow".into(),
             thermal_limit: crate::thermal::DEFAULT_LIMIT,
             fan_limit: crate::thermal::DEFAULT_FAN_LIMIT,
+            usage_layout: "tabs".into(),
+            usage_share: "cost".into(),
         }
     }
 }
@@ -256,6 +263,18 @@ mod tests {
         assert_eq!(load(&p).link_click, "desk");
         std::fs::write(&p, r#"{"version":1,"linkClick":"none"}"#).unwrap();
         assert_eq!(load(&p).link_click, "none");
+    }
+
+    #[test]
+    fn usage_options_default_unless_the_file_says_otherwise() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join("layout.json");
+        std::fs::write(&p, r#"{"version":1}"#).unwrap();
+        let l = load(&p);
+        assert_eq!((l.usage_layout.as_str(), l.usage_share.as_str()), ("tabs", "cost"));
+        std::fs::write(&p, r#"{"version":1,"usageLayout":"all","usageShare":"transcripts"}"#).unwrap();
+        let l = load(&p);
+        assert_eq!((l.usage_layout.as_str(), l.usage_share.as_str()), ("all", "transcripts"));
     }
 
     #[test]

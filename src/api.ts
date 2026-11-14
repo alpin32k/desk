@@ -82,10 +82,17 @@ export interface Layout {
   thermalLimit: number;
   /** Fans at full speed from this, °C, in mode "fansFirst" (fans.rs). */
   fanLimit: number;
+  /** The usage popover: one view at a time, or everything at once (usage-popover.ts). */
+  usageLayout: UsageLayout;
+  /** How a session's share of the 5-hour window is worked out (usage_share.rs). */
+  usageShare: UsageShare;
 }
 
 /** What desk does when hot: nothing, slow its sessions, the fans at full speed, or both. */
 export type ThermalMode = "off" | "slow" | "fansFirst" | "together" | "fans";
+
+export type UsageLayout = "tabs" | "all";
+export type UsageShare = "cost" | "transcripts";
 
 /** A Claude Code config folder with its own login (accounts.rs). */
 export interface ClaudeAccount {
@@ -249,6 +256,42 @@ export interface UsageWindow {
   usedPercent: number;
   /** Unix seconds. */
   resetsAt: number;
+  /** Anthropic's grading: "normal", "warning" or "critical"; null when unknown. */
+  severity: string | null;
+}
+
+/** A weekly limit of one model (Fable), on top of the plan's weekly one. */
+export interface ModelLimit {
+  name: string;
+  usedPercent: number;
+  /** Unix seconds. */
+  resetsAt: number;
+  severity: string | null;
+  /** Points of the plan's weekly limit this model used, and the most it may use. */
+  shareOfWeekly: number | null;
+  allowanceOfWeekly: number | null;
+}
+
+export interface FiveHourReset {
+  available: boolean;
+  /** Unix seconds. */
+  nextAvailableAt: number | null;
+}
+
+export interface SavedReset {
+  label: string;
+  left: number;
+  total: number;
+  /** Unix seconds. */
+  endsAt: number | null;
+  /** Works only at a usage limit. */
+  requiresLimit: boolean;
+}
+
+/** Resets on offer (Claude Code's /limit-reset); desk only shows them. */
+export interface Resets {
+  fiveHour: FiveHourReset | null;
+  saved: SavedReset[];
 }
 
 export interface Usage {
@@ -256,6 +299,63 @@ export interface Usage {
   /** The Claude account, with two or more of them. */
   account: string | null;
   windows: UsageWindow[];
+  models: ModelLimit[];
+  /** Usage credits take over at a limit; null when unknown. */
+  credits: boolean | null;
+  resets: Resets | null;
+}
+
+/** A limit's reading in desk's history: a window ("5h") or a model ("Fable"). */
+export interface LimitSample {
+  t: number;
+  agent: string;
+  account: string | null;
+  label: string;
+  pct: number;
+  resets: number;
+}
+
+/** A Claude session's status line input (usage_sessions.rs). */
+export interface SessionStatus {
+  slug: string;
+  sessionId: string;
+  transcript: string;
+  account: string;
+  model: string;
+  modelId: string;
+  effort: string | null;
+  fast: boolean;
+  /** Dollars since the session started, at API prices. */
+  cost: number;
+  contextPercent: number | null;
+  cacheWarm: boolean | null;
+  /** Unix seconds. */
+  cacheExpiresAt: number | null;
+  recacheTokens: number | null;
+}
+
+export interface ShareRow {
+  /** The desk session; null for one outside desk. */
+  slug: string | null;
+  label: string;
+  /** Of what the 5-hour window used; the rows add up to 1. */
+  fraction: number;
+}
+
+export interface Share {
+  mode: UsageShare;
+  /** Largest first. */
+  rows: ShareRow[];
+  /** desk was not recording when the window began. */
+  incomplete: boolean;
+}
+
+export interface UsageDetails {
+  history: LimitSample[];
+  /** Unix seconds of desk's oldest kept reading. */
+  recordingSince: number | null;
+  sessions: SessionStatus[];
+  share: Share | null;
 }
 
 export interface PtyExit {
@@ -353,6 +453,9 @@ export const api = {
   gitBranches: (path: string) => invoke<string[]>("git_branches", { path }),
   gitSwitch: (path: string, branch: string) => invoke<void>("git_switch", { path, branch }),
   usage: (agents: string[]) => invoke<Usage[]>("usage", { agents }),
+  /** The usage popover's history, sessions and (unless null) share of the 5-hour window. */
+  usageDetails: (agent: string, account: string | null, share: UsageShare | null) =>
+    invoke<UsageDetails>("usage_details", { agent, account, share }),
   /** Each Claude account's folder and login (Options). */
   claudeAccounts: () => invoke<AccountInfo[]>("claude_accounts"),
 };

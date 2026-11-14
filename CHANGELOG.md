@@ -1,5 +1,34 @@
 # Zmiany
 
+## 0.1.37 (2026-11-14)
+
+- **Pisanie nie zacina się, gdy desk chłodzi komputer.** Przy przegrzaniu desk zwalniał każdy
+  proces sesji, razem z powłoką i agentem, w którego piszesz, więc klawisze czekały w kolejce
+  z testami. Teraz zwalnia pracę: testy, buildy i wszystko, co uruchamia agent. Powłoka oraz
+  program, w którym możesz pisać (agent, edytor), mają pełną moc. Zadanie wpisane w powłoce
+  (`pnpm test`) jest zwalniane w całości. Na Windows program uruchomiony z powłoki zawsze ma
+  pełną moc.
+- **Polskie litery w terminalu stoją równo z resztą.** Z zainstalowanym JetBrainsMono Nerd Font
+  zwykłe litery były rysowane krojem SF Mono, a „ą”, „ł”, „ó”, „ś” i kolorowy tekst krojem
+  JetBrains Mono: cieńsze i 3 px wyżej w tym samym wierszu. Teraz wszystkie znaki pochodzą
+  z jednej czcionki.
+
+## 0.1.36 (2026-11-14)
+
+- **Klik w licznik limitów pokazuje szczegóły.** Licznik w górnym pasku otwiera dymek z trzema
+  zakładkami. „Teraz”: paski okna 5 h i tygodnia ze znacznikiem, ile czasu okna minęło, tempo
+  i prognoza, czy limit skończy się przed resetem, dzienny budżet do końca tygodnia, limity
+  pojedynczych modeli (Fable) z oceną Anthropic i resety do `/limit-reset`. „Sesje”: model,
+  koszt (cennik API, nie rachunek), cache i szacowany udział każdej sesji w oknie 5 h; klik
+  w sesję przenosi na jej kafelek. „Historia”: ostatnie 24 h okna 5 h i tydzień dzień po dniu.
+  W Opcjach (Statystyki AI) wybierasz zakładki albo wszystko naraz oraz to, czy udział liczyć
+  z kosztu sesji desk, czy z transkryptów Claude Code (lokalnie, bez wysyłania czegokolwiek).
+- **Licznik ostrzega też o tym, czego nie pokazuje.** Kolor bierze się z najgorszego limitu
+  konta: z oceny Anthropic, z limitu modelu i z tempa, przy którym 100% przyjdzie przed
+  resetem. Kropka po tekście znaczy, że powód jest poza nim; podpowiedź go nazywa.
+- **Kropka stanu w zwiniętym kafelku nie wchodzi w napis.** Stoi w odstępie od pionowej nazwy
+  i na jej osi.
+
 ## 0.1.35 (2026-11-14)
 
 - **Zwinięta sesja obok innych nie zabiera im miejsca.** W karcie ułożonej „obok siebie” zwinięcie

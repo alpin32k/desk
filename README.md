@@ -127,7 +127,8 @@ Zmieniają okno i terminale od razu.
 | **Ostatnie rozmowy** | ⌘S: rozmowy Claude z projektu aktywnego kafelka, od najnowszej, z tytułem i branchem. Wybrana wraca w nowym kafelku (`claude --resume`), a otwarta tylko dostaje fokus. |
 | **Zapisane rozmowy** | Nazwa kafelka z Claude (✎) zapisuje jego rozmowę. W ⌘S zapisane stoją na górze, zawsze wszystkie, pod Twoją nazwą, a wybrana wraca z tą nazwą także po zamknięciu kafelka i restarcie. ⌘↵ albo ✎ w ⌘S nazywa rozmowę, ⌘⌫ albo × usuwa ją z zapisanych. Po `/clear` nazwa zostaje przy starej rozmowie. |
 | **Sesje w tle** | ⌘Q zamyka kafelek, a sesja działa dalej. Gdy takie są, górny pasek pokazuje „N w tle”, a ⌘Y (albo klik w licznik) otwiera ich listę: ↵ otwiera sesję w kafelku, ⌘⌫ albo ✕ ją zabija, „Zabij wszystkie” kończy resztę. Przy zamykaniu desk (⏻) widać, które sesje zostaną, i można zabić wszystkie naraz. |
-| **Limity** | Górny pasek: zużycie planu (5h / 7d) dla otwartych agentów, z czasem do resetu (↻2h13m). Claude z konta co 5 min i ze status line sesji, Codex z `~/.codex/sessions`. Bursztyn od 70%, czerwień od 90%. |
+| **Limity** | Górny pasek: zużycie planu (5h / 7d) dla otwartych agentów, z czasem do resetu (↻2h13m). Claude z konta co 5 min i ze status line sesji, Codex z `~/.codex/sessions`. Kolor z najgorszego limitu: ocena Anthropic, a bez niej bursztyn od 70% i czerwień od 90%; kropka, gdy ostrzega coś, czego licznik nie pokazuje (limit modelu, np. Fable, albo tempo). |
+| **Szczegóły limitów** | Klik w licznik otwiera dymek (zakładki albo wszystko naraz, Opcje → Statystyki AI). **Teraz**: tempo i prognoza, czy limit skończy się przed resetem, dzienny budżet tygodnia, limity modeli i resety do `/limit-reset`. **Sesje**: model, koszt (cennik API, nie rachunek), cache i szacowany udział każdej sesji w oknie 5 h, liczony z kosztu sesji desk albo z transkryptów Claude Code. **Historia**: ostatnie 24 h i tydzień dzień po dniu; desk trzyma ją 8 dni w `usage-history.jsonl` w swoich danych. |
 | **Układ** | Ramki stoją tam, gdzie je przeciągniesz (przy brzegu kolumny powstaje nowa), a linie między kolumnami, ramkami i sesjami zmieniają rozmiar. Nowy projekt trafia w wolne miejsce, a ⌘L układa wszystko od nowa. W Opcjach wyłączysz dokładanie kolumn i ustawisz ich liczbę ręcznie. |
 | **Okno** | Otwiera się tam, gdzie je zamknięto: ten sam monitor, miejsce i rozmiar. Gdy monitora nie ma, okno otwiera się domyślnie. |
 | **Kafelek** | Projekt w swoim stonowanym kolorze, branch git (klik przełącza przez `git switch`, który przy niezapisanych zmianach odmawia) i stan. Powiadomienie, gdy sesja czeka, a okno nie ma fokusu. |
@@ -137,7 +138,7 @@ Zmieniają okno i terminale od razu.
 | **Pliki** | ⌘F: drzewo plików projektu (z `git ls-files`, bez `node_modules`). Filtr po nazwie, `?tekst` szuka w treści. Klik pokazuje plik w podglądzie, dwuklik otwiera edytor. Folder ma akcje: dodaj do sesji (`@ścieżka`), terminal tutaj, pokaż w Finderze. |
 | **Uruchom** | ⌘U albo ▶: skrypty z `package.json` (pnpm/yarn/npm/bun według lockfile), `cargo run`/`test`, cele `Makefile`, `docker compose up`, Django. Link `localhost` z wyjścia otwiera podgląd. |
 | **Kawa** | ⌘K: komputer nie zaśnie. Drugie ⌘K: także przy zamkniętej klapce. Wyłącza się sama przy przegrzaniu albo baterii ≤15%. Działa na macOS, Windows i Linuksie. |
-| **Temperatura** | Górny pasek: temperatura procesora (żółta 10°C przed progiem, czerwona od progu). Co desk robi przy przegrzaniu, wybierasz w Opcje → Zasilanie: nic, zwalnia sesje (domyślnie), wiatraki, potem zwalnianie (wiatraki od własnego, niższego progu), wiatraki i zwalnianie albo tylko wiatraki. **Zwalnianie:** gdy przez 15 s temperatura trzyma się powyżej progu (domyślnie 75°C), desk zwalnia programy w swoich sesjach: testy, buildy i agenci działają dalej, tylko wolniej (↓ przy temperaturze). Innych programów nie rusza. Działa na macOS, Windows i Linuksie. **Wiatraki** (macOS na Apple Silicon): wszystkie idą na pełne obroty (≋ przy temperaturze), ale tylko w trybie, który sam wybierzesz; za pierwszym razem macOS raz pyta o hasło administratora. Wiatraków, którymi steruje inny program (Stats, Macs Fan Control), desk nie rusza. Pełna moc sesji i auto wiatraków wracają 7°C niżej. |
+| **Temperatura** | Górny pasek: temperatura procesora (żółta 10°C przed progiem, czerwona od progu). Co desk robi przy przegrzaniu, wybierasz w Opcje → Zasilanie: nic, zwalnia sesje (domyślnie), wiatraki, potem zwalnianie (wiatraki od własnego, niższego progu), wiatraki i zwalnianie albo tylko wiatraki. **Zwalnianie:** gdy przez 15 s temperatura trzyma się powyżej progu (domyślnie 75°C), desk zwalnia pracę w swoich sesjach: testy, buildy i wszystko, co uruchamia agent, działają dalej, tylko wolniej (↓ przy temperaturze). Tego, w czym piszesz (powłoka, agent, edytor), nie zwalnia, więc pisanie się nie zacina. Innych programów nie rusza. Działa na macOS, Windows i Linuksie. **Wiatraki** (macOS na Apple Silicon): wszystkie idą na pełne obroty (≋ przy temperaturze), ale tylko w trybie, który sam wybierzesz; za pierwszym razem macOS raz pyta o hasło administratora. Wiatraków, którymi steruje inny program (Stats, Macs Fan Control), desk nie rusza. Pełna moc sesji i auto wiatraków wracają 7°C niżej. |
 | **Język** | Polski albo angielski. Pierwsze uruchomienie bierze język systemu (polski, a każdy inny to angielski), zmienisz go w Opcje → Ogólne. |
 | **Blokada** | ⌘B: terminale widać, ale nic nie wpiszesz, dopóki nie odblokujesz: Touch ID albo hasło na macOS, Windows Hello na Windows, hasło konta na Linuksie. |
 
@@ -251,7 +252,11 @@ a kliknięcie pobiera ją, podmienia aplikację i uruchamia ponownie:
   efektywności z Menedżera zadań). Na Linuksie czyta `/sys` (hwmon, strefy termiczne) i przenosi
   procesy sesji do zakresu systemd użytkownika `desk-sessions.scope` z limitem CPU na połowę rdzeni
   (`busctl --user`). Zwalnia tylko procesy uruchomione w sesjach desk, a przy zamknięciu desk
-  przywraca im pełną moc.
+  przywraca im pełną moc. Pełną moc zawsze mają powłoki sesji i program, który powłoka uruchomiła,
+  dopóki jego terminal przyjmuje pojedyncze klawisze (agent, edytor); zwalniane jest to, co taki
+  program uruchamia. Program uruchomiony z powłoki bez trybu pojedynczych klawiszy (`pnpm test`)
+  jest zwalniany w całości. Na Windows desk nie zna trybu konsoli, więc program uruchomiony
+  z powłoki zawsze ma pełną moc.
 - **Blokada** chroni sesje desk, a nie cały komputer: inny program działający jako Ty nadal może
   podłączyć się do `tmux -L desk`. Cały komputer blokuj ekranem blokady systemu. Na Linuksie hasło
   konta sprawdza PAM (tak jak wygaszacze ekranu).
@@ -261,6 +266,9 @@ a kliknięcie pobiera ją, podmienia aplikację i uruchamia ponownie:
   `api.anthropic.com`; desk go nie odświeża ani nie zapisuje. Do tego dochodzą odczyty ze status line
   sesji desk (świeże po każdej turze), a wygrywa najświeższy. Bez loginu zostają same sesje. Twoja
   własna status line działa dalej: desk ją wywołuje.
+- **Udział sesji z transkryptów** (Opcje → Statystyki AI) desk liczy lokalnie: czyta tokeny
+  z `~/.claude/projects` i wycenia je według cennika API z 14.11.2026. Treści rozmów nie zapisuje
+  ani nigdzie nie wysyła.
 - **Podgląd lokalnych plików** widzi tylko folder podglądanego pliku i nie ma dostępu do API desk.
   Markdown i inne dokumenty desk renderuje sam: ich własne skrypty się nie uruchamiają (mermaid jest
   wbudowany, działa bez internetu).

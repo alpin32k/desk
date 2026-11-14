@@ -17,7 +17,7 @@ export interface Theme {
   ui?: Partial<Record<UiVar, string>>;
 }
 
-type UiVar = "bg" | "panel" | "line" | "line-hi" | "fg" | "dim" | "accent" | "working" | "waiting" | "idle" | "danger";
+type UiVar = "bg" | "panel" | "line" | "line-hi" | "fg" | "dim" | "accent" | "working" | "waiting" | "idle" | "danger" | "model";
 
 export const DEFAULT_THEME = "desk";
 
@@ -262,6 +262,8 @@ export function uiColors(t: Theme): Record<UiVar, string> {
     waiting: t.ansi[3],
     idle: dim,
     danger: t.ansi[1],
+    // A model's own weekly limit (Fable) in the usage popover.
+    model: t.ansi[5],
     ...t.ui,
   };
 }
