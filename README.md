@@ -138,7 +138,7 @@ Zmieniają okno i terminale od razu.
 | **Pliki** | ⌘F: drzewo plików projektu (z `git ls-files`, bez `node_modules`). Filtr po nazwie, `?tekst` szuka w treści. Klik pokazuje plik w podglądzie, dwuklik otwiera edytor. Folder ma akcje: dodaj do sesji (`@ścieżka`), terminal tutaj, pokaż w Finderze. |
 | **Uruchom** | ⌘U albo ▶: skrypty z `package.json` (pnpm/yarn/npm/bun według lockfile), `cargo run`/`test`, cele `Makefile`, `docker compose up`, Django. Link `localhost` z wyjścia otwiera podgląd. |
 | **Kawa** | ⌘K: komputer nie zaśnie. Drugie ⌘K: także przy zamkniętej klapce. Wyłącza się sama przy przegrzaniu albo baterii ≤15%. Działa na macOS, Windows i Linuksie. |
-| **Temperatura** | Górny pasek: temperatura procesora (żółta 10°C przed progiem, czerwona od progu). Gdy przez 15 s trzyma się powyżej progu (domyślnie 75°C, Opcje → Ogólne), desk zwalnia programy w swoich sesjach: testy, buildy i agenci działają dalej, tylko wolniej (↓ przy temperaturze). Pełna moc wraca 7°C niżej. Innych programów nie rusza. Działa na macOS, Windows i Linuksie. |
+| **Temperatura** | Górny pasek: temperatura procesora (żółta 10°C przed progiem, czerwona od progu). Gdy przez 15 s trzyma się powyżej progu (domyślnie 75°C, Opcje → Ogólne), desk zwalnia pracę w swoich sesjach: testy, buildy i wszystko, co uruchamia agent, działają dalej, tylko wolniej (↓ przy temperaturze). Tego, w czym piszesz (powłoka, agent, edytor), nie zwalnia, więc pisanie się nie zacina. Pełna moc wraca 7°C niżej. Innych programów nie rusza. Działa na macOS, Windows i Linuksie. |
 | **Język** | Polski albo angielski. Pierwsze uruchomienie bierze język systemu (polski, a każdy inny to angielski), zmienisz go w Opcje → Ogólne. |
 | **Blokada** | ⌘B: terminale widać, ale nic nie wpiszesz, dopóki nie odblokujesz: Touch ID albo hasło na macOS, Windows Hello na Windows, hasło konta na Linuksie. |
 
@@ -246,7 +246,11 @@ a kliknięcie pobiera ją, podmienia aplikację i uruchamia ponownie:
   efektywności z Menedżera zadań). Na Linuksie czyta `/sys` (hwmon, strefy termiczne) i przenosi
   procesy sesji do zakresu systemd użytkownika `desk-sessions.scope` z limitem CPU na połowę rdzeni
   (`busctl --user`). Zwalnia tylko procesy uruchomione w sesjach desk, a przy zamknięciu desk
-  przywraca im pełną moc.
+  przywraca im pełną moc. Pełną moc zawsze mają powłoki sesji i program, który powłoka uruchomiła,
+  dopóki jego terminal przyjmuje pojedyncze klawisze (agent, edytor); zwalniane jest to, co taki
+  program uruchamia. Program uruchomiony z powłoki bez trybu pojedynczych klawiszy (`pnpm test`)
+  jest zwalniany w całości. Na Windows desk nie zna trybu konsoli, więc program uruchomiony
+  z powłoki zawsze ma pełną moc.
 - **Blokada** chroni sesje desk, a nie cały komputer: inny program działający jako Ty nadal może
   podłączyć się do `tmux -L desk`. Cały komputer blokuj ekranem blokady systemu. Na Linuksie hasło
   konta sprawdza PAM (tak jak wygaszacze ekranu).
