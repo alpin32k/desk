@@ -37,33 +37,39 @@ pub fn window_start(limits: &[LimitSample], now: u64) -> Option<u64> {
     Some(if resets <= now { resets } else { resets.saturating_sub(18_000) })
 }
 
-/// Each session's growth in cost since the window began. Its cost then is
-/// its last reading before the window; with none, 0 when desk was already
-/// recording (the session began in the window), else its first reading in
-/// the window, and the share is incomplete. `account` None counts them all.
+/// Each tile's growth in cost since the window began, over all the sessions
+/// it ran (a new session id after `/clear` or a resume). Its cost then is its
+/// last reading before the window; with none, 0 when desk was already
+/// recording (the tile began in the window), else its first reading in the
+/// window, and the share is incomplete. A new session whose cost is below
+/// the last one started from 0; at or above it, it carries the cost on.
+/// `account` None counts them all.
 pub fn from_costs(costs: &[CostSample], account: Option<&str>, window_start: u64, recording_since: Option<u64>) -> Share {
-    let mut by_session: std::collections::BTreeMap<&str, Vec<&CostSample>> = Default::default();
+    let mut by_slug: std::collections::BTreeMap<&str, Vec<&CostSample>> = Default::default();
     for c in costs.iter().filter(|c| account.is_none() || c.account.as_deref() == account) {
-        by_session.entry(c.session.as_str()).or_default().push(c);
+        by_slug.entry(c.slug.as_str()).or_default().push(c);
     }
     let recorded_before = recording_since.is_some_and(|r| r <= window_start);
     let mut incomplete = false;
     let mut used: Vec<(Option<String>, String, f64)> = Vec::new();
-    for samples in by_session.values_mut() {
+    for (slug, samples) in by_slug.iter_mut() {
         samples.sort_by_key(|c| c.t);
-        let Some(last) = samples.last() else { continue };
-        let before = samples.iter().rev().find(|c| c.t <= window_start);
-        let start = match before {
-            Some(c) => c.cost,
-            None if recorded_before => 0.0,
-            None => {
-                incomplete = true;
-                samples[0].cost
-            }
-        };
-        let delta = (last.cost - start).max(0.0);
+        let mut prev = samples.iter().rev().find(|c| c.t <= window_start).copied();
+        let mut inside = samples.iter().filter(|c| c.t > window_start).peekable();
+        if prev.is_none() && !recorded_before {
+            incomplete |= inside.peek().is_some();
+            prev = inside.next().copied();
+        }
+        let mut delta = 0.0;
+        for c in inside {
+            delta += match prev {
+                Some(p) if p.session == c.session || c.cost >= p.cost => (c.cost - p.cost).max(0.0),
+                _ => c.cost,
+            };
+            prev = Some(c);
+        }
         if delta > 0.0 {
-            used.push((Some(last.slug.clone()), last.slug.clone(), delta));
+            used.push((Some(slug.to_string()), slug.to_string(), delta));
         }
     }
     Share { mode: "cost".into(), rows: rows(used), incomplete }
@@ -126,6 +132,28 @@ mod tests {
         assert_eq!(s.rows.len(), 1);
         assert_eq!(s.rows[0].label, "b");
         assert!(from_costs(&[], None, 1000, None).rows.is_empty());
+    }
+
+    #[test]
+    fn share_sums_the_sessions_of_one_tile() {
+        let on = |t, session: &str, slug: &str, cost| CostSample { t, session: session.into(), slug: slug.into(), account: None, cost };
+        let s = from_costs(
+            &[
+                // p-1: $3 in A, then /clear: B starts again from 0 and spends $1.
+                on(900, "A", "p-1", 1.0),
+                on(1200, "A", "p-1", 4.0),
+                on(1300, "B", "p-1", 1.0),
+                // r-1: a resumed session that carries on the cost: $3.
+                on(900, "C", "r-1", 2.0),
+                on(1300, "D", "r-1", 5.0),
+                on(1400, "q", "q-1", 2.0),
+            ],
+            None,
+            1000,
+            Some(800),
+        );
+        let got: Vec<_> = s.rows.iter().map(|r| (r.label.as_str(), (r.fraction * 9.0).round())).collect();
+        assert_eq!(got, [("p-1", 4.0), ("r-1", 3.0), ("q-1", 2.0)]);
     }
 
     #[test]

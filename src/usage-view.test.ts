@@ -156,6 +156,11 @@ describe("the History view", () => {
     expect(html).toContain("desk zbiera historię od");
   });
 
+  it("marks the week's days before desk recorded as without data", () => {
+    const html = renderHistory({ ...details, recordingSince: s - 10 * H }, plain, now);
+    expect(html).toContain('class="up-day none"');
+  });
+
   it("draws 48 bars and the even share of the week", () => {
     const html = renderHistory(details, plain, now);
     expect(html.match(/class="up-b/g)).toHaveLength(48);

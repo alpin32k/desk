@@ -141,6 +141,13 @@ describe("history charts", () => {
     expect(marks[0].x).toBeCloseTo(0.5, 5);
   });
 
+  it("takes reset times a second apart for one reset", () => {
+    // Anthropic's answer and the status line give the same reset a second apart.
+    const history = [sample(s - 14 * H, 30, s - 12 * H), sample(s - 13.5 * H, 100, s - 12 * H + 1), sample(s - 13 * H, 100, s - 12 * H)];
+    expect(resetMarks(history, now)).toHaveLength(1);
+    expect(fullSpans(history, now)).toEqual([{ from: s - 13.5 * H, to: s - 12 * H + 1 }]);
+  });
+
   it("spans the time spent at the limit", () => {
     const spans = fullSpans([sample(s - 4 * H, 80, s - H), sample(s - 3 * H, 100, s - H), sample(s - 2 * H, 100, s - H)], now);
     expect(spans).toEqual([{ from: s - 3 * H, to: s - H }]);
@@ -153,5 +160,14 @@ describe("history charts", () => {
     const days = weekDays(history, "7d", resetsAt);
     expect(days.map((d) => d.delta)).toEqual([47, 5, 0, 0, 0, 0, 0]);
     expect(days[0].dayStart).toBe(start);
+  });
+
+  it("has no data for the days before desk recorded, and counts from the first reading", () => {
+    const start = new Date(2026, 10, 8).getTime() / 1000;
+    const resetsAt = new Date(2026, 10, 15).getTime() / 1000;
+    const since = start + 3 * 86400 + 10 * H;
+    const history = [sample(since, 54, resetsAt, "7d"), sample(since + 6 * H, 60, resetsAt, "7d"), sample(since + 30 * H, 65, resetsAt, "7d")];
+    const days = weekDays(history, "7d", resetsAt, since);
+    expect(days.map((d) => d.delta)).toEqual([null, null, null, 6, 5, 0, 0]);
   });
 });

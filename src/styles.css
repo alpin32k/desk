@@ -2126,10 +2126,10 @@ button.danger {
 }
 
 /* ---- usage popover (usage-view.ts, usage-popover.ts) ---- */
-/* over the tiles and toasts, under the lock screen */
+/* over the tiles, under the overlays (Options, palette, pickers) */
 .up-host {
   position: fixed;
-  z-index: 40;
+  z-index: 19;
   display: flex;
 }
 
@@ -2535,8 +2535,13 @@ p.up-model {
   margin: 3px 0;
 }
 
-.up-day.later {
+.up-day.later,
+.up-day.none {
   color: var(--dim);
+}
+
+.up-day.none .up-track {
+  height: 7px;
 }
 
 .up-day > span:last-child {

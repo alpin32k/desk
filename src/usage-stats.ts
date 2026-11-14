@@ -136,13 +136,16 @@ export function bars24h(history: LimitSample[], nowMs: number): { percent: numbe
   });
 }
 
+/** Anthropic's answer and the status line give one reset up to a few seconds apart. */
+const SAME_RESET = 60;
+
 /** The 5h window's resets in the last 24 hours, `x` from 0 (24 h ago) to 1 (now). */
 export function resetMarks(history: LimitSample[], nowMs: number): { at: number; x: number }[] {
   const now = nowMs / 1000;
-  const resets = new Set(fiveHour(history).map((x) => x.resets));
-  return [...resets]
+  const resets = [...new Set(fiveHour(history).map((x) => x.resets))].sort((a, b) => a - b);
+  return resets
+    .filter((at, i) => i === 0 || at - resets[i - 1] > SAME_RESET)
     .filter((at) => at > now - DAY && at <= now)
-    .sort((a, b) => a - b)
     .map((at) => ({ at, x: (at - (now - DAY)) / DAY }));
 }
 
@@ -152,7 +155,7 @@ export function fullSpans(history: LimitSample[], nowMs: number): { from: number
   const spans: { from: number; to: number }[] = [];
   let open: LimitSample | null = null;
   for (const x of fiveHour(history)) {
-    if (open && (x.pct < 100 || x.resets !== open.resets)) {
+    if (open && (x.pct < 100 || Math.abs(x.resets - open.resets) > SAME_RESET)) {
       spans.push({ from: open.t, to: Math.min(x.t, open.resets, now) });
       open = null;
     }
@@ -164,18 +167,30 @@ export function fullSpans(history: LimitSample[], nowMs: number): { from: number
 
 /**
  * The week up to `resetsAt` in local days: how much `label` grew in each
- * (its highest reading in the day less the highest before it).
+ * (its highest reading in the day less the highest before it). When desk
+ * began recording inside the week, the days before have no data (null) and
+ * growth counts from its first reading, not from 0.
  */
-export function weekDays(history: LimitSample[], label: string, resetsAt: number): { dayStart: number; delta: number }[] {
+export function weekDays(
+  history: LimitSample[],
+  label: string,
+  resetsAt: number,
+  recordingSince: number | null = null,
+): { dayStart: number; delta: number | null }[] {
   const start = resetsAt - WEEK;
-  const samples = history.filter((h) => h.label === label && h.t >= start && h.t < resetsAt);
+  const samples = history.filter((h) => h.label === label && h.t >= start && h.t < resetsAt).sort((a, b) => a.t - b.t);
+  const late = recordingSince !== null && recordingSince > start;
   const first = new Date(start * 1000);
-  const days: { dayStart: number; delta: number }[] = [];
-  let top = 0;
+  const days: { dayStart: number; delta: number | null }[] = [];
+  let top = late ? (samples[0]?.pct ?? 0) : 0;
   for (let i = 0; ; i++) {
     const dayStart = new Date(first.getFullYear(), first.getMonth(), first.getDate() + i).getTime() / 1000;
     if (dayStart >= resetsAt) break;
     const next = new Date(first.getFullYear(), first.getMonth(), first.getDate() + i + 1).getTime() / 1000;
+    if (late && next <= recordingSince) {
+      days.push({ dayStart, delta: null });
+      continue;
+    }
     const dayTop = Math.max(top, ...samples.filter((x) => x.t >= dayStart && x.t < next).map((x) => x.pct));
     days.push({ dayStart, delta: dayTop - top });
     top = dayTop;

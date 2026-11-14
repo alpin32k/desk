@@ -1,7 +1,7 @@
 //! History of the plan limits and of each session's cost, for the usage
 //! popover's charts and the share of the 5-hour window (usage_share.rs).
 //! One JSON line per change in `<support_dir>/usage-history.jsonl`, kept
-//! for 8 days.
+//! for 8 days (and the last line of every session and limit, however old).
 
 use crate::usage::Usage;
 use crate::usage_sessions::SessionStatus;
@@ -127,15 +127,26 @@ impl Recorder {
             return Ok(());
         };
         let keep_from = now.saturating_sub(KEEP_SECS);
-        let kept: String = text
-            .lines()
-            .filter(|l| {
-                serde_json::from_str::<Line>(l).is_ok_and(|x| match x {
-                    Line::Limit(x) => x.t >= keep_from,
-                    Line::Cost(x) => x.t >= keep_from,
-                })
+        let parsed: Vec<(&str, Line)> =
+            text.lines().filter_map(|l| serde_json::from_str::<Line>(l).ok().map(|x| (l, x))).collect();
+        // The last reading of every session and limit stays whatever its age:
+        // it is where the next change is counted from (usage_share.rs).
+        let id = |x: &Line| match x {
+            Line::Limit(x) => format!("limit\0{}\0{}\0{}", x.agent, x.account.as_deref().unwrap_or(""), x.label),
+            Line::Cost(x) => format!("cost\0{}", x.session),
+        };
+        let last: HashMap<String, usize> = parsed.iter().enumerate().map(|(i, (_, x))| (id(x), i)).collect();
+        let kept: String = parsed
+            .iter()
+            .enumerate()
+            .filter(|(i, (_, x))| {
+                let t = match x {
+                    Line::Limit(x) => x.t,
+                    Line::Cost(x) => x.t,
+                };
+                t >= keep_from || last.get(&id(x)) == Some(i)
             })
-            .map(|l| format!("{l}\n"))
+            .map(|(_, (l, _))| format!("{l}\n"))
             .collect();
         if kept.len() == text.len() {
             return Ok(());
@@ -230,6 +241,30 @@ mod tests {
         let mut r = Recorder::open(path);
         r.record(now, &[], &[]).unwrap();
         assert_eq!(r.load(0).0, vec![limit(now - 10, 20.0)]);
+    }
+
+    #[test]
+    fn keeps_the_last_reading_of_each_session_and_limit() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("h.jsonl");
+        let now = 1_000_000;
+        let old = now - KEEP_SECS - 100;
+        let c = |t, cost| CostSample { t, session: "s".into(), slug: "p-1".into(), account: None, cost };
+        let lines = [
+            serde_json::to_string(&c(old - 50, 1.0)).unwrap(),
+            serde_json::to_string(&c(old, 2.0)).unwrap(),
+            serde_json::to_string(&limit(old - 50, 10.0)).unwrap(),
+            serde_json::to_string(&limit(old, 11.0)).unwrap(),
+        ];
+        std::fs::write(&path, lines.join("\n") + "\n").unwrap();
+        let mut r = Recorder::open(path.clone());
+        r.record(now, &[], &[]).unwrap();
+        // Without its last reading a session idle for 8 days would count its
+        // whole cost into the next window it is used in.
+        assert_eq!(r.load(0), (vec![limit(old, 11.0)], vec![c(old, 2.0)]));
+        let mut again = Recorder::open(path);
+        again.record(now + 10, &[limit(now + 10, 11.0)], &[c(now + 10, 2.0)]).unwrap();
+        assert_eq!(again.load(0).1.len(), 1, "a restart writes nothing new");
     }
 
     #[test]

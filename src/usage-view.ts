@@ -245,17 +245,23 @@ export function renderHistory(d: UsageDetails, u: Usage, nowMs: number): string 
   let out = `<section class="up-sec"><h4>${t("usage.last24h")}</h4>${note}<div class="up-chart">${bars}${marks}</div><p class="up-axis"><span>${t("usage.axisDayAgo")}</span><span>${t("usage.axisNow")}</span></p>${full}</section>`;
   const week = u.windows.find((w) => w.label === "7d");
   if (week) {
-    const days = weekDays(d.history, "7d", week.resetsAt);
-    const models = u.models.map((m) => new Map(weekDays(d.history, m.name, m.resetsAt).map((x) => [x.dayStart, x.delta])));
+    const days = weekDays(d.history, "7d", week.resetsAt, d.recordingSince);
+    const models = u.models.map(
+      (m) => new Map(weekDays(d.history, m.name, m.resetsAt, d.recordingSince).map((x) => [x.dayStart, x.delta ?? 0])),
+    );
     const even = 100 / 7;
-    const scale = Math.max(even * 2, ...days.map((x) => x.delta), ...models.flatMap((m) => [...m.values()]));
+    const scale = Math.max(even * 2, ...days.map((x) => x.delta ?? 0), ...models.flatMap((m) => [...m.values()]));
     const w = (n: number) => `${((n / scale) * 100).toFixed(1)}%`;
     const rows = days
       .map((x) => {
         const name = new Date(x.dayStart * 1000).toLocaleDateString(language(), { weekday: "short" });
+        const evenMark = `<s class="up-even" style="left:${w(even)}"></s>`;
+        // Before desk recorded: no bar, a dash (not a day without use).
+        if (x.delta === null) return `<div class="up-day none"><span>${name}</span><div class="up-track">${evenMark}</div><span>—</span></div>`;
+        const delta = x.delta;
         const thin = models.map((m) => `<i class="up-wm" style="width:${w(m.get(x.dayStart) ?? 0)}"></i>`).join("");
-        const value = x.dayStart > now ? "" : pct(x.delta);
-        return `<div class="${x.dayStart > now ? "up-day later" : "up-day"}"><span>${name}</span><div class="up-track"><i class="${x.delta > even ? "up-wd high" : "up-wd"}" style="width:${w(x.delta)}"></i>${thin}<s class="up-even" style="left:${w(even)}"></s></div><span>${value}</span></div>`;
+        const value = x.dayStart > now ? "" : pct(delta);
+        return `<div class="${x.dayStart > now ? "up-day later" : "up-day"}"><span>${name}</span><div class="up-track"><i class="${delta > even ? "up-wd high" : "up-wd"}" style="width:${w(delta)}"></i>${thin}${evenMark}</div><span>${value}</span></div>`;
       })
       .join("");
     out += `<section class="up-sec"><h4>${t("usage.weekDays")}</h4>${rows}${line(`<span class="up-dim">${t("usage.evenShare", { n: Math.round(even) })}</span>`)}</section>`;

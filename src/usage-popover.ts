@@ -29,6 +29,14 @@ export function shareRequest(layout: Layout, tab: Tab): UsageShare | null {
   return layout.usageLayout === "all" || tab === "sessions" ? layout.usageShare : null;
 }
 
+/**
+ * A click or the focus landing on `target` leaves the popover: anywhere but
+ * the popover itself and the usage chips (which toggle it themselves).
+ */
+export function leftBy(target: { closest(selector: string): unknown } | null, inPopover: boolean): boolean {
+  return target !== null && !inPopover && !target.closest("[data-usage]");
+}
+
 /** "All at once" needs this much room before it goes to one column. */
 const ALL_WIDTH = 960 + 32;
 /** The same details asked again after this long (Rust keeps them 30 s). */
@@ -72,14 +80,14 @@ export class UsagePopover {
         this.ctx.focus(key);
       }
     });
-    document.addEventListener(
-      "mousedown",
-      (e) => {
-        const target = e.target as HTMLElement;
-        if (this.open && !this.el.contains(target) && !target.closest("[data-usage]")) this.close();
-      },
-      true,
-    );
+    // A click elsewhere, or the focus moving elsewhere: Options, the palette
+    // or a picker opened from the keyboard take it.
+    const leave = (e: Event) => {
+      const target = e.target instanceof Element ? e.target : null;
+      if (this.open && leftBy(target, target !== null && this.el.contains(target))) this.close();
+    };
+    document.addEventListener("mousedown", leave, true);
+    document.addEventListener("focusin", leave, true);
     window.addEventListener(
       "keydown",
       (e) => {

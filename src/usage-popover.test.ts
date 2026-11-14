@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Layout, Usage } from "./api";
-import { shareRequest, stillOpen } from "./usage-popover";
+import { leftBy, shareRequest, stillOpen } from "./usage-popover";
 
 function usage(account: string | null): Usage {
   return {
@@ -31,5 +31,15 @@ describe("the usage popover", () => {
     expect(shareRequest(layout("tabs", "cost"), "sessions")).toBe("cost");
     expect(shareRequest(layout("all", "cost"), "history")).toBe("cost");
     expect(shareRequest(layout("tabs", "transcripts"), "sessions")).toBe("transcripts");
+  });
+
+  it("is left by a click or focus anywhere but itself and the chips", () => {
+    const at = (chip: boolean) => ({ closest: (sel: string) => (sel === "[data-usage]" && chip ? {} : null) });
+    // Options or the palette opened from the keyboard take the focus.
+    expect(leftBy(at(false), false)).toBe(true);
+    expect(leftBy(at(false), true)).toBe(false);
+    // The chip toggles it itself.
+    expect(leftBy(at(true), false)).toBe(false);
+    expect(leftBy(null, false)).toBe(false);
   });
 });
