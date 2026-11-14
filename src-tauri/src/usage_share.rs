@@ -3,7 +3,7 @@
 //! desk's history (mode "cost", here) or from Claude Code's transcripts
 //! (mode "transcripts", usage_transcripts.rs).
 
-use crate::usage_history::CostSample;
+use crate::usage_history::{CostSample, LimitSample};
 use crate::usage_sessions::SessionStatus;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -27,6 +27,14 @@ pub struct Share {
     pub rows: Vec<ShareRow>,
     /// desk was not recording when the window began: early use is missing.
     pub incomplete: bool,
+}
+
+/// When the current 5-hour window began: its latest reading's reset less
+/// 5 hours, or that reset itself once it has passed. `limits` are one
+/// account's.
+pub fn window_start(limits: &[LimitSample], now: u64) -> Option<u64> {
+    let resets = limits.iter().filter(|l| l.label == "5h").max_by_key(|l| l.t)?.resets;
+    Some(if resets <= now { resets } else { resets.saturating_sub(18_000) })
 }
 
 /// Each session's growth in cost since the window began. Its cost then is
@@ -163,5 +171,15 @@ mod tests {
         assert!(!s.incomplete);
         let got: Vec<_> = s.rows.iter().map(|r| (r.slug.as_deref(), r.label.as_str(), r.fraction)).collect();
         assert_eq!(got, [(Some("desk-1"), "desk-1", 0.6), (None, "crm", 0.3), (None, "shop", 0.1)]);
+    }
+
+    #[test]
+    fn the_window_starts_five_hours_before_its_latest_reset() {
+        let l = |t, label: &str, resets| LimitSample { t, agent: "claude".into(), account: None, label: label.into(), pct: 1.0, resets };
+        let limits = [l(100, "5h", 20_000), l(300, "7d", 900_000), l(200, "5h", 40_000)];
+        assert_eq!(window_start(&limits, 30_000), Some(40_000 - 18_000));
+        assert_eq!(window_start(&limits[1..2], 30_000), None);
+        // That window is over: the next one began after its reset.
+        assert_eq!(window_start(&limits, 41_000), Some(40_000));
     }
 }

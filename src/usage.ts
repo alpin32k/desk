@@ -2,12 +2,9 @@
 // The numbers come from the agents' own local files (see src-tauri/src/usage.rs).
 import type { Usage } from "./api";
 import { t } from "./i18n";
+import { level } from "./usage-stats";
 
-export function level(percent: number): "" | "warn" | "high" {
-  if (percent >= 90) return "high";
-  if (percent >= 70) return "warn";
-  return "";
-}
+export { level };
 
 export function resetsIn(resetsAt: number, nowMs: number): string {
   const min = Math.max(0, Math.round((resetsAt * 1000 - nowMs) / 60000));

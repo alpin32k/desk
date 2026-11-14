@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
+import type { Usage, UsageWindow } from "./api";
 import { level, resetsIn, shortReset, usageHtml } from "./usage";
+
+/** A reading with only windows, as the status line gives it. */
+function plain(agent: string, account: string | null, windows: Omit<UsageWindow, "severity">[]): Usage {
+  return { agent, account, windows: windows.map((w) => ({ ...w, severity: null })), models: [], credits: null, resets: null };
+}
 
 describe("usage chips", () => {
   it("colors by the worst window", () => {
@@ -8,12 +14,11 @@ describe("usage chips", () => {
     expect(level(95)).toBe("high");
     const html = usageHtml(
       [
-        {
-          agent: "claude",
-          account: null,
-          windows: [{ label: "5h", usedPercent: 42.4, resetsAt: 7200 }, { label: "7d", usedPercent: 91, resetsAt: 90000 }],
-        },
-        { agent: "codex", account: null, windows: [] },
+        plain("claude", null, [
+          { label: "5h", usedPercent: 42.4, resetsAt: 7200 },
+          { label: "7d", usedPercent: 91, resetsAt: 90000 },
+        ]),
+        plain("codex", null, []),
       ],
       0,
     );
@@ -29,8 +34,8 @@ describe("usage chips", () => {
     };
     const html = usageHtml(
       [
-        { agent: "claude", account: "work", windows: [{ label: "5h", usedPercent: 94, resetsAt: 7200 }] },
-        { agent: "claude", account: "own", windows: [{ label: "5h", usedPercent: 12, resetsAt: 7200 }] },
+        plain("claude", "work", [{ label: "5h", usedPercent: 94, resetsAt: 7200 }]),
+        plain("claude", "own", [{ label: "5h", usedPercent: 12, resetsAt: 7200 }]),
       ],
       0,
       (id) => names[id] ?? null,

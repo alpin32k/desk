@@ -142,6 +142,12 @@ export const pl = {
   "usage.limit": "Limit planu {agent}",
   "usage.window": "{label}: {percent}%, reset za {time}",
   "usage.limitAccount": "Limit planu Claude na koncie {account}",
+  "usage.reasonModel": "{name} {percent}%",
+  "usage.severityCritical": "krytyczny",
+  "usage.severityWarning": "ostrzeżenie",
+  "usage.reasonForecast": "{label}: przy tym tempie 100% {time}",
+  "usage.endsToday": "dziś ok. {time}",
+  "usage.endsOn": "{day} ok. {time}",
 
   // app
   "app.dropUnsupported": "Tu nie da się upuścić pliku: wklej jego ścieżkę",

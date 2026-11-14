@@ -143,6 +143,12 @@ export const en: Messages = {
   "usage.limit": "{agent} plan limit",
   "usage.window": "{label}: {percent}%, resets in {time}",
   "usage.limitAccount": "Claude plan limit of the {account} account",
+  "usage.reasonModel": "{name} {percent}%",
+  "usage.severityCritical": "critical",
+  "usage.severityWarning": "warning",
+  "usage.reasonForecast": "{label}: at this pace 100% {time}",
+  "usage.endsToday": "today around {time}",
+  "usage.endsOn": "{day} around {time}",
 
   // app
   "app.dropUnsupported": "Files cannot be dropped here: paste the path instead",
