@@ -2126,9 +2126,15 @@ button.danger {
 }
 
 /* ---- usage popover (usage-view.ts, usage-popover.ts) ---- */
+/* over the tiles and toasts, under the lock screen */
 .up-host {
   position: fixed;
-  z-index: 60;
+  z-index: 40;
+  display: flex;
+}
+
+.up-host[hidden] {
+  display: none;
 }
 
 .up {
