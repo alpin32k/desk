@@ -19,6 +19,8 @@ pub mod hooks;
 pub mod layout;
 pub mod lock;
 #[cfg(target_os = "macos")]
+pub mod smc;
+#[cfg(target_os = "macos")]
 mod mac_keys;
 pub mod native;
 pub mod new_project;
